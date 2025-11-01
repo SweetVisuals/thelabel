@@ -604,16 +604,22 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     toast.promise(movePromise, {
       loading: `Moving ${imageIds.length} image(s)...`,
       success: () => {
-        // Optimistic update
-        const updatedImages = images.filter(img => !imageIds.includes(img.id));
-        const updatedFolders = folders.map(f => {
-          if (f.id === folderId) {
-            const movedImages = images.filter(img => imageIds.includes(img.id));
-            return { ...f, images: [...f.images, ...movedImages] };
-          }
-          return f;
-        });
-        onImagesUploaded(updatedImages);
+        // Optimistic update - remove from all folders first
+        const updatedFolders = folders.map(f => ({
+          ...f,
+          images: f.images.filter(img => !imageIds.includes(img.id))
+        }));
+        
+        // Add to target folder
+        const targetFolderIndex = updatedFolders.findIndex(f => f.id === folderId);
+        if (targetFolderIndex !== -1) {
+          const movedImages = images.filter(img => imageIds.includes(img.id));
+          updatedFolders[targetFolderIndex] = {
+            ...updatedFolders[targetFolderIndex],
+            images: [...updatedFolders[targetFolderIndex].images, ...movedImages]
+          };
+        }
+        
         onFoldersChange?.(updatedFolders);
         onSelectionChange([]);
         return `Successfully moved ${imageIds.length} image(s)!`;
@@ -625,6 +631,20 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const handleMoveSlideshowToFolder = async (slideshowId: string, folderId: string | null) => {
     try {
       await slideshowService.moveSlideshowToFolder(slideshowId, folderId);
+      
+      // Also update the localStorage slideshow file entry for proper folder display
+      const fileKey = `slideshow_file_${slideshowId}`;
+      const fileData = localStorage.getItem(fileKey);
+      if (fileData) {
+        const parsedFileData = JSON.parse(fileData);
+        parsedFileData.folderId = folderId;
+        parsedFileData.updated = new Date().toISOString();
+        localStorage.setItem(fileKey, JSON.stringify(parsedFileData));
+      }
+      
+      // Force re-render to update the file list
+      triggerReRender();
+      
       toast.success(`Slideshow moved to ${folderId || 'root'} successfully!`);
     } catch (error) {
       console.error('Failed to move slideshow to folder:', error);

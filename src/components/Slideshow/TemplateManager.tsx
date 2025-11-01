@@ -395,6 +395,21 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
     }
   }, [user]);
 
+  // Listen for template updates from other components
+  useEffect(() => {
+    const handleTemplatesUpdate = () => {
+      if (user) {
+        loadTemplates();
+      }
+    };
+
+    window.addEventListener('templatesUpdated', handleTemplatesUpdate);
+    
+    return () => {
+      window.removeEventListener('templatesUpdated', handleTemplatesUpdate);
+    };
+  }, [user]);
+
   // Auto-hide notifications
   useEffect(() => {
     if (notification.message) {

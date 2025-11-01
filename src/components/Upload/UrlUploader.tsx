@@ -100,26 +100,128 @@ export const UrlUploader: React.FC<UrlUploaderProps> = ({
 
   const downloadImageFromUrl = async (url: string, filename: string): Promise<File> => {
     try {
-      // Fetch the image
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Accept': 'image/*',
-        },
-      });
+      // Use a CORS proxy to fetch the image
+      const proxyUrls = [
+        `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+        `https://cors-anywhere.herokuapp.com/${url}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`
+      ];
 
-      if (!response.ok) {
-        throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+      let lastError: Error | null = null;
+      
+      for (const proxyUrl of proxyUrls) {
+        try {
+          console.log(`Trying CORS proxy: ${proxyUrl}`);
+          
+          const response = await fetch(proxyUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json, text/plain, */*',
+            },
+          });
+
+          if (!response.ok) {
+            throw new Error(`Failed to fetch via proxy: ${response.status} ${response.statusText}`);
+          }
+
+          let imageUrl: string;
+          
+          // Handle different proxy response formats
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            // AllOrigins format
+            const data = await response.json();
+            imageUrl = data.contents;
+          } else {
+            // Direct image response
+            imageUrl = url;
+          }
+
+          // Now fetch the actual image
+          const imageResponse = await fetch(imageUrl, {
+            method: 'GET',
+            headers: {
+              'Accept': 'image/*',
+            },
+          });
+
+          if (!imageResponse.ok) {
+            throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+          }
+
+          // Get the image data as blob
+          const blob = await imageResponse.blob();
+          
+          // Determine the MIME type
+          const mimeType = blob.type || 'image/jpeg';
+          
+          // Create a File object
+          return new File([blob], filename, { type: mimeType });
+          
+        } catch (error) {
+          console.warn(`CORS proxy ${proxyUrl} failed:`, error);
+          lastError = error instanceof Error ? error : new Error('Unknown error');
+          continue;
+        }
       }
 
-      // Get the image data as blob
-      const blob = await response.blob();
-      
-      // Determine the MIME type
-      const mimeType = blob.type || 'image/jpeg';
-      
-      // Create a File object
-      return new File([blob], filename, { type: mimeType });
+      // If all proxies failed, try a fallback approach
+      try {
+        console.log('Trying fallback approach with canvas...');
+        
+        // Create an image element and use canvas to get the image
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        
+        const imageData = await new Promise<string>((resolve, reject) => {
+          img.onload = () => {
+            try {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              
+              if (!ctx) {
+                reject(new Error('Failed to get canvas context'));
+                return;
+              }
+
+              canvas.width = img.width;
+              canvas.height = img.height;
+              ctx.drawImage(img, 0, 0);
+
+              // Convert to blob
+              canvas.toBlob(
+                (blob) => {
+                  if (blob) {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = () => reject(new Error('Failed to convert canvas to blob'));
+                    reader.readAsDataURL(blob);
+                  } else {
+                    reject(new Error('Failed to create blob from canvas'));
+                  }
+                },
+                'image/jpeg',
+                0.9
+              );
+            } catch (error) {
+              reject(error);
+            }
+          };
+          
+          img.onerror = () => reject(new Error('Failed to load image'));
+          img.src = url;
+        });
+
+        // Convert data URL to File
+        const response = await fetch(imageData);
+        const blob = await response.blob();
+        return new File([blob], filename, { type: blob.type || 'image/jpeg' });
+        
+      } catch (fallbackError) {
+        console.error('Fallback approach failed:', fallbackError);
+        throw new Error(`Failed to download image after trying all methods: ${lastError?.message || fallbackError}`);
+      }
+
     } catch (error) {
       throw new Error(`Failed to download image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }

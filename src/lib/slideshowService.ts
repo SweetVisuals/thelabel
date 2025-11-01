@@ -1478,6 +1478,9 @@ async createOptimizedSlideshow(
     // Save to database
     await this.saveTemplateToDatabase(template);
 
+    // Dispatch event to update UI
+    window.dispatchEvent(new CustomEvent('templatesUpdated'));
+
     console.log('Template created:', template.name);
     return template;
   }
@@ -1521,6 +1524,10 @@ async createOptimizedSlideshow(
     this.templates.delete(templateId);
     this.saveTemplatesToLocalStorage();
     await this.deleteTemplateFromDatabase(templateId);
+    
+    // Dispatch event to update UI
+    window.dispatchEvent(new CustomEvent('templatesUpdated'));
+    
     console.log('Template deleted:', templateId);
   }
 
@@ -1731,6 +1738,11 @@ async createOptimizedSlideshow(
 
       console.log('Loaded templates from database:', templates?.length || 0);
 
+      // Clear existing templates for this user first
+      const userTemplates = Array.from(this.templates.values()).filter(t => t.user_id !== userId);
+      this.templates.clear();
+      userTemplates.forEach(template => this.templates.set(template.id, template));
+
       // Convert database format to SlideshowTemplate
       templates?.forEach(dbTemplate => {
         const template: SlideshowTemplate = {
@@ -1758,6 +1770,9 @@ async createOptimizedSlideshow(
       // Save to localStorage for faster access
       this.saveTemplatesToLocalStorage();
       console.log('Total templates after database load:', this.templates.size);
+      
+      // Dispatch custom event to update template UI
+      window.dispatchEvent(new CustomEvent('templatesUpdated'));
     } catch (error) {
       console.error('Failed to load templates from database:', error);
     }
