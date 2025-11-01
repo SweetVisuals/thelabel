@@ -1009,6 +1009,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                      setRenameInputValue={setRenameInputValue}
                      setRenamingFolderId={setRenamingFolderId}
                      handleRenameSubmit={handleRenameSubmit}
+                     onImagesUploaded={onImagesUploaded}
+                     currentImages={currentImages}
                    />
                  ) : item.type === 'slideshow' ? (
                    <SlideshowTile
@@ -1404,6 +1406,8 @@ const FolderTile: React.FC<{
   setRenameInputValue: (value: string) => void;
   setRenamingFolderId: (id: string | null) => void;
   handleRenameSubmit: (folderId: string, newName: string) => void;
+  onImagesUploaded?: (images: UploadedImage[]) => void;
+  currentImages?: UploadedImage[];
 }> = ({
   item,
   onFolderClick,
@@ -1412,7 +1416,9 @@ const FolderTile: React.FC<{
   renameInputValue,
   setRenameInputValue,
   setRenamingFolderId,
-  handleRenameSubmit
+  handleRenameSubmit,
+  onImagesUploaded,
+  currentImages = []
 }) => {
   const { isOver, setNodeRef } = useDroppable({
     id: item.id,
@@ -1421,10 +1427,11 @@ const FolderTile: React.FC<{
       folderId: item.id
     }
   });
-  
+
   // NOTE: Folders are NOT draggable - only clickable for opening
   // This prevents drag/click interference
   const isRenaming = renamingFolderId === item.id;
+  const [isExternalDragOver, setIsExternalDragOver] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -1442,7 +1449,50 @@ const FolderTile: React.FC<{
     }
   };
 
-  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}`);
+  // Handle external file drops (from OS file browser)
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsExternalDragOver(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsExternalDragOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsExternalDragOver(false);
+
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+    if (imageFiles.length === 0) return;
+
+    try {
+      // Upload files to this folder
+      const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, item.id));
+      const newImages = await Promise.all(uploadPromises);
+
+      if (onImagesUploaded) {
+        onImagesUploaded([...currentImages, ...newImages]);
+      }
+
+      toast.success(`Successfully uploaded ${newImages.length} images to ${item.name}!`);
+    } catch (error) {
+      console.error('Failed to upload dropped files:', error);
+      toast.error('Failed to upload files. Please try again.');
+    }
+  };
+
+  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}, isExternalDragOver: ${isExternalDragOver}`);
 
   return (
     <div
@@ -1452,24 +1502,27 @@ const FolderTile: React.FC<{
         e.stopPropagation();
         onContextMenu(item.id, e.clientX, e.clientY);
       }}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       className={cn(
         "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all cursor-pointer",
-        isOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50"
+        (isOver || isExternalDragOver) ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50"
       )}
       style={{
-        zIndex: isOver ? 50 : 1,
+        zIndex: (isOver || isExternalDragOver) ? 50 : 1,
         cursor: isRenaming ? 'text' : 'pointer'
       }}
     >
       {/* Drop zone overlay for better visual feedback */}
-      {isOver && (
+      {(isOver || isExternalDragOver) && (
         <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
             Drop here
           </div>
         </div>
       )}
-      
+
       {/* Clickable content area - doesn't interfere with drop detection */}
       <div
         className="flex flex-col items-center justify-center h-full relative z-0"
