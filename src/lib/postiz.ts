@@ -128,6 +128,15 @@ export const postizAPI = {
     try {
       const proxiedUrl = `${VERCEL_PROXY}posts`;
       
+      // Validate required fields before proceeding
+      if (!postData.profileIds || postData.profileIds.length === 0) {
+        throw new Error('Profile ID is required');
+      }
+
+      if (!postData.text || postData.text.trim() === '') {
+        throw new Error('Post content is required');
+      }
+
       // Postiz requires images to be uploaded to their domain first, then referenced by path
       let processedImages: {id: string, path: string}[] = [];
       if (postData.mediaUrls && postData.mediaUrls.length > 0) {
@@ -143,7 +152,7 @@ export const postizAPI = {
         });
       }
 
-      // Postiz requires specific format with all required fields
+      // Postiz requires specific format with all required fields - ensuring proper types
       const requestBody = {
         type: postData.scheduledAt ? 'schedule' : 'now',
         date: postData.scheduledAt || new Date().toISOString(),
@@ -152,19 +161,19 @@ export const postizAPI = {
           value: [{
             content: postData.text,
             image: processedImages,
-            tags: processedImages.length > 0 ? processedImages.map(img => img.id) : [], // Use image IDs as tags
+            tags: [], // Postiz expects tags as empty array, not image IDs
           }],
-          // Required settings object with correct field names and types
+          // Required settings object with explicit boolean/string types
           settings: {
-            privacy_level: 'PUBLIC_TO_EVERYONE',
-            shortLink: true, // Must be boolean true, not false
-            duet: false,
-            stitch: false,
-            comment: true,
-            autoAddMusic: 'no', // camelCase
-            brand_content_toggle: false,
-            brand_organic_toggle: false,
-            content_posting_method: 'DIRECT_POST' // Required field
+            privacy_level: 'PUBLIC_TO_EVERYONE' as const,
+            shortLink: false, // Explicitly boolean false
+            duet: false as boolean,
+            stitch: false as boolean,
+            comment: true as boolean,
+            autoAddMusic: 'no' as const, // camelCase
+            brand_content_toggle: false as boolean,
+            brand_organic_toggle: false as boolean,
+            content_posting_method: 'DIRECT_POST' as const // Required field
           }
         }],
       };
@@ -180,13 +189,25 @@ export const postizAPI = {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Postiz API Error Details:', errorText);
+        
+        // Try to parse the error response for more details
+        try {
+          const errorData = JSON.parse(errorText);
+          if (errorData.message && Array.isArray(errorData.message)) {
+            throw new Error(`Postiz API validation error: ${errorData.message.join(', ')}`);
+          }
+        } catch (parseError) {
+          // If we can't parse the error, use the raw response
+        }
+        
         throw new Error(`Postiz API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('✅ Postiz API response:', data);
       
       return {
-        id: data[0]?.postId || 'unknown',
+        id: data[0]?.postId || data?.id || 'unknown',
         text: postData.text,
         mediaUrls: postData.mediaUrls || [],
         scheduledAt: postData.scheduledAt,
@@ -196,6 +217,7 @@ export const postizAPI = {
         updatedAt: new Date().toISOString(),
       };
     } catch (error) {
+      console.error('❌ Post creation failed:', error);
       throw new Error(`Failed to create post: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   },
