@@ -266,8 +266,8 @@ export const postizAPI = {
     try {
       console.log('🧪 Testing Postiz upload functionality...');
       
-      // Try a simple upload-from-url test with a small image
-      const testUrl = 'https://via.placeholder.com/100x100/000000/FFFFFF?text=TEST';
+      // Try a simple upload-from-url test with a proper image URL (has .png extension)
+      const testUrl = 'https://via.placeholder.com/100x100/000000/FFFFFF.png';
       const proxiedUrl = `${VERCEL_PROXY}upload-from-url`;
       
       const response = await fetch(proxiedUrl, {
@@ -279,10 +279,24 @@ export const postizAPI = {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Upload test failed:', response.status, errorText);
-        return {
-          success: false,
-          message: 'Postiz upload service is not available or your API key lacks upload permissions.'
-        };
+        
+        // More specific error messages based on status code
+        if (response.status === 400) {
+          return {
+            success: false,
+            message: 'Upload endpoint accessible but test URL rejected. Check API key permissions.'
+          };
+        } else if (response.status === 401) {
+          return {
+            success: false,
+            message: 'Authentication failed. Check your Postiz API key.'
+          };
+        } else {
+          return {
+            success: false,
+            message: `Postiz upload service returned ${response.status}: ${errorText}`
+          };
+        }
       }
       
       const result = await response.json();
