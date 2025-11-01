@@ -795,12 +795,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         } else {
           // Moving images to a folder - check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
-          console.log('📁 Target folder check for images:', { targetFolder, overId: over.id, allItems: fileItems.map(i => ({id: i.id, type: i.type})) });
+          const overData = (over as any)?.data;
+          
           if (targetFolder?.type === 'folder') {
-            console.log('🗂️ Moving images to folder:', over.id, itemsToMove);
             handleMoveImagesToFolder(over.id as string, itemsToMove);
-          } else {
-            console.log('❌ Drop target is not a folder for images:', over.id, targetFolder);
+          } else if (overData?.type === 'folder') {
+            // Check if the drop target data indicates it's a folder
+            const folderId = overData.folderId || over.id;
+            handleMoveImagesToFolder(folderId, itemsToMove);
           }
         }
       } else if (draggedItem?.type === 'slideshow') {
@@ -814,12 +816,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         } else {
           // Moving slideshow to a folder - check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
-          console.log('📁 Target folder check for slideshow:', { targetFolder, overId: over.id });
+          const overData = (over as any)?.data;
+          
           if (targetFolder?.type === 'folder') {
-            console.log('🗂️ Moving slideshow to folder:', active.id, 'to folder:', over.id);
             handleMoveSlideshowToFolder(active.id as string, over.id as string);
-          } else {
-            console.log('❌ Drop target is not a folder for slideshow:', over.id, targetFolder);
+          } else if (overData?.type === 'folder') {
+            // Check if the drop target data indicates it's a folder
+            const folderId = overData.folderId || over.id;
+            handleMoveSlideshowToFolder(active.id as string, folderId);
           }
         }
       } else {
