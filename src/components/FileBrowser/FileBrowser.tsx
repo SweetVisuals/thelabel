@@ -1393,19 +1393,37 @@ const FolderTile: React.FC<{
 
     const files = Array.from(e.dataTransfer.files);
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
-
-    if (imageFiles.length === 0) return;
+    const slideshowFiles = files.filter(file => file.name.endsWith('.slideshow'));
 
     try {
-      // Upload files to this folder
-      const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, item.id));
-      const newImages = await Promise.all(uploadPromises);
+      // Handle image files
+      if (imageFiles.length > 0) {
+        const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, item.id));
+        const newImages = await Promise.all(uploadPromises);
 
-      if (onImagesUploaded) {
-        onImagesUploaded([...currentImages, ...newImages]);
+        if (onImagesUploaded) {
+          onImagesUploaded([...currentImages, ...newImages]);
+        }
+
+        toast.success(`Successfully uploaded ${newImages.length} images to ${item.name}!`);
       }
 
-      toast.success(`Successfully uploaded ${newImages.length} images to ${item.name}!`);
+      // Handle slideshow files
+      if (slideshowFiles.length > 0) {
+        for (const file of slideshowFiles) {
+          try {
+            const slideshow = await slideshowService.loadSlideshowFromFile(file);
+            if (slideshow) {
+              // Move the loaded slideshow to this folder
+              await slideshowService.moveSlideshowToFolder(slideshow.id, item.id);
+              toast.success(`Loaded slideshow: ${slideshow.title} in ${item.name}`);
+            }
+          } catch (error) {
+            console.error('Failed to load slideshow:', error);
+            toast.error(`Failed to load slideshow: ${file.name}`);
+          }
+        }
+      }
     } catch (error) {
       console.error('Failed to upload dropped files:', error);
       toast.error('Failed to upload files. Please try again.');
