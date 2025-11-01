@@ -371,6 +371,14 @@ export const SlideshowManager: React.FC<SlideshowManagerProps> = ({
         currentSlideshow={currentSlideshow}
         uploadedImages={images}
         selectedImages={selectedImages}
+        currentTitle={title}
+        currentPostTitle={postTitle}
+        currentCaption={caption}
+        currentHashtags={hashtags}
+        currentTextOverlays={textOverlays}
+        currentAspectRatio={aspectRatio}
+        currentTransitionEffect={transitionEffect}
+        currentMusicEnabled={musicEnabled}
         onTemplateApplied={(result) => {
           if (onTemplateApplied) {
             onTemplateApplied(result);

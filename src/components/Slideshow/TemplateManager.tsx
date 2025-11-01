@@ -31,11 +31,20 @@ interface TemplateManagerProps {
   selectedImages: string[];
   onTemplateApplied: (result: TemplateApplicationResult) => void;
   onImagesSelectForBulk: (images: UploadedImage[]) => void;
+  // Additional props for creating templates from current settings
+  currentTitle?: string;
+  currentPostTitle?: string;
+  currentCaption?: string;
+  currentHashtags?: string[];
+  currentTextOverlays?: any[];
+  currentAspectRatio?: string;
+  currentTransitionEffect?: 'fade' | 'slide' | 'zoom';
+  currentMusicEnabled?: boolean;
 }
 
 interface CreateTemplateModalProps {
   isOpen: boolean;
-  slideshow: SlideshowMetadata | null;
+  slideshow?: SlideshowMetadata | null;
   onClose: () => void;
   onSave: (name: string, description: string) => void;
 }
@@ -380,6 +389,14 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
   selectedImages,
   onTemplateApplied,
   onImagesSelectForBulk,
+  currentTitle,
+  currentPostTitle,
+  currentCaption,
+  currentHashtags,
+  currentTextOverlays,
+  currentAspectRatio,
+  currentTransitionEffect,
+  currentMusicEnabled,
 }) => {
   const { user } = useAuth();
   const [templates, setTemplates] = useState<SlideshowTemplate[]>([]);
@@ -439,15 +456,21 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
   };
 
   const handleCreateTemplate = async (name: string, description: string) => {
-    if (!user || !currentSlideshow) return;
+    if (!user) return;
     
     try {
-      await slideshowService.createTemplateFromSlideshow(
-        name,
-        description,
-        currentSlideshow,
-        user.id
-      );
+      // Use current slideshow if available, otherwise create from current settings
+      if (currentSlideshow) {
+        await slideshowService.createTemplateFromSlideshow(
+          name,
+          description,
+          currentSlideshow,
+          user.id
+        );
+      } else {
+        // Create template from current settings when no slideshow exists
+        await createTemplateFromCurrentSettings(name, description);
+      }
       
       setNotification({ message: 'Template created successfully!', type: 'success' });
       await loadTemplates();
@@ -455,6 +478,45 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       console.error('Failed to create template:', error);
       setNotification({ message: 'Failed to create template', type: 'error' });
     }
+  };
+
+  // Check if we can create a template (either from slideshow or current settings)
+  const canCreateTemplate = () => {
+    if (!user) return false;
+    if (currentSlideshow) return true;
+    // Check if we have minimum required settings
+    return !!(currentTitle && currentCaption && currentHashtags && currentHashtags.length > 0);
+  };
+
+  const createTemplateFromCurrentSettings = async (name: string, description: string) => {
+    if (!user || !currentTitle || !currentCaption || !currentHashtags) {
+      throw new Error('Missing required settings for template creation');
+    }
+
+    // Create a temporary slideshow-like object from current settings
+    const tempSlideshow: SlideshowMetadata = {
+      id: `temp_${Date.now()}`,
+      title: currentTitle,
+      postTitle: currentPostTitle || currentTitle,
+      caption: currentCaption,
+      hashtags: currentHashtags,
+      condensedSlides: [], // Empty for templates
+      textOverlays: currentTextOverlays || [],
+      aspectRatio: currentAspectRatio || '9:16',
+      transitionEffect: currentTransitionEffect || 'fade',
+      musicEnabled: currentMusicEnabled || false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      user_id: user.id,
+      folder_id: null
+    };
+
+    await slideshowService.createTemplateFromSlideshow(
+      name,
+      description,
+      tempSlideshow,
+      user.id
+    );
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
@@ -548,9 +610,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       <div className="grid grid-cols-2 gap-3">
         <Button
           onClick={() => setIsCreateModalOpen(true)}
-          disabled={!user || !currentSlideshow}
+          disabled={!canCreateTemplate()}
           variant="outline"
           className="flex items-center gap-2"
+          title={!user ? 'Please log in to save templates' :
+                 !currentSlideshow && (!currentTitle || !currentCaption || !currentHashtags?.length)
+                   ? 'Please fill in title, caption, and hashtags to save as template' : 'Save current settings as template'}
         >
           <Save className="w-4 h-4" />
           Save as Template
@@ -682,7 +747,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       {/* Modals */}
       <CreateTemplateModal
         isOpen={isCreateModalOpen}
-        slideshow={currentSlideshow}
+        slideshow={currentSlideshow || null}
         onClose={() => setIsCreateModalOpen(false)}
         onSave={handleCreateTemplate}
       />
