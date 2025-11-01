@@ -1,6 +1,7 @@
 import { SlideshowMetadata, CondensedSlide, TikTokTextOverlay, UploadedImage, PostizSlideshowData, SlideshowTemplate, TemplateApplicationResult, BulkUploadWithTemplate } from '@/types';
 import { postizAPI } from './postiz';
 import { imageService } from './imageService';
+import { postizUploadService } from './postizUploadService';
 
 export class SlideshowService {
   private static instance: SlideshowService;
@@ -612,7 +613,7 @@ export class SlideshowService {
   }
 
   /**
-   * Schedule slideshow post via Postiz with automatic payload optimization
+   * Schedule slideshow post via Postiz with consolidated image upload to imgbb
    */
   async scheduleSlideshowPost(
     slideshow: SlideshowMetadata,
@@ -621,11 +622,25 @@ export class SlideshowService {
     postNow: boolean = false
   ): Promise<any> {
     try {
-      // Use optimized posting data with automatic upgrade if needed
-      const postData = await this.getOptimizedPostData(slideshow, profileIds, scheduledAt, postNow);
+      console.log('🚀 Starting consolidated slideshow post to Postiz...');
+      console.log('📋 Slideshow details:', {
+        title: slideshow.title,
+        slideCount: slideshow.condensedSlides.length,
+        profileCount: profileIds.length
+      });
+
+      // Use our new upload service to upload consolidated images to imgbb first
+      const postData = await postizUploadService.createOptimizedPostizData(
+        slideshow,
+        profileIds,
+        scheduledAt,
+        postNow
+      );
       
-      // Use the enhanced Postiz API with proper image processing
-      const result = await postizAPI.createPostWithImages(postData);
+      console.log('📤 Created post data with imgbb URLs, ready for Postiz...');
+      
+      // Now use Postiz API (images should be on imgbb, which Postiz can handle)
+      const result = await postizAPI.createPost(postData);
       
       console.log('✅ Successfully posted slideshow to Postiz:', result.id);
       return result;

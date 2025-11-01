@@ -123,7 +123,7 @@ export const postizAPI = {
     }
   },
 
-  // Create a new post with proper Postiz API format
+  // Create a new post with proper Postiz API format (images should already be hosted)
   async createPost(postData: CreatePostData): Promise<PostizPost> {
     try {
       const proxiedUrl = `${VERCEL_PROXY}posts`;
@@ -140,11 +140,8 @@ export const postizAPI = {
       // Postiz requires images to be uploaded to their domain first, then referenced by path
       let processedImages: {id: string, path: string}[] = [];
       if (postData.mediaUrls && postData.mediaUrls.length > 0) {
-        // For now, we'll try to use the images as-is
-        // In a real implementation, you'd upload to Postiz first
+        // Images should already be hosted on imgbb.com by our upload service
         processedImages = postData.mediaUrls.map((url, index) => {
-          // Postiz expects images to be on uploads.postiz.com domain
-          // If not, we'll still try to post but Postiz may reject
           return {
             id: `img_${index + 1}`,
             path: url // Postiz expects 'path' field, not 'url'
