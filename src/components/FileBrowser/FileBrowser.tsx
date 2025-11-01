@@ -1713,9 +1713,9 @@ const FileTile: React.FC<{
           }
         }}
       >
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           {item.image && (
-            <img src={item.image.url} alt={item.name} className="w-full h-full object-cover transition-transform hover:scale-105 pointer-events-none" />
+            <img src={item.image.url} alt={item.name} className="w-full h-full object-cover transition-transform hover:scale-105" />
           )}
         </div>
         {selected && <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center z-10"><CheckSquare className="w-3 h-3 text-white" /></div>}
