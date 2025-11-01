@@ -1627,14 +1627,6 @@ const FileTile: React.FC<{
     disabled: false
   });
 
-  const { isOver, setNodeRef: setDropNodeRef } = useDroppable({
-    id: item.id,
-    data: {
-      type: 'image',
-      imageId: item.id
-    }
-  });
-
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : {};
@@ -1652,7 +1644,6 @@ const FileTile: React.FC<{
       <div
         ref={(node) => {
           setNodeRef(node);
-          setDropNodeRef(node);
           tileRef(node);
         }}
         style={style}
@@ -1662,7 +1653,6 @@ const FileTile: React.FC<{
           "relative group aspect-square rounded-lg overflow-hidden bg-neutral-900 border-2 cursor-pointer transition-all",
           selected ? "border-blue-500 ring-2 ring-blue-400/30" : "border-transparent hover:shadow-lg hover:border-neutral-700",
           isDragging && "opacity-50",
-          isOver && "border-green-500 ring-2 ring-green-400/30 bg-green-900/20",
           className
         )}
         title={selected ? "Selected" : ""}
@@ -1676,15 +1666,6 @@ const FileTile: React.FC<{
           }
         }}
       >
-        {/* Drop zone overlay for better visual feedback */}
-        {isOver && (
-          <div className="absolute inset-0 bg-green-500/20 border-2 border-green-400 rounded-lg flex items-center justify-center z-10">
-            <div className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
-              Drop here
-            </div>
-          </div>
-        )}
-        
         <div className="absolute inset-0 flex items-center justify-center">
           {item.image && (
             <img src={item.image.url} alt={item.name} className="w-full h-full object-cover transition-transform hover:scale-105" />
