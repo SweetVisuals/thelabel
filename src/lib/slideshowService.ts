@@ -248,15 +248,15 @@ async saveSlideshow(
       // Use the aspect ratio from the first image if available, otherwise use the provided aspect ratio
       const finalAspectRatio = images[0]?.aspectRatio || aspectRatio;
 
-      // Create condensed slides (text consolidated into images) - but don't save them as separate files
+      // Create condensed slides (text consolidated into images) for slideshow display
       const condensedSlides = await this.createCondensedSlides(images, textOverlays, finalAspectRatio);
 
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
 
-      console.log('🖼️ Uploading condensed images to imgbb immediately...');
+      console.log('🖼️ Uploading condensed images to imgbb for slideshow display...');
       
-      // IMMEDIATE OPTIMIZATION: Upload condensed images to imgbb and get URLs
+      // Upload condensed images to imgbb for slideshow creation and display
       const optimizedCondensedSlides = await this.uploadCondensedSlidesToImgbb(condensedSlides);
 
       const slideshow: SlideshowMetadata = {
@@ -702,7 +702,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   }
 
   /**
-   * Schedule slideshow post via Postiz with consolidated image upload to imgbb
+   * Schedule slideshow post via Postiz with proper imgbb → Postiz storage flow
    */
   async scheduleSlideshowPost(
     slideshow: SlideshowMetadata,
@@ -711,14 +711,14 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
     postNow: boolean = false
   ): Promise<any> {
     try {
-      console.log('🚀 Starting consolidated slideshow post to Postiz...');
+      console.log('🚀 Starting slideshow post to Postiz with imgbb → Postiz storage flow...');
       console.log('📋 Slideshow details:', {
         title: slideshow.title,
         slideCount: slideshow.condensedSlides.length,
         profileCount: profileIds.length
       });
 
-      // Use our new upload service to upload consolidated images to imgbb first
+      // Step 1: Upload imgbb images from slideshow to Postiz storage
       const postData = await postizUploadService.createOptimizedPostizData(
         slideshow,
         profileIds,
@@ -726,9 +726,9 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         postNow
       );
       
-      console.log('📤 Created post data with imgbb URLs, ready for Postiz...');
+      console.log('📤 Created post data with Postiz storage paths...');
       
-      // Now use Postiz API (images should be on imgbb, which Postiz can handle)
+      // Step 2: Use Postiz API to create the post (images now in Postiz storage)
       const result = await postizAPI.createPost(postData);
       
       console.log('✅ Successfully posted slideshow to Postiz:', result.id);

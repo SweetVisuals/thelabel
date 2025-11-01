@@ -266,9 +266,27 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
       
       let errorMessage = error.message || 'Failed to post slideshow. Please try again.';
       
+      // Add debug information for development
+      if (import.meta.env.DEV) {
+        console.log('🔍 Debug Information:');
+        console.log('- Error type:', error.constructor.name);
+        console.log('- Error message:', error.message);
+        console.log('- Network request details:', error.cause);
+        console.log('- Stack trace:', error.stack);
+      }
+      
       // Check if it's an upload-related error
       if (errorMessage.includes('Postiz requires images') || errorMessage.includes('upload')) {
         errorMessage = `🚫 Image upload failed. ${errorMessage}\n\n💡 Quick Solution: Go to Postiz app (https://app.postiz.com/), upload your images manually, then replace URLs in your slideshow.`;
+      }
+      
+      // Check for specific API errors
+      if (errorMessage.includes('401')) {
+        errorMessage = '🔑 Authentication failed. Please check your Postiz API key.';
+      } else if (errorMessage.includes('404')) {
+        errorMessage = '❌ API endpoint not found. The proxy might not be working correctly.';
+      } else if (errorMessage.includes('CORS')) {
+        errorMessage = '🌐 CORS error detected. The proxy configuration needs to be checked.';
       }
       
       setPostResult({

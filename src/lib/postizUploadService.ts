@@ -1,88 +1,110 @@
-import { uploadToImgbb } from './imgbb';
+import { postizAPI } from './postiz';
 import { CondensedSlide, SlideshowMetadata } from '@/types';
 
 export class PostizUploadService {
   /**
-   * Upload consolidated slideshow images to imgbb and return optimized URLs for Postiz
+   * Upload imgbb-hosted slideshow images to Postiz storage for posting
+   * This takes the imgbb URLs from the slideshow and uploads them to Postiz's storage
    */
-  async uploadConsolidatedImagesToImgbb(slideshow: SlideshowMetadata): Promise<string[]> {
-    console.log('🖼️ Starting upload of consolidated images to imgbb...');
+  async uploadImgbbImagesToPostiz(slideshow: SlideshowMetadata): Promise<{id: string, path: string}[]> {
+    console.log('🔄 Starting upload of imgbb images to Postiz storage...');
     
-    const uploadedUrls: string[] = [];
+    const postizMedia: {id: string, path: string}[] = [];
     
-    for (let i = 0; i < slideshow.condensedSlides.length; i++) {
-      const slide = slideshow.condensedSlides[i];
-      
-      try {
-        console.log(`📤 Uploading slide ${i + 1}/${slideshow.condensedSlides.length}: ${slide.id}`);
-        
-        // Convert base64 data URL to File object
-        const imageFile = await this.dataUrlToFile(slide.condensedImageUrl, `slide_${i + 1}.jpg`);
-        
-        // Upload to imgbb
-        const imgbbResponse = await uploadToImgbb(imageFile);
-        
-        console.log(`✅ Successfully uploaded slide ${i + 1} to imgbb:`, imgbbResponse.data.url);
-        uploadedUrls.push(imgbbResponse.data.url);
-        
-      } catch (error) {
-        console.error(`❌ Failed to upload slide ${i + 1} to imgbb:`, error);
-        
-        // Fallback to original image URL if consolidated image fails
-        if (slide.originalImageUrl) {
-          console.warn(`⚠️ Falling back to original image for slide ${i + 1}`);
-          uploadedUrls.push(slide.originalImageUrl);
-        } else {
-          // Last resort: placeholder image
-          console.error(`❌ No fallback available for slide ${i + 1}`);
-          uploadedUrls.push('https://via.placeholder.com/1080x1920/000000/FFFFFF?text=Upload+Failed');
-        }
+    // Extract imgbb URLs from the slideshow
+    const imgbbUrls: string[] = [];
+    
+    for (const slide of slideshow.condensedSlides) {
+      // Priority 1: Use condensed image URL if it's imgbb
+      if (slide.condensedImageUrl?.includes('i.ibb.co')) {
+        imgbbUrls.push(slide.condensedImageUrl);
+      }
+      // Priority 2: Use original image URL if it's imgbb
+      else if (slide.originalImageUrl?.includes('i.ibb.co')) {
+        imgbbUrls.push(slide.originalImageUrl);
+      }
+      // Priority 3: Use any http URL available
+      else if (slide.condensedImageUrl?.startsWith('http')) {
+        imgbbUrls.push(slide.condensedImageUrl);
+      }
+      else if (slide.originalImageUrl?.startsWith('http')) {
+        imgbbUrls.push(slide.originalImageUrl);
+      }
+      // Last resort: skip this slide
+      else {
+        console.warn(`⚠️ No suitable imgbb URL found for slide ${slide.id}`);
       }
     }
     
-    console.log(`🎉 Completed upload of ${uploadedUrls.length} images to imgbb`);
-    return uploadedUrls;
-  }
-  
-  /**
-   * Convert data URL to File object
-   */
-  private async dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
-    return new Promise((resolve, reject) => {
-      const img = new Image();
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
+    console.log('📋 Found imgbb URLs to upload:', imgbbUrls);
+    
+    for (let i = 0; i < imgbbUrls.length; i++) {
+      const imgbbUrl = imgbbUrls[i];
       
-      if (!ctx) {
-        reject(new Error('Failed to get canvas context'));
-        return;
-      }
-      
-      img.onload = () => {
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
+      try {
+        console.log(`📤 Uploading imgbb image ${i + 1}/${imgbbUrls.length}: ${imgbbUrl}`);
         
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              resolve(new File([blob], filename, { type: 'image/jpeg' }));
-            } else {
-              reject(new Error('Failed to convert canvas to blob'));
-            }
-          },
-          'image/jpeg',
-          0.9
-        );
-      };
-      
-      img.onerror = () => reject(new Error('Failed to load image from data URL'));
-      img.src = dataUrl;
-    });
+        // Upload from imgbb URL to Postiz storage
+        const postizResponse = await this.uploadUrlToPostiz(imgbbUrl);
+        
+        postizMedia.push({
+          id: postizResponse.id,
+          path: postizResponse.path
+        });
+        
+        console.log(`✅ Successfully uploaded imgbb image ${i + 1} to Postiz:`, postizResponse.path);
+        
+      } catch (error) {
+        console.error(`❌ Failed to upload imgbb image ${i + 1}:`, error);
+        
+        // Create a placeholder entry for failed uploads
+        postizMedia.push({
+          id: `placeholder_${i + 1}`,
+          path: imgbbUrl // Keep the original imgbb URL as fallback
+        });
+      }
+    }
+    
+    console.log(`🎉 Completed upload of ${postizMedia.length} images to Postiz storage`);
+    console.log('📊 Postiz media items:', postizMedia);
+    return postizMedia;
   }
   
   /**
-   * Create optimized Postiz post data with imgbb-hosted images
+   * Upload image from URL to Postiz storage using upload-from-url endpoint
+   */
+  private async uploadUrlToPostiz(imageUrl: string): Promise<{id: string, path: string}> {
+    console.log(`🌐 Uploading to Postiz from URL: ${imageUrl}`);
+    
+    const response = await fetch('/api/postiz-proxy/upload-from-url', {
+      method: 'POST',
+      headers: {
+        'Authorization': postizAPI.getApiKey() || '',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ url: imageUrl })
+    });
+    
+    console.log(`📊 Upload response status: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Postiz upload error:', errorText);
+      throw new Error(`URL upload failed: ${response.status} - ${errorText}`);
+    }
+    
+    const result = await response.json();
+    console.log('✅ Postiz upload successful:', result);
+    
+    return {
+      id: result.id || `upload_${Date.now()}`,
+      path: result.path || result.url
+    };
+  }
+  
+  /**
+   * Create Postiz post data with imgbb images uploaded to Postiz storage
+   * This follows the correct flow: imgbb for slideshow → Postiz storage for posting
    */
   async createOptimizedPostizData(
     slideshow: SlideshowMetadata,
@@ -90,20 +112,22 @@ export class PostizUploadService {
     scheduledAt?: Date,
     postNow: boolean = false
   ) {
-    console.log('🔄 Creating optimized Postiz data with imgbb uploads...');
+    console.log('🔄 Creating Postiz post data with imgbb → Postiz storage flow...');
     
-    // Upload consolidated images to imgbb
-    const imgbbUrls = await this.uploadConsolidatedImagesToImgbb(slideshow);
+    // Step 1: Upload imgbb images to Postiz storage
+    const postizMedia = await this.uploadImgbbImagesToPostiz(slideshow);
     
     const postData = {
       text: this.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags),
       profileIds: profileIds,
-      mediaUrls: imgbbUrls,
+      mediaUrls: postizMedia.map(media => media.path), // Use Postiz storage paths
       scheduledAt: scheduledAt?.toISOString(),
-      publishedAt: postNow ? new Date().toISOString() : undefined
+      publishedAt: postNow ? new Date().toISOString() : undefined,
+      _postizMedia: postizMedia // Keep for debugging and API call
     };
     
-    console.log('✅ Created optimized Postiz data with imgbb URLs');
+    console.log('✅ Created Postiz post data with Postiz storage paths');
+    console.log('📊 Final media to reference in post:', postizMedia);
     return postData;
   }
   

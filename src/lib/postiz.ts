@@ -1,6 +1,21 @@
 const POSTIZ_API_BASE = 'https://api.postiz.com/public/v1';
-// Vercel proxy to bypass CORS and handle large payloads
+// Proxy configuration for development and production
 const VERCEL_PROXY = '/api/postiz-proxy?path=';
+
+// Check if we're in development mode
+const isDevelopment = import.meta.env.DEV;
+
+// Get the appropriate proxy URL based on environment
+const getProxyUrl = (path: string): string => {
+  if (isDevelopment) {
+    // In development, use the direct proxy path without query parameter
+    return `/api/postiz-proxy/${path}`;
+  }
+  // In production, use the original Vercel proxy format
+  return `${VERCEL_PROXY}${path}`;
+};
+
+console.log(`🚀 Postiz API Mode: ${isDevelopment ? 'Development (Proxy)' : 'Production (Vercel Proxy)'}`);
 
 export interface PostizProfile {
   id: string;
@@ -52,25 +67,27 @@ export const postizAPI = {
     };
   },
 
-  // Get proxied URL for Vercel proxy
+  // Get proxied URL for Vercel proxy (legacy method - use getProxyUrl for new code)
   getProxiedUrl: (url: string): string => {
     // Extract the path from the URL for the Vercel proxy
     const urlObj = new URL(url);
     const path = urlObj.pathname.replace('/public/v1/', '');
-    return `${VERCEL_PROXY}${path}`;
+    return getProxyUrl(path);
   },
 
   // Get user profiles
   async getProfiles(): Promise<PostizProfile[]> {
     try {
-      const url = `${POSTIZ_API_BASE}/integrations`;
-      const proxiedUrl = `${VERCEL_PROXY}integrations`;
-      
       const headers = postizAPI.getAuthHeaders();
+      const proxiedUrl = getProxyUrl('integrations');
+      
+      console.log('📤 Fetching profiles via:', proxiedUrl);
       
       const response = await fetch(proxiedUrl, {
         headers,
       });
+
+      console.log('📊 Profile fetch response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -123,10 +140,10 @@ export const postizAPI = {
     }
   },
 
-  // Create a new post with proper Postiz API format (images should already be hosted)
-  async createPost(postData: CreatePostData): Promise<PostizPost> {
+  // Create a new post with proper Postiz API format (images must be uploaded to Postiz first)
+  async createPost(postData: CreatePostData & { _postizMedia?: {id: string, path: string}[] }): Promise<PostizPost> {
     try {
-      const proxiedUrl = `${VERCEL_PROXY}posts`;
+      const proxiedUrl = getProxyUrl('posts');
       
       // Validate required fields before proceeding
       if (!postData.profileIds || postData.profileIds.length === 0) {
@@ -137,19 +154,35 @@ export const postizAPI = {
         throw new Error('Post content is required');
       }
 
-      // Postiz requires images to be uploaded to their domain first, then referenced by path
+      console.log('📤 Creating post via:', proxiedUrl);
+      console.log('📊 Post data:', {
+        profileCount: postData.profileIds.length,
+        mediaCount: postData.mediaUrls?.length || 0,
+        hasPostizMedia: !!postData._postizMedia
+      });
+
+      // Postiz requires images to be uploaded to Postiz storage first, then referenced by id/path
       let processedImages: {id: string, path: string}[] = [];
-      if (postData.mediaUrls && postData.mediaUrls.length > 0) {
-        // Images should already be hosted on imgbb.com by our upload service
-        processedImages = postData.mediaUrls.map((url, index) => {
-          return {
-            id: `img_${index + 1}`,
-            path: url // Postiz expects 'path' field, not 'url'
-          };
-        });
+      
+      if (postData._postizMedia && postData._postizMedia.length > 0) {
+        // Use the actual uploaded media from Postiz (preferred)
+        console.log('🎯 Using Postiz uploaded media:', postData._postizMedia);
+        processedImages = postData._postizMedia.map((media, index) => ({
+          id: media.id,
+          path: media.path
+        }));
+      } else if (postData.mediaUrls && postData.mediaUrls.length > 0) {
+        // Fallback: try to use URLs directly (may work for some cases)
+        console.warn('⚠️ No Postiz upload data found, using URLs directly');
+        processedImages = postData.mediaUrls.map((url, index) => ({
+          id: `img_${index + 1}`,
+          path: url
+        }));
       }
 
-      // Postiz requires specific format with all required fields - ensuring proper types
+      console.log('📸 Processed images for Postiz:', processedImages);
+
+      // Postiz requires specific format with all required fields
       const requestBody = {
         type: postData.scheduledAt ? 'schedule' : 'now',
         date: postData.scheduledAt || new Date().toISOString(),
@@ -158,7 +191,7 @@ export const postizAPI = {
           value: [{
             content: postData.text,
             image: processedImages,
-            tags: [], // Postiz expects tags as empty array, not image IDs
+            tags: [], // Postiz expects tags as empty array
           }],
           // Required settings object with explicit boolean/string types
           settings: {
@@ -183,6 +216,8 @@ export const postizAPI = {
         body: JSON.stringify(requestBody),
       });
 
+      console.log('📊 Post response status:', response.status);
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Postiz API Error Details:', errorText);
@@ -206,7 +241,7 @@ export const postizAPI = {
       return {
         id: data[0]?.postId || data?.id || 'unknown',
         text: postData.text,
-        mediaUrls: postData.mediaUrls || [],
+        mediaUrls: processedImages.map(img => img.path),
         scheduledAt: postData.scheduledAt,
         status: 'scheduled',
         profiles: postData.profileIds,
@@ -293,7 +328,9 @@ export const postizAPI = {
   // Upload image from URL using Postiz API (as documented in Discord)
   async uploadImageFromUrl(imageUrl: string, index: number): Promise<{success: boolean, path: string}> {
     try {
-      const proxiedUrl = `${VERCEL_PROXY}upload-from-url`;
+      const proxiedUrl = getProxyUrl('upload-from-url');
+      
+      console.log(`📤 Uploading from URL via:`, proxiedUrl);
       
       const response = await fetch(proxiedUrl, {
         method: 'POST',
@@ -301,12 +338,15 @@ export const postizAPI = {
         body: JSON.stringify({ url: imageUrl })
       });
 
+      console.log(`📊 Upload response status:`, response.status);
+
       if (!response.ok) {
         console.error(`❌ URL upload failed for ${imageUrl}:`, response.status);
         return { success: false, path: imageUrl };
       }
 
       const result = await response.json();
+      console.log(`✅ Upload successful:`, result);
       return {
         success: true,
         path: result.path || result.url || `upload_${Date.now()}_${index + 1}`
@@ -333,7 +373,9 @@ export const postizAPI = {
       const formData = new FormData();
       formData.append('file', blob, filename);
 
-      const proxiedUrl = `${VERCEL_PROXY}upload`;
+      const proxiedUrl = getProxyUrl('upload');
+      
+      console.log(`📤 Multipart upload via:`, proxiedUrl);
 
       const response = await fetch(proxiedUrl, {
         method: 'POST',
@@ -344,12 +386,15 @@ export const postizAPI = {
         body: formData
       });
 
+      console.log(`📊 Multipart upload response status:`, response.status);
+
       if (!response.ok) {
         console.error(`❌ File upload failed for ${imageUrl}:`, response.status);
         return { success: false, path: imageUrl };
       }
 
       const result = await response.json();
+      console.log(`✅ Multipart upload successful:`, result);
       return {
         success: true,
         path: result.path || result.url || filename
@@ -499,11 +544,15 @@ Once you upload images to Postiz, they're permanently available for all your fut
     try {
       const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
       const endDate = new Date().toISOString();
-      const proxiedUrl = `${VERCEL_PROXY}posts&startDate=${startDate}&endDate=${endDate}`;
+      const proxiedUrl = getProxyUrl(`posts?startDate=${startDate}&endDate=${endDate}`);
+
+      console.log('📤 Fetching posts via:', proxiedUrl);
 
       const response = await fetch(proxiedUrl, {
         headers: postizAPI.getAuthHeaders(),
       });
+
+      console.log('📊 Posts fetch response status:', response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
