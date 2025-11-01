@@ -666,6 +666,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     const { active, over } = event;
     const dragDuration = Date.now() - dragStartTime;
 
+    console.log('🎯 Drag ended:', {
+      activeId: active.id,
+      overId: over?.id,
+      dragDuration,
+      availableFolders: folders.map(f => ({ id: f.id, name: f.name }))
+    });
+
     // If drag was very short (less than 300ms) and no drop target, treat as click
     if (!over && dragDuration < 300) {
       const clickedItem = fileItems.find(item => item.id === active.id);
@@ -691,9 +698,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     // Only process drag operations if we have a drop target
     if (over) {
       const draggedItem = fileItems.find(item => item.id === active.id);
+      console.log('📦 Dragged item:', draggedItem?.type, draggedItem?.name);
       
       // Handle drop into root move zone
       if (over.id === 'root-move-zone') {
+        console.log('📤 Dropping to root');
         if (draggedItem?.type === 'file') {
           const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
           handleMoveImagesToRoot(itemsToMove);
@@ -704,20 +713,22 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         return;
       }
       
-      // Handle drop into folders - both images and slideshows use the same detection logic
-      if (draggedItem?.type === 'slideshow') {
-        // Handle slideshow file dragging
-        const targetFolder = folders.find(f => f.id === over.id || f.id === String(over.id));
-        if (targetFolder) {
+      // Handle drop into folders - check if the drop target is a folder
+      const targetFolder = folders.find(f => f.id === over.id);
+      
+      console.log('🎯 Target folder found:', targetFolder?.name, 'for drop id:', over.id);
+      
+      if (targetFolder) {
+        if (draggedItem?.type === 'slideshow') {
+          console.log('📺 Moving slideshow to folder:', targetFolder.name);
           handleMoveSlideshowToFolder(active.id as string, targetFolder.id);
-        }
-      } else if (draggedItem?.type === 'file') {
-        // Handle image file dragging
-        const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
-        const targetFolder = folders.find(f => f.id === over.id || f.id === String(over.id));
-        if (targetFolder) {
+        } else if (draggedItem?.type === 'file') {
+          console.log('🖼️ Moving image(s) to folder:', targetFolder.name);
+          const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
           handleMoveImagesToFolder(targetFolder.id, itemsToMove);
         }
+      } else {
+        console.log('⚠️ No target folder found for drop id:', over.id);
       }
     }
 
@@ -1407,7 +1418,8 @@ const FolderTile: React.FC<{
     id: item.id,
     data: {
       type: 'folder',
-      folderId: item.id
+      folderId: item.id,
+      accepts: ['file', 'slideshow'] // Explicitly define what can be dropped
     }
   });
   
@@ -1435,12 +1447,12 @@ const FolderTile: React.FC<{
 
   return (
     <div
+      ref={setNodeRef}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
         onContextMenu(item.id, e.clientX, e.clientY);
       }}
-      onClick={handleClick}
       className={cn(
         "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all cursor-pointer",
         isOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50"
@@ -1449,20 +1461,21 @@ const FolderTile: React.FC<{
         zIndex: isOver ? 50 : 1,
         cursor: isRenaming ? 'text' : 'pointer'
       }}
-      ref={setNodeRef} // setNodeRef should be on the main droppable element
     >
       {/* Drop zone overlay for better visual feedback */}
       {isOver && (
-        <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10">
+        <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
             Drop here
           </div>
         </div>
       )}
       
-      {/* The main div itself is the droppable area, no need for a separate expanded div with pointer-events: none */}
-      
-      <div className="flex flex-col items-center justify-center h-full relative z-10">
+      {/* Clickable content area - doesn't interfere with drop detection */}
+      <div
+        className="flex flex-col items-center justify-center h-full relative z-0"
+        onClick={handleClick}
+      >
         <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
         {isRenaming ? (
           <input
@@ -1510,6 +1523,10 @@ const SlideshowTile: React.FC<{
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
+    data: {
+      type: 'slideshow',
+      itemId: item.id
+    },
     disabled: false
   });
 
@@ -1598,6 +1615,10 @@ const FileTile: React.FC<{
 }> = ({ item, selected, onToggleSelection, className, fileTileRefs }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
+    data: {
+      type: 'file',
+      itemId: item.id
+    },
     disabled: false
   });
 
