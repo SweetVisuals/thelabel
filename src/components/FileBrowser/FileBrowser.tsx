@@ -181,16 +181,28 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   // Get slideshows from service instead of directly from localStorage
   const getSlideshowsFromService = () => {
     try {
-      // Load slideshows from the service
+      // Load slideshows from the service to ensure fresh data
       slideshowService.loadFromLocalStorage();
       
       // Get slideshows directly from memory
       const allSlideshows = Array.from((slideshowService as any)['slideshows'].values());
       
+      console.log('📊 Loading slideshows from service:', {
+        total: allSlideshows.length,
+        currentFolderId,
+        slideshowsWithFolderId: allSlideshows.filter((s: any) => s.folder_id).length
+      });
+      
       // Filter slideshows by current folder for proper folder display
       const filteredSlideshows = currentFolderId === null
         ? allSlideshows.filter((slideshow: any) => !slideshow.folder_id)
         : allSlideshows.filter((slideshow: any) => slideshow.folder_id === currentFolderId);
+      
+      console.log('📁 Filtered slideshows for current folder:', {
+        currentFolderId,
+        filteredCount: filteredSlideshows.length,
+        slideshowTitles: filteredSlideshows.map((s: any) => s.title)
+      });
       
       return filteredSlideshows.map((slideshow: any) => {
         return {
@@ -597,73 +609,37 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     });
   };
 
+  const handleMoveImagesToRoot = async (imageIds: string[]) => {
+    console.log('📤 handleMoveImagesToRoot called:', imageIds);
+    
+    const movePromise = imageService.removeImagesFromFolder(imageIds);
+    toast.promise(movePromise, {
+      loading: 'Moving images to root...',
+      success: () => {
+        console.log('✅ Images moved to root, updating UI...');
+        
+        // Optimistic update
+        const movedImages = folders.flatMap(f => f.images.filter(img => imageIds.includes(img.id)));
+        const updatedImages = [...images, ...movedImages];
+        const updatedFolders = folders.map(f => ({
+          ...f,
+          images: f.images.filter(img => !imageIds.includes(img.id)),
+        }));
+        onImagesUploaded(updatedImages);
+        onFoldersChange?.(updatedFolders);
+        onSelectionChange([]);
+        return 'Images moved to root successfully!';
+      },
+      error: 'Failed to move images to root.',
+    });
+  };
+
   const handleMoveSlideshowToFolder = async (slideshowId: string, folderId: string | null) => {
     try {
-      // Get the current slideshow data to check its current folder
-      const allSlideshows = getSlideshowsFromService();
-      const slideshowItem = allSlideshows.find(item => item.id === slideshowId);
-      if (!slideshowItem || !slideshowItem.slideshow) {
-        throw new Error('Slideshow not found');
-      }
+      console.log(`📁 Moving slideshow ${slideshowId} to folder ${folderId || 'root'}`);
       
-      const slideshow = slideshowItem.slideshow;
-      const currentFolderId = slideshow.folder_id;
-      
-      // Don't do anything if moving to the same folder
-      if (currentFolderId === folderId) {
-        return;
-      }
-      
-      console.log(`📁 Moving slideshow "${slideshow.title}" from folder ${currentFolderId || 'root'} to folder ${folderId || 'root'}`);
-      
-      // Update the slideshow service
+      // Use the slideshow service to move the slideshow
       await slideshowService.moveSlideshowToFolder(slideshowId, folderId);
-      
-      // CRITICAL: Update ALL slideshow file entries in localStorage
-      // First, find all file entries for this slideshow
-      const slideshowFileKeys = [];
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('slideshow_file_')) {
-          const fileData = localStorage.getItem(key);
-          if (fileData) {
-            try {
-              const parsed = JSON.parse(fileData);
-              // Match by slideshow ID (remove the "slideshow_" prefix if present)
-              const fileSlideshowId = parsed.id.startsWith('slideshow_') ? parsed.id : `slideshow_${parsed.id}`;
-              if (fileSlideshowId === slideshowId) {
-                slideshowFileKeys.push(key);
-              }
-            } catch (error) {
-              console.warn('Failed to parse slideshow file data:', key, error);
-            }
-          }
-        }
-      }
-      
-      console.log(`🔍 Found ${slideshowFileKeys.length} file entries for slideshow ${slideshowId}`);
-      
-      // Update all found file entries to the new folder
-      slideshowFileKeys.forEach(fileKey => {
-        try {
-          const fileData = localStorage.getItem(fileKey);
-          if (fileData) {
-            const parsedFileData = JSON.parse(fileData);
-            parsedFileData.folderId = folderId;
-            parsedFileData.updated = new Date().toISOString();
-            localStorage.setItem(fileKey, JSON.stringify(parsedFileData));
-            console.log(`✅ Updated file entry ${fileKey} to folder ${folderId || 'root'}`);
-          }
-        } catch (error) {
-          console.error(`Failed to update file entry ${fileKey}:`, error);
-        }
-      });
-      
-      // Dispatch storage event to trigger re-render
-      window.dispatchEvent(new StorageEvent('storage', {
-        key: 'savedSlideshows',
-        newValue: localStorage.getItem('savedSlideshows')
-      }));
       
       // Force re-render to update the file list
       triggerReRender();
@@ -679,8 +655,16 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     const { active, over } = event;
     const dragDuration = Date.now() - dragStartTime;
 
-    // If drag was very short (less than 500ms for more forgiving detection) and no drop target, treat as click
-    if (!over && dragDuration < 500) {
+    console.log('🔄 Drag end event:', {
+      active: active.id,
+      over: over?.id,
+      activeId,
+      dragDuration,
+      timestamp: Date.now() - dragStartTime
+    });
+
+    // If drag was very short (less than 300ms) and no drop target, treat as click
+    if (!over && dragDuration < 300) {
       const clickedItem = fileItems.find(item => item.id === active.id);
       if (clickedItem?.type === 'file') {
         toggleSelection(active.id as string);
@@ -701,85 +685,82 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       return;
     }
 
-    console.log('🔄 Drag end event:', {
-      active: active.id,
-      over: over?.id,
-      activeId,
-      hasActiveId: !!activeId,
-      timestamp: Date.now() - dragStartTime
-    });
-
-    // Only process drag operations if we have an active drag and a valid drop target
-    if (over && activeId) {
+    // Only process drag operations if we have an active drag
+    if (activeId) {
       const draggedItem = fileItems.find(item => item.id === active.id);
       
-      console.log('🔄 Drag end - active:', active.id, 'over:', over.id, 'draggedItem:', draggedItem);
+      console.log('🔄 Processing drag - active:', active.id, 'over:', over?.id, 'draggedItem:', draggedItem);
       
       if (draggedItem?.type === 'file') {
         // Handle image file dragging
         const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
-        console.log('🖼️ Processing image drag - items to move:', itemsToMove, 'target:', over.id);
+        console.log('🖼️ Processing image drag - items to move:', itemsToMove, 'target:', over?.id);
         
-        if (over.id === 'root-move-zone') {
+        if (over?.id === 'root-move-zone') {
           // Moving images to root
           console.log('📤 Moving images to root:', itemsToMove);
-          const removePromise = imageService.removeImagesFromFolder(itemsToMove);
-          toast.promise(removePromise, {
-            loading: 'Moving images to root...',
-            success: () => {
-              // Optimistic update
-              const movedImages = folders.flatMap(f => f.images.filter(img => itemsToMove.includes(img.id)));
-              const updatedImages = [...images, ...movedImages];
-              const updatedFolders = folders.map(f => ({
-                ...f,
-                images: f.images.filter(img => !itemsToMove.includes(img.id)),
-              }));
-              onImagesUploaded(updatedImages);
-              onFoldersChange?.(updatedFolders);
-              onSelectionChange([]);
-              return 'Images moved to root successfully!';
-            },
-            error: 'Failed to move images.',
-          });
-        } else {
-          // Moving images to a folder - check if the drop target is a folder
+          handleMoveImagesToRoot(itemsToMove);
+        } else if (over) {
+          // Check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
           const overData = (over as any)?.data;
           
+          console.log('📁 Drop target analysis:', {
+            targetFolder,
+            overData,
+            isFolder: targetFolder?.type === 'folder',
+            hasFolderData: !!overData?.type
+          });
+          
           if (targetFolder?.type === 'folder') {
+            console.log('✅ Moving to folder:', over.id);
             handleMoveImagesToFolder(over.id as string, itemsToMove);
           } else if (overData?.type === 'folder') {
             // Check if the drop target data indicates it's a folder
             const folderId = overData.folderId || over.id;
+            console.log('✅ Moving to folder (via data):', folderId);
             handleMoveImagesToFolder(folderId, itemsToMove);
+          } else {
+            console.log('❌ Invalid drop target for images:', over?.id);
           }
         }
       } else if (draggedItem?.type === 'slideshow') {
         // Handle slideshow file dragging
-        console.log('🎬 Processing slideshow drag - target:', over.id);
+        console.log('🎬 Processing slideshow drag - target:', over?.id);
         
-        if (over.id === 'root-move-zone') {
+        if (over?.id === 'root-move-zone') {
           // Moving slideshow to root
           console.log('📤 Moving slideshow to root:', active.id);
           handleMoveSlideshowToFolder(active.id as string, null);
-        } else {
-          // Moving slideshow to a folder - check if the drop target is a folder
+        } else if (over) {
+          // Check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
           const overData = (over as any)?.data;
           
+          console.log('📁 Slideshow drop target analysis:', {
+            targetFolder,
+            overData,
+            isFolder: targetFolder?.type === 'folder',
+            hasFolderData: !!overData?.type
+          });
+          
           if (targetFolder?.type === 'folder') {
+            console.log('✅ Moving slideshow to folder:', over.id);
             handleMoveSlideshowToFolder(active.id as string, over.id as string);
           } else if (overData?.type === 'folder') {
             // Check if the drop target data indicates it's a folder
             const folderId = overData.folderId || over.id;
+            console.log('✅ Moving slideshow to folder (via data):', folderId);
             handleMoveSlideshowToFolder(active.id as string, folderId);
+          } else {
+            console.log('❌ Invalid drop target for slideshow:', over?.id);
           }
         }
       } else {
         console.log('❌ Dragged item not found or not draggable:', active.id, draggedItem);
       }
     } else {
-      console.log('❌ No drop target or no active drag:', { over: over?.id, activeId, hasOver: !!over });
+      console.log('❌ No active drag:', { over: over?.id, activeId });
     }
 
     setActiveId(null);
@@ -1508,6 +1489,9 @@ const FolderTile: React.FC<{
   setRenamingFolderId,
   handleRenameSubmit
 }) => {
+  const [clickStartPos, setClickStartPos] = useState<{x: number, y: number} | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  
   const { isOver, setNodeRef } = useDroppable({
     id: item.id,
     data: {
@@ -1515,7 +1499,7 @@ const FolderTile: React.FC<{
       folderId: item.id
     }
   });
-  const { attributes, listeners, setNodeRef: dragSetNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef: dragSetNodeRef, transform } = useDraggable({
     id: item.id,
     disabled: false
   });
@@ -1529,17 +1513,49 @@ const FolderTile: React.FC<{
     }
   };
 
-  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}`);
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setClickStartPos({ x: e.clientX, y: e.clientY });
+    setIsDragging(false);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!clickStartPos) return;
+    
+    const distance = Math.sqrt(
+      Math.pow(e.clientX - clickStartPos.x, 2) + Math.pow(e.clientY - clickStartPos.y, 2)
+    );
+    
+    if (distance > 5) { // 5px threshold for drag detection
+      setIsDragging(true);
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (!isDragging && !isRenaming) {
+      e.stopPropagation();
+      onFolderClick(item.id);
+    }
+    setClickStartPos(null);
+    setIsDragging(false);
+  };
+
+  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}, isDragging: ${isDragging}`);
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : {};
 
   return (
-    <div onClick={(e) => {
-      e.stopPropagation();
-      if (!isRenaming) onFolderClick(item.id);
-    }}>
+    <div
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onContextMenu(item.id, e.clientX, e.clientY);
+      }}
+    >
       <div
         ref={(node) => {
           setNodeRef(node);
@@ -1547,19 +1563,15 @@ const FolderTile: React.FC<{
         }}
         {...attributes}
         {...listeners}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          onContextMenu(item.id, e.clientX, e.clientY);
-        }}
         className={cn(
-          "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent cursor-pointer transition-all",
+          "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all",
           isOver ? "border-blue-500 ring-2 ring-blue-400/30 bg-blue-500/20" : "hover:shadow-lg hover:border-blue-400/50",
           isDragging && "opacity-50"
         )}
         style={{
           ...style,
           zIndex: isOver ? 50 : 1,
+          cursor: isRenaming ? 'text' : 'pointer'
         }}
       >
         <div className="flex flex-col items-center justify-center h-full">

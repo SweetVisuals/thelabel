@@ -1195,16 +1195,55 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       // Save to localStorage
       this.saveToLocalStorage();
 
-      // Update the slideshow file data in localStorage
-      const fileKey = `slideshow_file_${slideshowId}`;
-      const fileData = localStorage.getItem(fileKey);
-      if (fileData) {
-        const parsedFileData = JSON.parse(fileData);
-        parsedFileData.folderId = folderId;
-        parsedFileData.updated = new Date().toISOString();
-        localStorage.setItem(fileKey, JSON.stringify(parsedFileData));
+      // CRITICAL FIX: Update ALL slideshow file entries in localStorage
+      // Find all file entries for this slideshow by searching all slideshow_file_ keys
+      const slideshowFileKeys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('slideshow_file_')) {
+          const fileData = localStorage.getItem(key);
+          if (fileData) {
+            try {
+              const parsed = JSON.parse(fileData);
+              // Match by slideshow ID (remove the "slideshow_" prefix if present)
+              const fileSlideshowId = parsed.id.startsWith('slideshow_') ? parsed.id : `slideshow_${parsed.id}`;
+              if (fileSlideshowId === slideshowId) {
+                slideshowFileKeys.push(key);
+              }
+            } catch (error) {
+              console.warn('Failed to parse slideshow file data:', key, error);
+            }
+          }
+        }
       }
+      
+      console.log(`🔍 Found ${slideshowFileKeys.length} file entries for slideshow ${slideshowId}`);
+      
+      // Update all found file entries to the new folder
+      slideshowFileKeys.forEach(fileKey => {
+        try {
+          const fileData = localStorage.getItem(fileKey);
+          if (fileData) {
+            const parsedFileData = JSON.parse(fileData);
+            parsedFileData.folderId = folderId;
+            parsedFileData.updated = new Date().toISOString();
+            localStorage.setItem(fileKey, JSON.stringify(parsedFileData));
+            console.log(`✅ Updated file entry ${fileKey} to folder ${folderId || 'root'}`);
+          }
+        } catch (error) {
+          console.error(`Failed to update file entry ${fileKey}:`, error);
+        }
+      });
+      
+      // Also save to database for persistence
+      await this.saveToDatabase(slideshow);
 
+      // Dispatch storage event to trigger re-render
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'savedSlideshows',
+        newValue: localStorage.getItem('savedSlideshows')
+      }));
+      
       // Dispatch custom event to update file browser
       window.dispatchEvent(new CustomEvent('slideshowUpdated'));
 
