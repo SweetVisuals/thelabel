@@ -216,7 +216,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const handleDragStart = (event: DragStartEvent) => {
     const draggedItem = fileItems.find(item => item.id === event.active.id);
-    if (draggedItem?.type === 'file' || draggedItem?.type === 'slideshow') {
+    if (draggedItem && (draggedItem.type === 'file' || draggedItem.type === 'slideshow')) {
       setActiveId(event.active.id as string);
       setDragStartTime(Date.now());
       // Note: We'll detect clicks in handleDragEnd if the drag was very short
@@ -737,14 +737,18 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       return;
     }
 
+    // Only process drag operations if we have an active drag and a valid drop target
     if (over && activeId) {
       const draggedItem = fileItems.find(item => item.id === active.id);
+      
+      console.log('🔄 Drag end - active:', active.id, 'over:', over.id, 'draggedItem:', draggedItem);
       
       if (draggedItem?.type === 'file') {
         // Handle image file dragging
         const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
         if (over.id === 'root-move-zone') {
           // Moving images to root
+          console.log('📤 Moving images to root:', itemsToMove);
           const removePromise = imageService.removeImagesFromFolder(itemsToMove);
           toast.promise(removePromise, {
             loading: 'Moving images to root...',
@@ -764,25 +768,38 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             error: 'Failed to move images.',
           });
         } else {
-          // Moving images to a folder
+          // Moving images to a folder - check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
+          console.log('📁 Target folder check:', targetFolder);
           if (targetFolder?.type === 'folder') {
+            console.log('🗂️ Moving images to folder:', over.id, itemsToMove);
             handleMoveImagesToFolder(over.id as string, itemsToMove);
+          } else {
+            console.log('❌ Drop target is not a folder:', over.id);
           }
         }
       } else if (draggedItem?.type === 'slideshow') {
         // Handle slideshow file dragging
         if (over.id === 'root-move-zone') {
           // Moving slideshow to root
+          console.log('📤 Moving slideshow to root:', active.id);
           handleMoveSlideshowToFolder(active.id as string, null);
         } else {
-          // Moving slideshow to a folder
+          // Moving slideshow to a folder - check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
+          console.log('📁 Target folder check for slideshow:', targetFolder);
           if (targetFolder?.type === 'folder') {
+            console.log('🗂️ Moving slideshow to folder:', active.id, 'to folder:', over.id);
             handleMoveSlideshowToFolder(active.id as string, over.id as string);
+          } else {
+            console.log('❌ Drop target is not a folder for slideshow:', over.id);
           }
         }
+      } else {
+        console.log('❌ Dragged item not found or not draggable:', active.id);
       }
+    } else {
+      console.log('❌ No drop target or no active drag:', { over, activeId });
     }
 
     setActiveId(null);
@@ -1180,6 +1197,25 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                   </div>
                 );
               })()
+            ) : activeItem && activeItem.type === 'slideshow' ? (
+              <div className="relative">
+                <SlideshowTile
+                  item={activeItem}
+                  onSlideshowClick={() => {}}
+                  onContextMenu={() => {}}
+                  selected={false} // Don't show selected state in drag overlay
+                  onToggleSelection={() => {}}
+                  renamingSlideshowId={null}
+                  renameSlideshowInputValue={''}
+                  setRenameSlideshowInputValue={() => {}}
+                  setRenamingSlideshowId={() => {}}
+                  handleRenameSlideshowSubmit={async () => {}}
+                  debugSelected={false}
+                />
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded mb-1 pointer-events-none">
+                  Drag slideshow
+                </div>
+              </div>
             ) : activeItem && activeItem.type === 'folder' ? (
               <FolderTile
                 item={activeItem}

@@ -250,9 +250,16 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
   if (!isOpen) return null;
 
   const selectedTemplateData = templates.find(t => t.id === selectedTemplate);
-  const targetImages = selectedImages.length > 0 
+  const targetImages = selectedImages.length > 0
     ? uploadedImages.filter(img => selectedImages.includes(img.id))
     : uploadedImages;
+
+  // Filter templates that can be applied based on image count
+  const applicableTemplates = templates.filter(template => {
+    return selectedImages.length > 0
+      ? selectedImages.length === template.slideCount
+      : uploadedImages.length >= template.slideCount;
+  });
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -278,19 +285,30 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
               <p className="text-muted-foreground">No templates available</p>
               <p className="text-sm text-muted-foreground">Create a template first to use this feature</p>
             </div>
+          ) : applicableTemplates.length === 0 ? (
+            <div className="text-center py-8">
+              <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+              <p className="text-muted-foreground">No templates match current image count</p>
+              <p className="text-sm text-muted-foreground">
+                {selectedImages.length > 0
+                  ? `Selected ${selectedImages.length} images - templates require exactly ${templates.map(t => t.slideCount).join(', ')} slides`
+                  : `Upload ${templates.map(t => t.slideCount).join(' or ')} images to apply a template`
+                }
+              </p>
+            </div>
           ) : (
             <>
               {/* Template Selection */}
               <div>
                 <label className="text-sm font-medium block mb-3">Choose Template</label>
                 <div className="grid gap-3">
-                  {templates.map(template => (
+                  {applicableTemplates.map(template => (
                     <div
                       key={template.id}
                       className={cn(
                         "border rounded-lg p-4 cursor-pointer transition-all",
-                        selectedTemplate === template.id 
-                          ? "border-primary bg-primary/5" 
+                        selectedTemplate === template.id
+                          ? "border-primary bg-primary/5"
                           : "border-border hover:border-primary/50"
                       )}
                       onClick={() => setSelectedTemplate(template.id)}
@@ -394,12 +412,12 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
                 <Button variant="outline" onClick={onClose} className="flex-1">
                   Cancel
                 </Button>
-                <Button 
-                  onClick={handleApply} 
+                <Button
+                  onClick={handleApply}
                   disabled={!selectedTemplate || isApplying}
                   className="flex-1"
                 >
-                  {isApplying ? 'Applying...' : 'Apply Template'}
+                  {isApplying ? 'Applying...' : 'Apply Template to Settings'}
                 </Button>
               </div>
             </>
@@ -530,7 +548,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       hashtags: currentHashtags,
       condensedSlides: [{}, {}, {}] as any, // 3 placeholder slides for TikTok templates
       textOverlays: currentTextOverlays || [],
-      aspectRatio: currentAspectRatio || '9:16',
+      aspectRatio: currentAspectRatio || '3:4', // Use 3:4 as fallback instead of 9:16
       transitionEffect: currentTransitionEffect || 'fade',
       musicEnabled: currentMusicEnabled || false,
       created_at: new Date().toISOString(),
@@ -564,8 +582,6 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
   };
 
   const handleApplyTemplate = async (templateId: string, customizations?: any) => {
-    if (!user) return;
-    
     try {
       const template = templates.find(t => t.id === templateId);
       if (!template) {
@@ -573,7 +589,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
         return;
       }
 
-      const targetImages = selectedImages.length > 0 
+      const targetImages = selectedImages.length > 0
         ? uploadedImages.filter(img => selectedImages.includes(img.id))
         : uploadedImages;
 
@@ -582,24 +598,25 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
         return;
       }
 
-      const result = await slideshowService.applyTemplateToImages(
+      // Use the new applyTemplateToSettings method that only populates edit settings
+      const result = await slideshowService.applyTemplateToSettings(
         template,
-        targetImages,
-        user.id,
+        uploadedImages,
+        selectedImages.length > 0 ? selectedImages : targetImages.map(img => img.id),
         customizations
       );
 
       onTemplateApplied(result);
       
       if (result.success) {
-        setNotification({ 
-          message: `Template applied successfully! Created ${result.processedImages} slides.`, 
-          type: 'success' 
+        setNotification({
+          message: `Template applied to settings! Ready to create ${result.processedImages} slides.`,
+          type: 'success'
         });
       } else {
-        setNotification({ 
-          message: `Template application failed: ${result.error}`, 
-          type: 'error' 
+        setNotification({
+          message: `Template application failed: ${result.error}`,
+          type: 'error'
         });
       }
     } catch (error) {

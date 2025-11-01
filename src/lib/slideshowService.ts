@@ -1568,7 +1568,83 @@ async createOptimizedSlideshow(
   }
 
   /**
-   * Apply template to images and create slideshow
+   * Apply template settings to current editor without creating a saved slideshow
+   * This populates the edit settings columns with template data using new images
+   */
+  async applyTemplateToSettings(
+    template: SlideshowTemplate,
+    images: UploadedImage[],
+    selectedImageIds: string[],
+    customizations?: {
+      title?: string;
+      caption?: string;
+      hashtags?: string[];
+    }
+  ): Promise<TemplateApplicationResult> {
+    try {
+      // Use template settings with optional overrides
+      const finalTitle = customizations?.title || template.title;
+      const finalCaption = customizations?.caption || template.caption;
+      const finalHashtags = customizations?.hashtags || template.hashtags;
+
+      // Filter images based on selected IDs or use all images
+      const targetImages = selectedImageIds.length > 0
+        ? images.filter(img => selectedImageIds.includes(img.id))
+        : images;
+
+      // Validate that image count matches template slide count
+      if (targetImages.length !== template.slideCount) {
+        return {
+          success: false,
+          error: `Template requires exactly ${template.slideCount} images, but ${targetImages.length} are selected`,
+          processedImages: targetImages.length,
+          totalImages: images.length
+        };
+      }
+
+      // Apply template text overlays with new image IDs adapted for the new images
+      const adaptedTextOverlays = template.textOverlays.map(overlay => ({
+        ...overlay,
+        id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      }));
+
+      // Create a temporary slideshow for validation (not saved)
+      const tempSlideshow: SlideshowMetadata = {
+        id: `temp_${Date.now()}`,
+        title: finalTitle,
+        postTitle: template.postTitle || finalTitle,
+        caption: finalCaption,
+        hashtags: finalHashtags,
+        condensedSlides: [], // Empty for settings-only application
+        textOverlays: adaptedTextOverlays,
+        aspectRatio: template.aspectRatio,
+        transitionEffect: template.transitionEffect,
+        musicEnabled: template.musicEnabled,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_id: '', // Will be set by caller if needed
+        folder_id: null
+      };
+
+      return {
+        success: true,
+        slideshow: tempSlideshow,
+        processedImages: targetImages.length,
+        totalImages: images.length
+      };
+    } catch (error) {
+      console.error('Failed to apply template to settings:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        processedImages: 0,
+        totalImages: images.length
+      };
+    }
+  }
+
+  /**
+   * Apply template to images and create slideshow (legacy method for backward compatibility)
    */
   async applyTemplateToImages(
     template: SlideshowTemplate,

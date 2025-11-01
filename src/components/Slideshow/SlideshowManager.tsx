@@ -384,11 +384,27 @@ export const SlideshowManager: React.FC<SlideshowManagerProps> = ({
             onTemplateApplied(result);
           }
           if (result.success && result.slideshow) {
-            // Refresh saved slideshows to show the new one
-            loadSavedSlideshows();
+            // Template applied to settings - update the editor with template data
+            const templateData = result.slideshow;
+            
+            // Update all the editor fields with template data
+            onTitleChange(templateData.title);
+            onPostTitleChange(templateData.postTitle || templateData.title);
+            onCaptionChange(templateData.caption);
+            onHashtagsChange(templateData.hashtags);
+            onTextOverlaysChange(templateData.textOverlays);
+            onAspectRatioChange(templateData.aspectRatio);
+            onTransitionEffectChange(templateData.transitionEffect);
+            onMusicEnabledChange(templateData.musicEnabled);
+            
             setNotification({
-              message: `Template applied successfully! Created ${result.processedImages} slides.`,
+              message: `Template applied to editor! Settings updated for ${result.processedImages} slides.`,
               type: 'success'
+            });
+          } else {
+            setNotification({
+              message: `Template application failed: ${result.error}`,
+              type: 'error'
             });
           }
         }}
