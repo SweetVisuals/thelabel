@@ -152,12 +152,12 @@ export const postizAPI = {
           value: [{
             content: postData.text,
             image: processedImages,
-            tags: [], // Required field - can be empty array
+            tags: processedImages.length > 0 ? processedImages.map(img => img.id) : [], // Use image IDs as tags
           }],
-          // Required settings object with correct field names
+          // Required settings object with correct field names and types
           settings: {
             privacy_level: 'PUBLIC_TO_EVERYONE',
-            shortLink: false, // lowercase 'L'
+            shortLink: true, // Must be boolean true, not false
             duet: false,
             stitch: false,
             comment: true,
