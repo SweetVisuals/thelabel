@@ -737,6 +737,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       return;
     }
 
+    console.log('🔄 Drag end event:', {
+      active: active.id,
+      over: over?.id,
+      activeId,
+      hasActiveId: !!activeId,
+      timestamp: Date.now() - dragStartTime
+    });
+
     // Only process drag operations if we have an active drag and a valid drop target
     if (over && activeId) {
       const draggedItem = fileItems.find(item => item.id === active.id);
@@ -746,6 +754,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       if (draggedItem?.type === 'file') {
         // Handle image file dragging
         const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
+        console.log('🖼️ Processing image drag - items to move:', itemsToMove, 'target:', over.id);
+        
         if (over.id === 'root-move-zone') {
           // Moving images to root
           console.log('📤 Moving images to root:', itemsToMove);
@@ -770,16 +780,18 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         } else {
           // Moving images to a folder - check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
-          console.log('📁 Target folder check:', targetFolder);
+          console.log('📁 Target folder check for images:', { targetFolder, overId: over.id, allItems: fileItems.map(i => ({id: i.id, type: i.type})) });
           if (targetFolder?.type === 'folder') {
             console.log('🗂️ Moving images to folder:', over.id, itemsToMove);
             handleMoveImagesToFolder(over.id as string, itemsToMove);
           } else {
-            console.log('❌ Drop target is not a folder:', over.id);
+            console.log('❌ Drop target is not a folder for images:', over.id, targetFolder);
           }
         }
       } else if (draggedItem?.type === 'slideshow') {
         // Handle slideshow file dragging
+        console.log('🎬 Processing slideshow drag - target:', over.id);
+        
         if (over.id === 'root-move-zone') {
           // Moving slideshow to root
           console.log('📤 Moving slideshow to root:', active.id);
@@ -787,19 +799,19 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         } else {
           // Moving slideshow to a folder - check if the drop target is a folder
           const targetFolder = fileItems.find(item => item.id === over.id);
-          console.log('📁 Target folder check for slideshow:', targetFolder);
+          console.log('📁 Target folder check for slideshow:', { targetFolder, overId: over.id });
           if (targetFolder?.type === 'folder') {
             console.log('🗂️ Moving slideshow to folder:', active.id, 'to folder:', over.id);
             handleMoveSlideshowToFolder(active.id as string, over.id as string);
           } else {
-            console.log('❌ Drop target is not a folder for slideshow:', over.id);
+            console.log('❌ Drop target is not a folder for slideshow:', over.id, targetFolder);
           }
         }
       } else {
-        console.log('❌ Dragged item not found or not draggable:', active.id);
+        console.log('❌ Dragged item not found or not draggable:', active.id, draggedItem);
       }
     } else {
-      console.log('❌ No drop target or no active drag:', { over, activeId });
+      console.log('❌ No drop target or no active drag:', { over: over?.id, activeId, hasOver: !!over });
     }
 
     setActiveId(null);
@@ -1526,7 +1538,13 @@ const FolderTile: React.FC<{
   setRenamingFolderId,
   handleRenameSubmit
 }) => {
-  const { isOver, setNodeRef } = useDroppable({ id: item.id });
+  const { isOver, setNodeRef } = useDroppable({
+    id: item.id,
+    data: {
+      type: 'folder',
+      folderId: item.id
+    }
+  });
   const isRenaming = renamingFolderId === item.id;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1536,6 +1554,8 @@ const FolderTile: React.FC<{
       setRenamingFolderId(null);
     }
   };
+
+  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}`);
 
   return (
     <div onClick={(e) => {
@@ -1551,8 +1571,11 @@ const FolderTile: React.FC<{
         }}
         className={cn(
           "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent cursor-pointer transition-all",
-          isOver ? "border-blue-500 ring-2 ring-blue-400/30" : "hover:shadow-lg hover:border-blue-400/50"
+          isOver ? "border-blue-500 ring-2 ring-blue-400/30 bg-blue-500/20" : "hover:shadow-lg hover:border-blue-400/50"
         )}
+        style={{
+          zIndex: isOver ? 50 : 1,
+        }}
       >
         <div className="flex flex-col items-center justify-center h-full">
           <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
