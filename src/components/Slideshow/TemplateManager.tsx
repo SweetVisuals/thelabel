@@ -521,13 +521,14 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
     }
 
     // Create a temporary slideshow-like object from current settings
+    // Add placeholder slides to satisfy database constraint and TikTok content requirements (3+ slides)
     const tempSlideshow: SlideshowMetadata = {
       id: `temp_${Date.now()}`,
       title: currentTitle,
       postTitle: currentPostTitle || currentTitle,
       caption: currentCaption,
       hashtags: currentHashtags,
-      condensedSlides: [], // Empty for templates
+      condensedSlides: [{}, {}, {}] as any, // 3 placeholder slides for TikTok templates
       textOverlays: currentTextOverlays || [],
       aspectRatio: currentAspectRatio || '9:16',
       transitionEffect: currentTransitionEffect || 'fade',
@@ -538,12 +539,17 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       folder_id: null
     };
 
-    await slideshowService.createTemplateFromSlideshow(
-      name,
-      description,
-      tempSlideshow,
-      user.id
-    );
+    try {
+      await slideshowService.createTemplateFromSlideshow(
+        name,
+        description,
+        tempSlideshow,
+        user.id
+      );
+    } catch (error) {
+      console.error('Failed to create template from settings:', error);
+      throw error;
+    }
   };
 
   const handleDeleteTemplate = async (templateId: string) => {
