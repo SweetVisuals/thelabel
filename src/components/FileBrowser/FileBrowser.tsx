@@ -709,11 +709,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             targetFolder,
             overData,
             isFolder: targetFolder?.type === 'folder',
-            hasFolderData: !!overData?.type
+            hasFolderData: !!overData?.type,
+            targetId: over.id,
+            folderIdFromData: overData?.folderId
           });
           
           if (targetFolder?.type === 'folder') {
-            console.log('✅ Moving to folder:', over.id);
+            console.log('✅ Moving to folder (found in fileItems):', over.id);
             handleMoveImagesToFolder(over.id as string, itemsToMove);
           } else if (overData?.type === 'folder') {
             // Check if the drop target data indicates it's a folder
@@ -741,11 +743,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             targetFolder,
             overData,
             isFolder: targetFolder?.type === 'folder',
-            hasFolderData: !!overData?.type
+            hasFolderData: !!overData?.type,
+            targetId: over.id,
+            folderIdFromData: overData?.folderId
           });
           
           if (targetFolder?.type === 'folder') {
-            console.log('✅ Moving slideshow to folder:', over.id);
+            console.log('✅ Moving slideshow to folder (found in fileItems):', over.id);
             handleMoveSlideshowToFolder(active.id as string, over.id as string);
           } else if (overData?.type === 'folder') {
             // Check if the drop target data indicates it's a folder
@@ -1446,7 +1450,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 const RootDropZone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isOver, setNodeRef } = useDroppable({ id: 'root-drop-zone' });
   return (
-    <div ref={setNodeRef} className={cn("h-full", isOver && "bg-green-50")}>
+    <div ref={setNodeRef} className={cn("h-full relative", isOver && "bg-green-50/20 border-2 border-green-500 border-dashed")}>
       {children}
     </div>
   );
@@ -1525,12 +1529,13 @@ const FolderTile: React.FC<{
       Math.pow(e.clientX - clickStartPos.x, 2) + Math.pow(e.clientY - clickStartPos.y, 2)
     );
     
-    if (distance > 5) { // 5px threshold for drag detection
+    if (distance > 3) { // Lowered threshold for better responsiveness
       setIsDragging(true);
     }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    // Don't trigger click if we're dragging or renaming
     if (!isDragging && !isRenaming) {
       e.stopPropagation();
       onFolderClick(item.id);
@@ -1565,7 +1570,7 @@ const FolderTile: React.FC<{
         {...listeners}
         className={cn(
           "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all",
-          isOver ? "border-blue-500 ring-2 ring-blue-400/30 bg-blue-500/20" : "hover:shadow-lg hover:border-blue-400/50",
+          isOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50",
           isDragging && "opacity-50"
         )}
         style={{
@@ -1574,7 +1579,25 @@ const FolderTile: React.FC<{
           cursor: isRenaming ? 'text' : 'pointer'
         }}
       >
-        <div className="flex flex-col items-center justify-center h-full">
+        {/* Drop zone overlay for better visual feedback */}
+        {isOver && (
+          <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+            <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+              Drop here
+            </div>
+          </div>
+        )}
+        
+        {/* Expanded drop zone area - extends beyond the visual folder */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            margin: '-8px', // Extends drop zone 8px beyond the folder bounds
+            zIndex: isOver ? 5 : 1
+          }}
+        />
+        
+        <div className="flex flex-col items-center justify-center h-full relative z-10">
           <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
           {isRenaming ? (
             <input
