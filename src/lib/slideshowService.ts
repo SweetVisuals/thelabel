@@ -2,6 +2,7 @@ import { SlideshowMetadata, CondensedSlide, TikTokTextOverlay, UploadedImage, Po
 import { postizAPI } from './postiz';
 import { imageService } from './imageService';
 import { postizUploadService } from './postizUploadService';
+import { uploadToImgbb } from './imgbb';
 
 export class SlideshowService {
   private static instance: SlideshowService;
@@ -229,7 +230,7 @@ export class SlideshowService {
   /**
    * Save slideshow metadata
    */
-  async saveSlideshow(
+async saveSlideshow(
     title: string,
     postTitle: string,
     caption: string,
@@ -242,11 +243,10 @@ export class SlideshowService {
     userId: string
   ): Promise<SlideshowMetadata> {
     try {
+      console.log('🚀 Starting optimized slideshow save with immediate imgbb upload...');
 
       // Use the aspect ratio from the first image if available, otherwise use the provided aspect ratio
       const finalAspectRatio = images[0]?.aspectRatio || aspectRatio;
-
-      
 
       // Create condensed slides (text consolidated into images) - but don't save them as separate files
       const condensedSlides = await this.createCondensedSlides(images, textOverlays, finalAspectRatio);
@@ -254,13 +254,18 @@ export class SlideshowService {
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
 
+      console.log('🖼️ Uploading condensed images to imgbb immediately...');
+      
+      // IMMEDIATE OPTIMIZATION: Upload condensed images to imgbb and get URLs
+      const optimizedCondensedSlides = await this.uploadCondensedSlidesToImgbb(condensedSlides);
+
       const slideshow: SlideshowMetadata = {
         id: slideshowId, // Use prefixed ID consistently throughout
         title,
         postTitle: postTitle || title, // Use postTitle if provided, fallback to title
         caption,
         hashtags,
-        condensedSlides, // These are the individual images with text consolidated
+        condensedSlides: optimizedCondensedSlides, // These now have imgbb URLs instead of base64!
         textOverlays, // Keep original text overlays for editing
         aspectRatio: finalAspectRatio,
         transitionEffect: transitionEffect, // Keep original transition effect
@@ -271,27 +276,23 @@ export class SlideshowService {
         folder_id: null // Initialize with no folder
       };
 
-      console.log('✅ Slideshow object created:', {
+      console.log('✅ Slideshow object created with imgbb URLs:', {
         id: slideshow.id,
         title: slideshow.title,
         condensedSlidesCount: slideshow.condensedSlides.length,
-        hasCondensedSlides: !!slideshow.condensedSlides
+        hasImgbbUrls: slideshow.condensedSlides.every(slide => slide.condensedImageUrl?.includes('i.ibb.co'))
       });
 
       // Store in memory
-      
       this.slideshows.set(slideshow.id, slideshow);
-      
 
       // Save to localStorage for persistence (this makes it appear in the file browser)
-      
       this.saveToLocalStorage();
 
       // Save to Supabase database for persistence
       await this.saveToDatabase(slideshow);
 
       // Dispatch custom event to update file browser immediately
-      
       window.dispatchEvent(new CustomEvent('slideshowUpdated'));
 
       // Automatically export slideshow as a clickable file for the file browser
@@ -310,7 +311,7 @@ export class SlideshowService {
         // Don't fail the entire save operation if file export fails
       }
 
-      console.log('✅💾 Slideshow saved successfully:', slideshow.title, 'with', condensedSlides.length, 'slides');
+      console.log('✅💾 Optimized slideshow saved successfully:', slideshow.title, 'with', optimizedCondensedSlides.length, 'slides (imgbb URLs)');
       console.log('🎯 Slideshow ID for file browser:', slideshow.id);
 
       return slideshow;
@@ -480,7 +481,7 @@ export class SlideshowService {
   /**
    * Optimize slideshow payload to avoid 413 errors
    */
-  optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[], hasLargePayload: boolean } {
+optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[], hasLargePayload: boolean } {
     const urls: string[] = [];
     let totalSize = 0;
     let hasLargeDataUrl = false;
@@ -488,35 +489,43 @@ export class SlideshowService {
     for (const slide of slideshow.condensedSlides) {
       let url = '';
       
-      // CRITICAL FIX: Priority 1 - Use CONsolidated image URL (with text overlays)
-      if (slide.condensedImageUrl) {
-        if (slide.condensedImageUrl.startsWith('data:')) {
-          // For base64 data, we need to upload this as a blob to Postiz
-          console.log(`📝 Using base64 condensed image (with text) for slide ${slide.id}`);
-          url = slide.condensedImageUrl;
-          hasLargeDataUrl = true;
-        } else {
-          // For regular URLs (should not happen normally)
-          console.log(`🖼️ Using condensed image URL (with text) for slide ${slide.id}`);
-          url = slide.condensedImageUrl;
-        }
+      // CRITICAL FIX: Priority 1 - Use imgbb URL if available (best for Postiz)
+      if (slide.condensedImageUrl?.includes('i.ibb.co')) {
+        console.log(`🔗 Using imgbb URL (optimized) for slide ${slide.id}`);
+        url = slide.condensedImageUrl;
       }
-      // Priority 2 - Fallback to original image URL ONLY if no condensed image
+      // Priority 2 - Use condensed image URL if it's NOT base64
+      else if (slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:')) {
+        console.log(`🖼️ Using condensed image URL (with text) for slide ${slide.id}`);
+        url = slide.condensedImageUrl;
+      }
+      // Priority 3 - Fallback to original image URL ONLY if no better option
       else if (slide.originalImageUrl) {
-        console.warn(`⚠️ Fallback to original image (NO TEXT) for slide ${slide.id} - condensed image missing!`);
+        console.warn(`⚠️ Fallback to original image (NO TEXT) for slide ${slide.id}`);
         url = slide.originalImageUrl;
+      }
+      // Priority 4 - Last resort: keep base64 if nothing else works
+      else if (slide.condensedImageUrl?.startsWith('data:')) {
+        console.warn(`⚠️ Using base64 data (large payload) for slide ${slide.id}`);
+        url = slide.condensedImageUrl;
+        hasLargeDataUrl = true;
       }
 
       urls.push(url);
       
-      // Estimate size (rough calculation for base64 data URLs)
+      // Estimate size for payload optimization
       if (url.startsWith('data:')) {
         // Base64 data URLs are roughly 33% larger than the original binary data
         totalSize += (url.length * 3) / 4;
+        hasLargeDataUrl = true;
       } else if (url.startsWith('http')) {
-        // For actual URLs, we need to estimate the image size
-        // This is a rough estimate - actual sizes vary
-        totalSize += 200000; // Assume ~200KB per image on average
+        // For actual URLs (imgbb or others), we need to estimate the image size
+        // imgbb URLs are generally much smaller than base64 data
+        if (url.includes('i.ibb.co')) {
+          totalSize += 50000; // ~50KB per imgbb image (much smaller than base64)
+        } else {
+          totalSize += 200000; // Assume ~200KB per image on average
+        }
       }
     }
 
@@ -526,7 +535,9 @@ export class SlideshowService {
     console.log('📊 Payload optimization result:', {
       urlsCount: urls.length,
       hasLargePayload,
-      usingConsolidatedImages: urls.some(url => !url.includes('i.ibb.co')) // Check if we're NOT using original imgbb URLs
+      usingImgbbUrls: urls.some(url => url.includes('i.ibb.co')),
+      usingBase64: urls.some(url => url.startsWith('data:')),
+      totalEstimatedSize: Math.round(totalSize / 1024) + 'KB'
     });
     return { optimizedUrls: urls, hasLargePayload };
   }
@@ -586,9 +597,87 @@ export class SlideshowService {
    * Check if slideshow needs upgrading (has large base64 payloads)
    */
   needsUpgrade(slideshow: SlideshowMetadata): boolean {
-    return slideshow.condensedSlides.some(slide => 
+    return slideshow.condensedSlides.some(slide =>
       slide.condensedImageUrl?.startsWith('data:') && !slide.originalImageUrl
     );
+  }
+
+  /**
+   * Upload condensed slides to imgbb and return optimized slides with imgbb URLs
+   */
+  private async uploadCondensedSlidesToImgbb(condensedSlides: CondensedSlide[]): Promise<CondensedSlide[]> {
+    const optimizedSlides: CondensedSlide[] = [];
+    
+    for (let i = 0; i < condensedSlides.length; i++) {
+      const slide = condensedSlides[i];
+      
+      try {
+        console.log(`📤 Uploading slide ${i + 1}/${condensedSlides.length} to imgbb: ${slide.id}`);
+        
+        // Upload the condensed image (base64) to imgbb
+        const imageFile = await this.dataUrlToFile(slide.condensedImageUrl, `slideshow_slide_${i + 1}.jpg`);
+        const imgbbResponse = await uploadToImgbb(imageFile);
+        
+        // Create optimized slide with imgbb URL
+        const optimizedSlide: CondensedSlide = {
+          ...slide,
+          condensedImageUrl: imgbbResponse.data.url, // Replace base64 with imgbb URL
+          originalImageUrl: slide.originalImageUrl // Keep original as backup
+        };
+        
+        console.log(`✅ Successfully uploaded slide ${i + 1} to imgbb:`, imgbbResponse.data.url);
+        optimizedSlides.push(optimizedSlide);
+        
+      } catch (error) {
+        console.error(`❌ Failed to upload slide ${i + 1} to imgbb:`, error);
+        
+        // Fallback: keep the base64 data if imgbb upload fails
+        console.warn(`⚠️ Keeping base64 data for slide ${i + 1} as fallback`);
+        optimizedSlides.push(slide);
+      }
+    }
+    
+    const successCount = optimizedSlides.filter(slide => slide.condensedImageUrl?.includes('i.ibb.co')).length;
+    console.log(`🎉 Completed imgbb upload: ${successCount}/${condensedSlides.length} slides optimized`);
+    
+    return optimizedSlides;
+  }
+
+  /**
+   * Convert data URL to File object
+   */
+  private async dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+      
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(new File([blob], filename, { type: 'image/jpeg' }));
+            } else {
+              reject(new Error('Failed to convert canvas to blob'));
+            }
+          },
+          'image/jpeg',
+          0.9
+        );
+      };
+      
+      img.onerror = () => reject(new Error('Failed to load image from data URL'));
+      img.src = dataUrl;
+    });
   }
 
   /**
@@ -1136,7 +1225,7 @@ export class SlideshowService {
    * Create slideshow with optimized payload for posting
    * This method ensures slideshows can be posted without 413 errors
    */
-  async createOptimizedSlideshow(
+async createOptimizedSlideshow(
     title: string,
     postTitle: string,
     caption: string,
@@ -1149,14 +1238,21 @@ export class SlideshowService {
     userId: string
   ): Promise<SlideshowMetadata> {
     try {
+      console.log('🚀 Starting optimized slideshow creation with immediate imgbb upload...');
+
       // Use the aspect ratio from the first image if available
       const finalAspectRatio = images[0]?.aspectRatio || aspectRatio;
 
-      // Create optimized condensed slides with original URLs for API posting
-      const condensedSlides = await this.createOptimizedCondensedSlides(images, textOverlays, finalAspectRatio);
+      // Create condensed slides first
+      const condensedSlides = await this.createCondensedSlides(images, textOverlays, finalAspectRatio);
 
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
+
+      console.log('🖼️ Uploading condensed images to imgbb immediately...');
+      
+      // IMMEDIATE OPTIMIZATION: Upload condensed images to imgbb and get URLs
+      const optimizedCondensedSlides = await this.uploadCondensedSlidesToImgbb(condensedSlides);
 
       const slideshow: SlideshowMetadata = {
         id: slideshowId,
@@ -1164,7 +1260,7 @@ export class SlideshowService {
         postTitle: postTitle || title,
         caption,
         hashtags,
-        condensedSlides, // These include original URLs for optimized posting
+        condensedSlides: optimizedCondensedSlides, // These now have imgbb URLs instead of base64!
         textOverlays,
         aspectRatio: finalAspectRatio,
         transitionEffect,
@@ -1174,6 +1270,13 @@ export class SlideshowService {
         user_id: userId,
         folder_id: null
       };
+
+      console.log('✅ Optimized slideshow object created:', {
+        id: slideshow.id,
+        title: slideshow.title,
+        condensedSlidesCount: slideshow.condensedSlides.length,
+        hasImgbbUrls: slideshow.condensedSlides.every(slide => slide.condensedImageUrl?.includes('i.ibb.co'))
+      });
 
       // Store in memory
       this.slideshows.set(slideshow.id, slideshow);
@@ -1192,7 +1295,7 @@ export class SlideshowService {
         console.warn('Failed to auto-export slideshow file:', exportError);
       }
 
-      console.log(`✅ Created optimized slideshow: ${title} (${condensedSlides.length} slides)`);
+      console.log(`✅ Created optimized slideshow: ${title} (${optimizedCondensedSlides.length} slides with imgbb URLs)`);
       return slideshow;
     } catch (error) {
       console.error('❌ Failed to create optimized slideshow:', error);
