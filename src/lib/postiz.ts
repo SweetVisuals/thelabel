@@ -140,75 +140,62 @@ export const postizAPI = {
     }
   },
 
-  // Create a new post with proper Postiz API format (images must be uploaded to Postiz first)
-  async createPost(postData: CreatePostData & { _postizMedia?: {id: string, path: string}[] }): Promise<PostizPost> {
+  // Create a new post using Postiz image gallery URLs (Step 2: after images are uploaded)
+  async createPostWithPostizImages(
+    text: string,
+    integrationId: string,
+    postizMedia: {id: string, path: string}[],
+    scheduledAt?: Date,
+    postNow: boolean = false
+  ): Promise<{postId: string, integration: string}> {
     try {
       const proxiedUrl = getProxyUrl('posts');
       
-      // Validate required fields before proceeding
-      if (!postData.profileIds || postData.profileIds.length === 0) {
-        throw new Error('Profile ID is required');
+      // Validate required fields
+      if (!integrationId) {
+        throw new Error('Integration ID (profile ID) is required');
       }
 
-      if (!postData.text || postData.text.trim() === '') {
+      if (!text || text.trim() === '') {
         throw new Error('Post content is required');
       }
 
-      console.log('📤 Creating post via:', proxiedUrl);
-      console.log('📊 Post data:', {
-        profileCount: postData.profileIds.length,
-        mediaCount: postData.mediaUrls?.length || 0,
-        hasPostizMedia: !!postData._postizMedia
-      });
-
-      // Postiz requires images to be uploaded to Postiz storage first, then referenced by id/path
-      let processedImages: {id: string, path: string}[] = [];
-      
-      if (postData._postizMedia && postData._postizMedia.length > 0) {
-        // Use the actual uploaded media from Postiz (preferred)
-        console.log('🎯 Using Postiz uploaded media:', postData._postizMedia);
-        processedImages = postData._postizMedia.map((media, index) => ({
-          id: media.id,
-          path: media.path
-        }));
-      } else if (postData.mediaUrls && postData.mediaUrls.length > 0) {
-        // Fallback: try to use URLs directly (may work for some cases)
-        console.warn('⚠️ No Postiz upload data found, using URLs directly');
-        processedImages = postData.mediaUrls.map((url, index) => ({
-          id: `img_${index + 1}`,
-          path: url
-        }));
+      if (!postizMedia || postizMedia.length === 0) {
+        throw new Error('Postiz media images are required');
       }
 
-      console.log('📸 Processed images for Postiz:', processedImages);
+      console.log('📤 Creating post with Postiz image gallery URLs via:', proxiedUrl);
+      console.log('📊 Post details:', {
+        integrationId,
+        mediaCount: postizMedia.length,
+        hasScheduledDate: !!scheduledAt,
+        postNow
+      });
 
-      // Postiz requires specific format with all required fields
+      // Format according to exact Postiz API specification
       const requestBody = {
-        type: postData.scheduledAt ? 'schedule' : 'now',
-        date: postData.scheduledAt || new Date().toISOString(),
+        type: postNow ? 'now' : (scheduledAt ? 'schedule' : 'now'),
+        date: scheduledAt ? scheduledAt.toISOString() : new Date().toISOString(),
         posts: [{
-          integration: { id: postData.profileIds[0] },
+          integration: {
+            id: integrationId
+          },
           value: [{
-            content: postData.text,
-            image: processedImages,
-            tags: [], // Postiz expects tags as empty array
+            content: text,
+            image: postizMedia.map(media => ({
+              id: media.id,
+              path: media.path
+            }))
           }],
-          // Required settings object with explicit boolean/string types
+          group: `slideshow_${Date.now()}`, // Unique group ID for batch posts
           settings: {
-            privacy_level: 'PUBLIC_TO_EVERYONE' as const,
-            shortLink: false, // Explicitly boolean false
-            duet: false as boolean,
-            stitch: false as boolean,
-            comment: true as boolean,
-            autoAddMusic: 'no' as const, // camelCase
-            brand_content_toggle: false as boolean,
-            brand_organic_toggle: false as boolean,
-            content_posting_method: 'DIRECT_POST' as const // Required field
+            shortLink: false,
+            privacy_level: 'PUBLIC_TO_EVERYONE'
           }
-        }],
+        }]
       };
 
-      console.log('📤 Posting to Postiz with format:', JSON.stringify(requestBody, null, 2));
+      console.log('📤 Posting to Postiz with exact format:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(proxiedUrl, {
         method: 'POST',
@@ -235,13 +222,61 @@ export const postizAPI = {
         throw new Error(`Postiz API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log('✅ Postiz API response:', data);
+      const responseData = await response.json();
+      console.log('✅ Postiz API response:', responseData);
       
+      // Return exact format as specified: [{ "postId": "POST_ID", "integration": "INTEGRATION_ID" }]
+      if (Array.isArray(responseData) && responseData.length > 0) {
+        return {
+          postId: responseData[0].postId,
+          integration: responseData[0].integration
+        };
+      } else {
+        throw new Error('Invalid response format from Postiz API');
+      }
+    } catch (error) {
+      console.error('❌ Post creation with Postiz images failed:', error);
+      throw new Error(`Failed to create post with Postiz images: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  },
+
+  // Legacy method for backward compatibility (Step 1 & 2 combined)
+  async createPost(postData: CreatePostData & { _postizMedia?: {id: string, path: string}[] }): Promise<PostizPost> {
+    try {
+      // Step 1: Validate required fields
+      if (!postData.profileIds || postData.profileIds.length === 0) {
+        throw new Error('Profile ID is required');
+      }
+
+      if (!postData.text || postData.text.trim() === '') {
+        throw new Error('Post content is required');
+      }
+
+      // Step 2: Ensure we have Postiz media (images must be uploaded to Postiz first)
+      if (!postData._postizMedia || postData._postizMedia.length === 0) {
+        throw new Error('Postiz images are required. Please upload images to Postiz first using the 2-step process.');
+      }
+
+      console.log('📤 Creating post via legacy method with Postiz images');
+      console.log('📊 Post data:', {
+        profileCount: postData.profileIds.length,
+        mediaCount: postData._postizMedia.length
+      });
+
+      // Use the new method for post creation
+      const result = await this.createPostWithPostizImages(
+        postData.text,
+        postData.profileIds[0],
+        postData._postizMedia,
+        postData.scheduledAt ? new Date(postData.scheduledAt) : undefined,
+        !!postData.publishedAt
+      );
+
+      // Return in the legacy format for backward compatibility
       return {
-        id: data[0]?.postId || data?.id || 'unknown',
+        id: result.postId,
         text: postData.text,
-        mediaUrls: processedImages.map(img => img.path),
+        mediaUrls: postData._postizMedia.map((media: {id: string, path: string}) => media.path),
         scheduledAt: postData.scheduledAt,
         status: 'scheduled',
         profiles: postData.profileIds,
@@ -249,7 +284,7 @@ export const postizAPI = {
         updatedAt: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('❌ Post creation failed:', error);
+      console.error('❌ Legacy post creation failed:', error);
       throw new Error(`Failed to create post: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   },

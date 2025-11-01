@@ -145,7 +145,14 @@ export class PostizUploadService {
       mediaUrls: postizMedia.map(media => media.path), // Use Postiz storage paths
       scheduledAt: scheduledAt?.toISOString(),
       publishedAt: postNow ? new Date().toISOString() : undefined,
-      _postizMedia: postizMedia // Keep for debugging and API call
+      _postizMedia: postizMedia, // Keep for API call with Postiz image IDs
+      // Add enhanced metadata for better tracking
+      _uploadMetadata: {
+        originalImgbbCount: slideshow.condensedSlides.length,
+        postizUploadedCount: postizMedia.length,
+        uploadTimestamp: new Date().toISOString(),
+        uploadSuccess: postizMedia.length === slideshow.condensedSlides.length
+      }
     };
     
     console.log('✅ Created Postiz post data with Postiz storage paths');
@@ -153,6 +160,38 @@ export class PostizUploadService {
     return postData;
   }
   
+  /**
+   * STEP 1 ONLY: Upload images to Postiz storage (no post creation)
+   * Returns Postiz image gallery URLs for use in Step 2
+   */
+  async uploadImagesToPostizStorage(slideshow: SlideshowMetadata): Promise<{id: string, path: string}[]> {
+    console.log('📤 STEP 1: Uploading images to Postiz storage only...');
+    return await this.uploadImgbbImagesToPostiz(slideshow);
+  }
+
+  /**
+   * STEP 2 ONLY: Create post using already uploaded Postiz images
+   * Requires images to already be uploaded to Postiz storage (Step 1 completed)
+   */
+  async createPostWithUploadedImages(
+    text: string,
+    integrationId: string,
+    postizMedia: {id: string, path: string}[],
+    scheduledAt?: Date,
+    postNow: boolean = false
+  ): Promise<{postId: string, integration: string}> {
+    console.log('📤 STEP 2: Creating post with already uploaded Postiz images...');
+    
+    // Use the postizAPI method directly
+    return await postizAPI.createPostWithPostizImages(
+      text,
+      integrationId,
+      postizMedia,
+      scheduledAt,
+      postNow
+    );
+  }
+
   /**
    * Format caption with hashtags for Postiz
    */

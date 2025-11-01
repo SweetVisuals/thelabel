@@ -702,7 +702,9 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   }
 
   /**
-   * Schedule slideshow post via Postiz with proper imgbb → Postiz storage flow
+   * Schedule slideshow post via Postiz using the 2-step process:
+   * Step 1: Upload images to Postiz storage
+   * Step 2: Create post using Postiz image gallery URLs
    */
   async scheduleSlideshowPost(
     slideshow: SlideshowMetadata,
@@ -711,28 +713,55 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
     postNow: boolean = false
   ): Promise<any> {
     try {
-      console.log('🚀 Starting slideshow post to Postiz with imgbb → Postiz storage flow...');
+      console.log('🚀 Starting 2-step slideshow post to Postiz...');
       console.log('📋 Slideshow details:', {
         title: slideshow.title,
         slideCount: slideshow.condensedSlides.length,
-        profileCount: profileIds.length
+        profileCount: profileIds.length,
+        hasScheduledDate: !!scheduledAt,
+        postNow
       });
 
-      // Step 1: Upload imgbb images from slideshow to Postiz storage
-      const postData = await postizUploadService.createOptimizedPostizData(
-        slideshow,
-        profileIds,
-        scheduledAt,
-        postNow
+      // ========================================
+      // STEP 1: Upload imgbb images to Postiz storage
+      // ========================================
+      console.log('📤 STEP 1: Uploading images to Postiz storage...');
+      const postizMedia = await postizUploadService.uploadImgbbImagesToPostiz(slideshow);
+      
+      if (postizMedia.length === 0) {
+        throw new Error('No images were successfully uploaded to Postiz storage. Cannot create post without images.');
+      }
+      
+      console.log(`✅ STEP 1 COMPLETE: ${postizMedia.length} images uploaded to Postiz storage`);
+      console.log('📊 Postiz media details:', postizMedia);
+
+      // ========================================
+      // STEP 2: Create post using Postiz image gallery URLs
+      // ========================================
+      console.log('📤 STEP 2: Creating TikTok post with Postiz image gallery URLs...');
+      
+      const captionText = this.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags);
+      
+      const result = await postizAPI.createPostWithPostizImages(
+        captionText,                           // Post content
+        profileIds[0],                         // Integration ID (TikTok profile)
+        postizMedia,                           // Postiz uploaded images {id, path}[]
+        scheduledAt,                           // Scheduled date (if any)
+        postNow                                // Post immediately or schedule
       );
       
-      console.log('📤 Created post data with Postiz storage paths...');
+      console.log('✅ STEP 2 COMPLETE: TikTok post created successfully');
+      console.log('🎉 Final result:', result);
       
-      // Step 2: Use Postiz API to create the post (images now in Postiz storage)
-      const result = await postizAPI.createPost(postData);
+      return {
+        id: result.postId,
+        integration: result.integration,
+        status: 'scheduled',
+        scheduledAt: scheduledAt?.toISOString(),
+        mediaCount: postizMedia.length,
+        slideshowTitle: slideshow.title
+      };
       
-      console.log('✅ Successfully posted slideshow to Postiz:', result.id);
-      return result;
     } catch (error) {
       console.error('❌ Failed to post slideshow to Postiz:', error);
       throw error;

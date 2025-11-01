@@ -17,13 +17,14 @@ import {
   Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { 
-  PostizProfile, 
-  PostizSlideshowData, 
-  SlideshowMetadata 
+import {
+  PostizProfile,
+  PostizSlideshowData,
+  SlideshowMetadata
 } from '../../types';
 import { postizAPI } from '../../lib/postiz';
 import { slideshowService } from '../../lib/slideshowService';
+import { postizUploadService } from '../../lib/postizUploadService';
 
 interface PostizPosterProps {
   slideshow: SlideshowMetadata | null;
@@ -204,53 +205,61 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
     // The slideshow service handles this automatically with the condensed slideshow images
 
     setIsPosting(true);
-    setPostResult({
-      success: false,
-      message: 'Preparing to upload images to Postiz domain...',
-      isUploading: true,
-      uploadProgress: 'Testing upload functionality'
-    });
 
     try {
-      // First, test if upload functionality is available
-      const uploadTest = await postizAPI.testUploadFunctionality();
-      
-      if (!uploadTest.success) {
-        setPostResult({
-          success: false,
-          message: uploadTest.message,
-          isUploading: false
-        });
-        return;
-      }
-
-      setPostResult({
-        success: false,
-        message: '✅ Upload service available. Processing slideshow images...',
-        isUploading: true,
-        uploadProgress: 'Starting image upload'
-      });
-
       const scheduledDateTime = getScheduledDateTime();
       
-      const result = await slideshowService.scheduleSlideshowPost(
-        slideshow,
-        selectedProfiles,
+      // ========================================
+      // STEP 1: Upload images to Postiz storage
+      // ========================================
+      setPostResult({
+        success: false,
+        message: '📤 STEP 1: Uploading images to Postiz storage...\n\nThis may take a few moments as we transfer each image to your Postiz media gallery.',
+        isUploading: true,
+        uploadProgress: 'Starting image upload to Postiz'
+      });
+
+      const postizMedia = await postizUploadService.uploadImagesToPostizStorage(slideshow);
+      
+      setPostResult({
+        success: false,
+        message: `✅ STEP 1 COMPLETE: ${postizMedia.length} images uploaded to Postiz storage!\n\nNow creating your TikTok post...`,
+        isUploading: true,
+        uploadProgress: 'Images uploaded, creating post'
+      });
+
+      // ========================================
+      // STEP 2: Create TikTok post with Postiz images
+      // ========================================
+      setPostResult({
+        success: false,
+        message: `📤 STEP 2: Creating TikTok post using Postiz image gallery...\n\nUsing ${postizMedia.length} images from your Postiz media gallery.`,
+        isUploading: true,
+        uploadProgress: 'Creating TikTok post with Postiz images'
+      });
+
+      const captionText = slideshowService.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags);
+      
+      const result = await postizUploadService.createPostWithUploadedImages(
+        captionText,
+        selectedProfiles[0],
+        postizMedia,
         scheduledDateTime,
-        !isScheduled // If not scheduled, post now
+        !isScheduled
       );
 
+      // Success!
       setPostResult({
         success: true,
-        message: isScheduled 
-          ? `✅ Slideshow scheduled successfully for ${scheduledDate} at ${scheduledTime}!`
-          : '✅ Slideshow posted successfully with automatic image upload!',
-        postId: result.id,
+        message: isScheduled
+          ? `🎉 SUCCESS! Your TikTok post has been scheduled for ${scheduledDate} at ${scheduledTime}\n\n✅ Step 1: ${postizMedia.length} images uploaded to Postiz\n✅ Step 2: Post created with Postiz image gallery`
+          : `🎉 SUCCESS! Your TikTok post is now live!\n\n✅ Step 1: ${postizMedia.length} images uploaded to Postiz\n✅ Step 2: Post created with Postiz image gallery`,
+        postId: result.postId,
         isUploading: false
       });
 
-      if (onPostSuccess && result.id) {
-        onPostSuccess(result.id);
+      if (onPostSuccess && result.postId) {
+        onPostSuccess(result.postId);
       }
 
       // Reset form on success
@@ -259,7 +268,7 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
         setIsScheduled(false);
         setScheduledDate('');
         setScheduledTime('');
-      }, 2000);
+      }, 3000);
 
     } catch (error: any) {
       console.error('Post creation failed:', error);
@@ -276,8 +285,8 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
       }
       
       // Check if it's an upload-related error
-      if (errorMessage.includes('Postiz requires images') || errorMessage.includes('upload')) {
-        errorMessage = `🚫 Image upload failed. ${errorMessage}\n\n💡 Quick Solution: Go to Postiz app (https://app.postiz.com/), upload your images manually, then replace URLs in your slideshow.`;
+      if (errorMessage.includes('upload')) {
+        errorMessage = `🚫 Upload failed during 2-step process. ${errorMessage}\n\n💡 This might be a temporary issue. Please try again.`;
       }
       
       // Check for specific API errors
@@ -291,7 +300,7 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
       
       setPostResult({
         success: false,
-        message: errorMessage,
+        message: `❌ FAILED: ${errorMessage}`,
         isUploading: false
       });
     } finally {
