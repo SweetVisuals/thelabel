@@ -452,7 +452,7 @@ export class SlideshowService {
   }
 
   /**
-   * Create Postiz post data from slideshow
+   * Create Postiz post data from slideshow with payload size optimization
    */
   createPostizPostData(
     slideshow: SlideshowMetadata,
@@ -460,38 +460,150 @@ export class SlideshowService {
     scheduledAt?: Date,
     postNow: boolean = false
   ): PostizSlideshowData {
-    // Use original image URLs when available to avoid large base64 payloads
-    const mediaUrls = slideshow.condensedSlides.map(slide => {
-      // Prefer original image URL to avoid large base64 data
-      if (slide.originalImageUrl) {
-        return slide.originalImageUrl;
-      }
-      
-      // Fallback to condensed image URL if available
-      if (slide.condensedImageUrl) {
-        // If it's a data URL (base64), warn about potential large payload
-        if (slide.condensedImageUrl.startsWith('data:')) {
-          console.warn('Using base64 image for slideshow - payload may be large');
-        }
-        return slide.condensedImageUrl;
-      }
-      
-      // Last resort - return empty string
-      console.warn('No image URL available for slide:', slide.id);
-      return '';
-    });
+    // Get optimized media URLs with size checking
+    const { optimizedUrls, hasLargePayload } = this.optimizeSlideshowPayload(slideshow);
+    
+    if (hasLargePayload) {
+      console.warn('⚠️ Large slideshow payload detected. Consider reducing image count or using compressed images.');
+    }
 
     return {
       text: this.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags),
       profileIds: profileIds,
-      mediaUrls: mediaUrls,
+      mediaUrls: optimizedUrls,
       scheduledAt: scheduledAt?.toISOString(),
       publishedAt: postNow ? new Date().toISOString() : undefined
     };
   }
 
   /**
-   * Schedule slideshow post via Postiz
+   * Optimize slideshow payload to avoid 413 errors
+   */
+  optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[], hasLargePayload: boolean } {
+    const urls: string[] = [];
+    let totalSize = 0;
+    let hasLargeDataUrl = false;
+
+    for (const slide of slideshow.condensedSlides) {
+      let url = '';
+      
+      // Priority 1: Use original image URL if available
+      if (slide.originalImageUrl) {
+        url = slide.originalImageUrl;
+      }
+      // Priority 2: Use condensed image URL if it's not base64
+      else if (slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:')) {
+        url = slide.condensedImageUrl;
+      }
+      // Priority 3: Fallback to condensed image URL (may be base64)
+      else if (slide.condensedImageUrl) {
+        console.warn(`⚠️ Slide ${slide.id} still using base64 data - payload will be large`);
+        url = slide.condensedImageUrl;
+        hasLargeDataUrl = true;
+      }
+
+      urls.push(url);
+      
+      // Estimate size (rough calculation for base64 data URLs)
+      if (url.startsWith('data:')) {
+        // Base64 data URLs are roughly 33% larger than the original binary data
+        totalSize += (url.length * 3) / 4;
+      } else if (url.startsWith('http')) {
+        // For actual URLs, we need to estimate the image size
+        // This is a rough estimate - actual sizes vary
+        totalSize += 200000; // Assume ~200KB per image on average
+      }
+    }
+
+    // Check if payload might be too large (rough threshold)
+    const hasLargePayload = hasLargeDataUrl || totalSize > 1000000; // 1MB threshold
+
+    return { optimizedUrls: urls, hasLargePayload };
+  }
+
+  /**
+   * Upgrade slideshow by adding originalImageUrl to condensed slides
+   * This is used to fix existing slideshows that have large base64 data
+   */
+  async upgradeSlideshowPayload(slideshow: SlideshowMetadata): Promise<SlideshowMetadata> {
+    try {
+      console.log('🔄 Upgrading slideshow payload to reduce size...');
+      
+      // Load the original images to get their URLs
+      const allImages = await imageService.loadImages();
+      const imageUrlMap = new Map(allImages.map(img => [img.id, img.url]));
+      
+      // Update each condensed slide to include original URL if missing
+      const upgradedSlides = slideshow.condensedSlides.map(slide => {
+        if (!slide.originalImageUrl && slide.originalImageId) {
+          const originalUrl = imageUrlMap.get(slide.originalImageId);
+          if (originalUrl) {
+            console.log(`✅ Added original URL for slide ${slide.id}`);
+            return {
+              ...slide,
+              originalImageUrl: originalUrl
+            };
+          }
+        }
+        return slide;
+      });
+
+      // Create upgraded slideshow
+      const upgradedSlideshow: SlideshowMetadata = {
+        ...slideshow,
+        condensedSlides: upgradedSlides
+      };
+
+      // Update in memory
+      this.slideshows.set(slideshow.id, upgradedSlideshow);
+      
+      // Save to localStorage
+      this.saveToLocalStorage();
+      
+      // Save to database
+      await this.saveToDatabase(upgradedSlideshow);
+
+      console.log(`✅ Upgraded slideshow: ${slideshow.title} (${upgradedSlides.length} slides)`);
+      return upgradedSlideshow;
+      
+    } catch (error) {
+      console.error('❌ Failed to upgrade slideshow payload:', error);
+      return slideshow; // Return original if upgrade fails
+    }
+  }
+
+  /**
+   * Check if slideshow needs upgrading (has large base64 payloads)
+   */
+  needsUpgrade(slideshow: SlideshowMetadata): boolean {
+    return slideshow.condensedSlides.some(slide => 
+      slide.condensedImageUrl?.startsWith('data:') && !slide.originalImageUrl
+    );
+  }
+
+  /**
+   * Auto-upgrade slideshow if it needs it and return optimized data
+   */
+  async getOptimizedPostData(
+    slideshow: SlideshowMetadata,
+    profileIds: string[],
+    scheduledAt?: Date,
+    postNow: boolean = false
+  ): Promise<PostizSlideshowData> {
+    let slideshowToUse = slideshow;
+    
+    // Auto-upgrade if needed
+    if (this.needsUpgrade(slideshow)) {
+      console.log('🔄 Auto-upgrading slideshow to reduce payload size...');
+      slideshowToUse = await this.upgradeSlideshowPayload(slideshow);
+    }
+    
+    // Get optimized data
+    return this.createPostizPostData(slideshowToUse, profileIds, scheduledAt, postNow);
+  }
+
+  /**
+   * Schedule slideshow post via Postiz with automatic payload optimization
    */
   async scheduleSlideshowPost(
     slideshow: SlideshowMetadata,
@@ -499,7 +611,8 @@ export class SlideshowService {
     scheduledAt?: Date,
     postNow: boolean = false
   ): Promise<any> {
-    const postData = this.createPostizPostData(slideshow, profileIds, scheduledAt, postNow);
+    // Use optimized posting data with automatic upgrade if needed
+    const postData = await this.getOptimizedPostData(slideshow, profileIds, scheduledAt, postNow);
     return await postizAPI.createPost(postData);
   }
 
@@ -984,6 +1097,184 @@ export class SlideshowService {
   // ========================================
   // TEMPLATE MANAGEMENT METHODS
   // ========================================
+
+  /**
+   * Create slideshow with optimized payload for posting
+   * This method ensures slideshows can be posted without 413 errors
+   */
+  async createOptimizedSlideshow(
+    title: string,
+    postTitle: string,
+    caption: string,
+    hashtags: string[],
+    images: UploadedImage[],
+    textOverlays: TikTokTextOverlay[],
+    aspectRatio: string,
+    transitionEffect: 'fade' | 'slide' | 'zoom',
+    musicEnabled: boolean,
+    userId: string
+  ): Promise<SlideshowMetadata> {
+    try {
+      // Use the aspect ratio from the first image if available
+      const finalAspectRatio = images[0]?.aspectRatio || aspectRatio;
+
+      // Create optimized condensed slides with original URLs for API posting
+      const condensedSlides = await this.createOptimizedCondensedSlides(images, textOverlays, finalAspectRatio);
+
+      // Generate slideshow ID with prefix for consistency
+      const slideshowId = `slideshow_${crypto.randomUUID()}`;
+
+      const slideshow: SlideshowMetadata = {
+        id: slideshowId,
+        title,
+        postTitle: postTitle || title,
+        caption,
+        hashtags,
+        condensedSlides, // These include original URLs for optimized posting
+        textOverlays,
+        aspectRatio: finalAspectRatio,
+        transitionEffect,
+        musicEnabled,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        user_id: userId,
+        folder_id: null
+      };
+
+      // Store in memory
+      this.slideshows.set(slideshow.id, slideshow);
+      this.saveToLocalStorage();
+
+      // Save to Supabase database
+      await this.saveToDatabase(slideshow);
+
+      // Dispatch custom event to update file browser
+      window.dispatchEvent(new CustomEvent('slideshowUpdated'));
+
+      // Auto-export slideshow file
+      try {
+        await this.saveSlideshowFile(slideshow);
+      } catch (exportError) {
+        console.warn('Failed to auto-export slideshow file:', exportError);
+      }
+
+      console.log(`✅ Created optimized slideshow: ${title} (${condensedSlides.length} slides)`);
+      return slideshow;
+    } catch (error) {
+      console.error('❌ Failed to create optimized slideshow:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create condensed slides with optimized payload (original URLs for API)
+   */
+  private async createOptimizedCondensedSlides(
+    images: UploadedImage[],
+    textOverlays: TikTokTextOverlay[],
+    aspectRatio: string
+  ): Promise<CondensedSlide[]> {
+    const condensedSlides: CondensedSlide[] = [];
+
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      const slideTextOverlays = textOverlays.filter(overlay => overlay.slideIndex === i);
+
+      try {
+        // Create optimized slide with both base64 (for display) and original URL (for API)
+        const optimizedSlide = await this.createOptimizedCondensedSlide(image, slideTextOverlays, aspectRatio);
+        condensedSlides.push(optimizedSlide);
+      } catch (error) {
+        console.error(`Failed to create optimized condensed slide for image ${image.id}:`, error);
+        throw error;
+      }
+    }
+
+    return condensedSlides;
+  }
+
+  /**
+   * Create a single optimized condensed slide
+   */
+  private async createOptimizedCondensedSlide(
+    image: UploadedImage,
+    textOverlays: TikTokTextOverlay[],
+    aspectRatio: string
+  ): Promise<CondensedSlide> {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        reject(new Error('Failed to get canvas context'));
+        return;
+      }
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        try {
+          // Set canvas size based on aspect ratio
+          const ratio = this.parseAspectRatio(aspectRatio);
+          if (ratio > 0) {
+            canvas.width = 1080;
+            canvas.height = Math.round(1080 / ratio);
+          } else {
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+          }
+
+          // Draw the base image
+          if (ratio > 0) {
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          } else {
+            ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
+          }
+
+          // Overlay text elements
+          textOverlays.forEach(overlay => {
+            this.drawTextOverlay(ctx, overlay, canvas.width, canvas.height);
+          });
+
+          // Convert to compressed image
+          canvas.toBlob(
+            async (blob) => {
+              if (blob) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const base64Data = reader.result as string;
+                  resolve({
+                    id: `optimized_${image.id}_${Date.now()}`,
+                    originalImageId: image.id,
+                    condensedImageUrl: base64Data, // For display/preview
+                    originalImageUrl: image.url,   // For API posting (optimizes payload!)
+                    width: canvas.width,
+                    height: canvas.height,
+                    aspectRatio: aspectRatio,
+                    fileSize: blob.size
+                  });
+                };
+                reader.onerror = () => {
+                  reject(new Error('Failed to convert blob to base64'));
+                };
+                reader.readAsDataURL(blob);
+              } else {
+                reject(new Error('Failed to create blob from canvas'));
+              }
+            },
+            'image/jpeg',
+            0.85 // 85% quality for good compression
+          );
+        } catch (error) {
+          reject(error);
+        }
+      };
+
+      img.onerror = () => reject(new Error('Failed to load image'));
+      img.src = image.url;
+    });
+  }
 
   /**
    * Create a template from a slideshow
