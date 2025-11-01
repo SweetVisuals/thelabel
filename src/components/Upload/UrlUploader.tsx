@@ -100,129 +100,115 @@ export const UrlUploader: React.FC<UrlUploaderProps> = ({
 
   const downloadImageFromUrl = async (url: string, filename: string): Promise<File> => {
     try {
-      // Use a CORS proxy to fetch the image
-      const proxyUrls = [
-        `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-        `https://cors-anywhere.herokuapp.com/${url}`,
-        `https://corsproxy.io/?${encodeURIComponent(url)}`
+      console.log(`📥 Downloading image from URL: ${url}`);
+      
+      // Method 1: Use our server-side image proxy (best approach)
+      try {
+        const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(url)}`;
+        console.log(`🔄 Using server-side image proxy: ${proxyUrl}`);
+        
+        const response = await fetch(proxyUrl, {
+          method: 'GET',
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const mimeType = blob.type || 'image/jpeg';
+          console.log(`✅ Server proxy download successful for ${filename}`);
+          return new File([blob], filename, { type: mimeType });
+        } else {
+          const errorData = await response.json();
+          console.warn(`Server proxy failed: ${errorData.error}`);
+        }
+      } catch (proxyError) {
+        console.error('Server proxy error:', proxyError);
+      }
+
+      // Method 2: Direct fetch attempt (sometimes works for some domains)
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          mode: 'cors',
+          headers: {
+            'Accept': 'image/*',
+          },
+        });
+
+        if (response.ok) {
+          const blob = await response.blob();
+          const mimeType = blob.type || 'image/jpeg';
+          console.log(`✅ Direct download successful for ${filename}`);
+          return new File([blob], filename, { type: mimeType });
+        }
+      } catch (directError) {
+        console.log(`⚠️ Direct download failed: ${directError}`);
+      }
+
+      // Method 3: Try alternative proxy services
+      const alternativeProxies = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://images.weserv.nl/?url=${encodeURIComponent(new URL(url).hostname + new URL(url).pathname)}`,
       ];
 
-      let lastError: Error | null = null;
-      
-      for (const proxyUrl of proxyUrls) {
+      for (const proxyUrl of alternativeProxies) {
         try {
-          console.log(`Trying CORS proxy: ${proxyUrl}`);
+          console.log(`🔄 Trying alternative proxy: ${proxyUrl}`);
           
           const response = await fetch(proxyUrl, {
-            method: 'GET',
-            headers: {
-              'Accept': 'application/json, text/plain, */*',
-            },
-          });
-
-          if (!response.ok) {
-            throw new Error(`Failed to fetch via proxy: ${response.status} ${response.statusText}`);
-          }
-
-          let imageUrl: string;
-          
-          // Handle different proxy response formats
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('application/json')) {
-            // AllOrigins format
-            const data = await response.json();
-            imageUrl = data.contents;
-          } else {
-            // Direct image response
-            imageUrl = url;
-          }
-
-          // Now fetch the actual image
-          const imageResponse = await fetch(imageUrl, {
             method: 'GET',
             headers: {
               'Accept': 'image/*',
             },
           });
 
-          if (!imageResponse.ok) {
-            throw new Error(`Failed to fetch image: ${imageResponse.status} ${imageResponse.statusText}`);
+          if (response.ok) {
+            const blob = await response.blob();
+            const mimeType = blob.type || 'image/jpeg';
+            console.log(`✅ Alternative proxy successful for ${filename}`);
+            return new File([blob], filename, { type: mimeType });
           }
-
-          // Get the image data as blob
-          const blob = await imageResponse.blob();
-          
-          // Determine the MIME type
-          const mimeType = blob.type || 'image/jpeg';
-          
-          // Create a File object
-          return new File([blob], filename, { type: mimeType });
-          
-        } catch (error) {
-          console.warn(`CORS proxy ${proxyUrl} failed:`, error);
-          lastError = error instanceof Error ? error : new Error('Unknown error');
+        } catch (proxyError) {
+          console.warn(`Alternative proxy ${proxyUrl} failed:`, proxyError);
           continue;
         }
       }
 
-      // If all proxies failed, try a fallback approach
+      // Method 4: Pinterest-specific handling
       try {
-        console.log('Trying fallback approach with canvas...');
+        const urlObj = new URL(url);
         
-        // Create an image element and use canvas to get the image
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        
-        const imageData = await new Promise<string>((resolve, reject) => {
-          img.onload = () => {
-            try {
-              const canvas = document.createElement('canvas');
-              const ctx = canvas.getContext('2d');
-              
-              if (!ctx) {
-                reject(new Error('Failed to get canvas context'));
-                return;
-              }
-
-              canvas.width = img.width;
-              canvas.height = img.height;
-              ctx.drawImage(img, 0, 0);
-
-              // Convert to blob
-              canvas.toBlob(
-                (blob) => {
-                  if (blob) {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result as string);
-                    reader.onerror = () => reject(new Error('Failed to convert canvas to blob'));
-                    reader.readAsDataURL(blob);
-                  } else {
-                    reject(new Error('Failed to create blob from canvas'));
-                  }
-                },
-                'image/jpeg',
-                0.9
-              );
-            } catch (error) {
-              reject(error);
-            }
-          };
+        if (urlObj.hostname.includes('pinimg.com')) {
+          console.log('🔍 Detected Pinterest URL, trying Pinterest-specific handling...');
           
-          img.onerror = () => reject(new Error('Failed to load image'));
-          img.src = url;
-        });
-
-        // Convert data URL to File
-        const response = await fetch(imageData);
-        const blob = await response.blob();
-        return new File([blob], filename, { type: blob.type || 'image/jpeg' });
-        
-      } catch (fallbackError) {
-        console.error('Fallback approach failed:', fallbackError);
-        throw new Error(`Failed to download image after trying all methods: ${lastError?.message || fallbackError}`);
+          const pathParts = urlObj.pathname.split('/');
+          const directUrl = `https://i.pinimg.com/originals/${pathParts[pathParts.length - 1]}`;
+          console.log(`🔄 Trying direct Pinterest URL: ${directUrl}`);
+          
+          try {
+            const response = await fetch(directUrl, {
+              method: 'GET',
+              mode: 'cors',
+            });
+            
+            if (response.ok) {
+              const blob = await response.blob();
+              const mimeType = blob.type || 'image/jpeg';
+              console.log(`✅ Pinterest direct URL successful for ${filename}`);
+              return new File([blob], filename, { type: mimeType });
+            }
+          } catch (pinterestError) {
+            console.warn('Pinterest direct URL failed:', pinterestError);
+          }
+        }
+      } catch (urlError) {
+        console.warn('URL parsing failed:', urlError);
       }
 
+      // If all methods fail, provide a helpful error message
+      throw new Error(`Unable to download image from ${url}. The server-side proxy may be temporarily unavailable. Please try again in a moment, or download the image manually and upload it directly.`);
+      
     } catch (error) {
+      console.error('❌ All download methods failed:', error);
       throw new Error(`Failed to download image: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
