@@ -97,6 +97,7 @@ export interface CondensedSlide {
   id: string;
   originalImageId: string;
   condensedImageUrl: string; // URL of the final compressed image with text
+  originalImageUrl?: string; // Original image URL for API posting (to avoid large base64 payloads)
   width: number;
   height: number;
   aspectRatio: string;

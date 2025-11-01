@@ -98,7 +98,8 @@ export class SlideshowService {
                   resolve({
                     id: `condensed_${image.id}_${Date.now()}`,
                     originalImageId: image.id,
-                    condensedImageUrl: base64Data, // Store base64 data directly
+                    condensedImageUrl: base64Data, // For display/preview only
+                    originalImageUrl: image.url, // Store original URL for API posting
                     width: canvas.width,
                     height: canvas.height,
                     aspectRatio: aspectRatio,
@@ -459,10 +460,31 @@ export class SlideshowService {
     scheduledAt?: Date,
     postNow: boolean = false
   ): PostizSlideshowData {
+    // Use original image URLs when available to avoid large base64 payloads
+    const mediaUrls = slideshow.condensedSlides.map(slide => {
+      // Prefer original image URL to avoid large base64 data
+      if (slide.originalImageUrl) {
+        return slide.originalImageUrl;
+      }
+      
+      // Fallback to condensed image URL if available
+      if (slide.condensedImageUrl) {
+        // If it's a data URL (base64), warn about potential large payload
+        if (slide.condensedImageUrl.startsWith('data:')) {
+          console.warn('Using base64 image for slideshow - payload may be large');
+        }
+        return slide.condensedImageUrl;
+      }
+      
+      // Last resort - return empty string
+      console.warn('No image URL available for slide:', slide.id);
+      return '';
+    });
+
     return {
       text: this.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags),
       profileIds: profileIds,
-      mediaUrls: slideshow.condensedSlides.map(slide => slide.condensedImageUrl),
+      mediaUrls: mediaUrls,
       scheduledAt: scheduledAt?.toISOString(),
       publishedAt: postNow ? new Date().toISOString() : undefined
     };
