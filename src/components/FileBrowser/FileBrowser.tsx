@@ -605,10 +605,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   };
 
   const handleMoveImagesToFolder = async (folderId: string, imageIds: string[]) => {
+    console.log('🗂️ handleMoveImagesToFolder called:', { folderId, imageIds, totalImages: images.length, totalFolders: folders.length });
+    
     const movePromise = imageService.moveImagesToFolder(imageIds, folderId);
     toast.promise(movePromise, {
       loading: `Moving ${imageIds.length} image(s)...`,
       success: () => {
+        console.log('✅ Image move promise resolved, updating UI...');
+        
         // Optimistic update - remove from all folders first
         const updatedFolders = folders.map(f => ({
           ...f,
@@ -617,19 +621,30 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         
         // Add to target folder
         const targetFolderIndex = updatedFolders.findIndex(f => f.id === folderId);
+        console.log('📁 Target folder index:', targetFolderIndex);
+        
         if (targetFolderIndex !== -1) {
           const movedImages = images.filter(img => imageIds.includes(img.id));
+          console.log('🖼️ Images to move:', movedImages.map(img => ({ id: img.id, name: img.file.name })));
+          
           updatedFolders[targetFolderIndex] = {
             ...updatedFolders[targetFolderIndex],
             images: [...updatedFolders[targetFolderIndex].images, ...movedImages]
           };
+        } else {
+          console.log('❌ Target folder not found!');
         }
+        
+        console.log('📊 Updated folders structure:', updatedFolders.map(f => ({ id: f.id, name: f.name, imageCount: f.images.length })));
         
         onFoldersChange?.(updatedFolders);
         onSelectionChange([]);
         return `Successfully moved ${imageIds.length} image(s)!`;
       },
-      error: 'Failed to move images. Please try again.',
+      error: (error) => {
+        console.error('❌ Image move failed:', error);
+        return 'Failed to move images. Please try again.';
+      },
     });
   };
 
@@ -1173,7 +1188,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         </div>
 
         {createPortal(
-          <DragOverlay>
+          <DragOverlay style={{ zIndex: 9999 }}>
             {activeItem && activeItem.type === 'file' && activeItem.image ? (
               (() => {
                 const isActiveSelected = selectedImages.includes(activeItem.id);
@@ -1183,7 +1198,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                   : [activeItem];
 
                 return (
-                  <div className="relative">
+                  <div className="relative pointer-events-none">
                     {itemsDragging.slice(0, itemsToShow).map((item, index) => (
                       <FileTile
                         key={item.id}
@@ -1191,13 +1206,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         selected={selectedImages.includes(item.id)}
                         onToggleSelection={toggleSelection}
                         className={cn(
-                          "absolute",
+                          "absolute pointer-events-none",
                           itemsToShow > 1 && index > 0 && `top-${index * 2} left-${index * 2} scale-90`
                         )}
                       />
                     ))}
                     {isActiveSelected && itemsDragging.length > 4 && (
-                      <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-black">
+                      <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-black pointer-events-none">
                         +{itemsDragging.length - 3}
                       </div>
                     )}
@@ -1210,7 +1225,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 );
               })()
             ) : activeItem && activeItem.type === 'slideshow' ? (
-              <div className="relative">
+              <div className="relative pointer-events-none">
                 <SlideshowTile
                   item={activeItem}
                   onSlideshowClick={() => {}}
