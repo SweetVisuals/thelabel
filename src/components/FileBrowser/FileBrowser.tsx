@@ -701,29 +701,23 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           console.log('📤 Moving images to root:', itemsToMove);
           handleMoveImagesToRoot(itemsToMove);
         } else if (over) {
-          // Check if the drop target is a folder
-          const targetFolder = fileItems.find(item => item.id === over.id);
+          // Check if the drop target is a folder (even if not in fileItems since folders aren't draggable)
           const overData = (over as any)?.data;
           
           console.log('📁 Drop target analysis:', {
-            targetFolder,
+            overId: over.id,
             overData,
-            isFolder: targetFolder?.type === 'folder',
-            hasFolderData: !!overData?.type,
-            targetId: over.id,
+            isFolder: overData?.type === 'folder',
             folderIdFromData: overData?.folderId
           });
           
-          if (targetFolder?.type === 'folder') {
-            console.log('✅ Moving to folder (found in fileItems):', over.id);
-            handleMoveImagesToFolder(over.id as string, itemsToMove);
-          } else if (overData?.type === 'folder') {
-            // Check if the drop target data indicates it's a folder
+          if (overData?.type === 'folder') {
+            // Use folder ID from drop data
             const folderId = overData.folderId || over.id;
             console.log('✅ Moving to folder (via data):', folderId);
             handleMoveImagesToFolder(folderId, itemsToMove);
           } else {
-            console.log('❌ Invalid drop target for images:', over?.id);
+            console.log('❌ Invalid drop target for images:', over?.id, 'Data:', overData);
           }
         }
       } else if (draggedItem?.type === 'slideshow') {
@@ -735,29 +729,23 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           console.log('📤 Moving slideshow to root:', active.id);
           handleMoveSlideshowToFolder(active.id as string, null);
         } else if (over) {
-          // Check if the drop target is a folder
-          const targetFolder = fileItems.find(item => item.id === over.id);
+          // Check if the drop target is a folder (even if not in fileItems since folders aren't draggable)
           const overData = (over as any)?.data;
           
           console.log('📁 Slideshow drop target analysis:', {
-            targetFolder,
+            overId: over.id,
             overData,
-            isFolder: targetFolder?.type === 'folder',
-            hasFolderData: !!overData?.type,
-            targetId: over.id,
+            isFolder: overData?.type === 'folder',
             folderIdFromData: overData?.folderId
           });
           
-          if (targetFolder?.type === 'folder') {
-            console.log('✅ Moving slideshow to folder (found in fileItems):', over.id);
-            handleMoveSlideshowToFolder(active.id as string, over.id as string);
-          } else if (overData?.type === 'folder') {
-            // Check if the drop target data indicates it's a folder
+          if (overData?.type === 'folder') {
+            // Use folder ID from drop data
             const folderId = overData.folderId || over.id;
             console.log('✅ Moving slideshow to folder (via data):', folderId);
             handleMoveSlideshowToFolder(active.id as string, folderId);
           } else {
-            console.log('❌ Invalid drop target for slideshow:', over?.id);
+            console.log('❌ Invalid drop target for slideshow:', over?.id, 'Data:', overData);
           }
         }
       } else {
@@ -1500,10 +1488,8 @@ const FolderTile: React.FC<{
       folderId: item.id
     }
   });
-  const { attributes, listeners, setNodeRef: dragSetNodeRef, transform, isDragging } = useDraggable({
-    id: item.id,
-    disabled: false
-  });
+  // NOTE: Folders are NOT draggable - only clickable for opening
+  // This prevents drag/click interference
   const isRenaming = renamingFolderId === item.id;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1514,11 +1500,15 @@ const FolderTile: React.FC<{
     }
   };
 
-  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}, isDragging: ${isDragging}`);
+  const handleClick = (e: React.MouseEvent) => {
+    if (!isRenaming) {
+      e.preventDefault();
+      e.stopPropagation();
+      onFolderClick(item.id);
+    }
+  };
 
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : {};
+  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}`);
 
   return (
     <div
@@ -1527,67 +1517,51 @@ const FolderTile: React.FC<{
         e.stopPropagation();
         onContextMenu(item.id, e.clientX, e.clientY);
       }}
+      onClick={handleClick}
+      className={cn(
+        "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all cursor-pointer",
+        isOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50"
+      )}
+      style={{
+        zIndex: isOver ? 50 : 1,
+        cursor: isRenaming ? 'text' : 'pointer'
+      }}
+      ref={setNodeRef}
     >
-      <div
-        ref={(node) => {
-          setNodeRef(node);
-          dragSetNodeRef(node);
-        }}
-        {...attributes}
-        {...listeners}
-        className={cn(
-          "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all",
-          isOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50",
-          isDragging && "opacity-50"
-        )}
-        style={{
-          ...style,
-          zIndex: isOver ? 50 : 1,
-          cursor: isRenaming ? 'text' : 'pointer'
-        }}
-        onClick={(e) => {
-          // Handle click separately from drag - only trigger if not renaming and not dragging
-          if (!isRenaming && !isDragging) {
-            e.stopPropagation();
-            onFolderClick(item.id);
-          }
-        }}
-      >
-        {/* Drop zone overlay for better visual feedback */}
-        {isOver && (
-          <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
-            <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
-              Drop here
-            </div>
+      {/* Drop zone overlay for better visual feedback */}
+      {isOver && (
+        <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+          <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+            Drop here
           </div>
-        )}
-        
-        {/* Expanded drop zone area - extends beyond the visual folder */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            margin: '-8px', // Extends drop zone 8px beyond the folder bounds
-            zIndex: isOver ? 5 : 1
-          }}
-        />
-        
-        <div className="flex flex-col items-center justify-center h-full relative z-10">
-          <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
-          {isRenaming ? (
-            <input
-              type="text"
-              value={renameInputValue}
-              onChange={(e) => setRenameInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={() => handleRenameSubmit(item.id, renameInputValue)}
-              className="text-center text-xs font-medium text-white mt-2 px-2 py-1 border border-blue-500 rounded bg-neutral-900 w-full max-w-20 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              autoFocus
-            />
-          ) : (
-            <p className="text-center text-xs font-medium text-neutral-200 mt-2 truncate px-2">{item.name}</p>
-          )}
         </div>
+      )}
+      
+      {/* Expanded drop zone area - extends beyond the visual folder */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          margin: '-8px', // Extends drop zone 8px beyond the folder bounds
+          zIndex: isOver ? 5 : 1
+        }}
+      />
+      
+      <div className="flex flex-col items-center justify-center h-full relative z-10">
+        <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
+        {isRenaming ? (
+          <input
+            type="text"
+            value={renameInputValue}
+            onChange={(e) => setRenameInputValue(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onClick={(e) => e.stopPropagation()}
+            onBlur={() => handleRenameSubmit(item.id, renameInputValue)}
+            className="text-center text-xs font-medium text-white mt-2 px-2 py-1 border border-blue-500 rounded bg-neutral-900 w-full max-w-20 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            autoFocus
+          />
+        ) : (
+          <p className="text-center text-xs font-medium text-neutral-200 mt-2 truncate px-2">{item.name}</p>
+        )}
       </div>
     </div>
   );
