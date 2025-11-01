@@ -1373,11 +1373,12 @@ const FolderTile: React.FC<{
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(true);
     
-    // Ensure proper visual feedback during drag
+    // Only show drag over for our specific drag data
     if (e.dataTransfer.types.includes('application/json')) {
+      setIsDragOver(true);
       e.dataTransfer.dropEffect = 'move';
+      console.log('📁 Folder drag over:', item.name, item.id);
     }
   };
 
@@ -1575,6 +1576,7 @@ const SlideshowTile: React.FC<{
 }) => {
   const isRenaming = renamingSlideshowId === item.id;
   const hasValidSlideshow = item.slideshow && item.slideshow.id && item.slideshow.title;
+  const [isDragging, setIsDragging] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -1585,6 +1587,8 @@ const SlideshowTile: React.FC<{
   };
 
   const handleDragStart = (e: React.DragEvent) => {
+    console.log('🎬 Starting drag for slideshow:', item.id, item.name);
+    
     const dragData = {
       type: 'slideshow',
       id: item.id,
@@ -1596,6 +1600,27 @@ const SlideshowTile: React.FC<{
     
     // Add visual feedback during drag
     e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
+    
+    // Set dragging state
+    setIsDragging(true);
+    
+    // Clear dragging state after a short delay
+    setTimeout(() => setIsDragging(false), 100);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    setIsDragging(false);
+  };
+
+  // Handle click only if not dragging
+  const handleClick = (e: React.MouseEvent) => {
+    // Only trigger click if not currently dragging and it's a primary mouse button
+    if (!isDragging && !isRenaming && e.button === 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('🎬 Slideshow clicked:', item.id);
+      onToggleSelection(item.id);
+    }
   };
 
   return (
@@ -1607,18 +1632,14 @@ const SlideshowTile: React.FC<{
       }}
       draggable={!isRenaming}
       onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
       className={cn(
-        "relative group aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-blue-900/20 border-2 cursor-pointer transition-all",
-        selected ? "border-purple-500 ring-2 ring-purple-400/30" : "border-transparent hover:shadow-lg hover:border-purple-400/50"
+        "relative group aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-blue-900/20 border-2 transition-all",
+        selected ? "border-purple-500 ring-2 ring-purple-400/30" : "border-transparent hover:shadow-lg hover:border-purple-400/50",
+        isDragging ? "opacity-50 cursor-grabbing" : "cursor-pointer"
       )}
       title={`Slideshow: ${item.slideshow?.title || 'Loading...'}`}
-      onClick={(e) => {
-        // Handle click separately from drag - only trigger if not renaming
-        if (!isRenaming) {
-          e.stopPropagation();
-          onToggleSelection(item.id);
-        }
-      }}
+      onClick={handleClick}
     >
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center mb-2">
@@ -1671,7 +1692,11 @@ const FileTile: React.FC<{
     }
   }, [item.id, fileTileRefs]);
 
+  const [isDragging, setIsDragging] = useState(false);
+
   const handleDragStart = (e: React.DragEvent) => {
+    console.log('🖼️ Starting drag for file:', item.id, item.name);
+    
     const dragData = {
       type: 'file',
       id: item.id,
@@ -1683,26 +1708,46 @@ const FileTile: React.FC<{
     
     // Add visual feedback during drag
     e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
+    
+    // Set dragging state
+    setIsDragging(true);
+    
+    // Clear dragging state after a short delay
+    setTimeout(() => setIsDragging(false), 100);
+  };
+
+  const handleDragEnd = (e: React.DragEvent) => {
+    setIsDragging(false);
+  };
+
+  // Handle click only if not dragging
+  const handleClick = (e: React.MouseEvent) => {
+    // Only trigger click if not currently dragging and it's a primary mouse button
+    if (!isDragging && e.button === 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (onToggleSelection) {
+        console.log('📁 File clicked:', item.id);
+        onToggleSelection(item.id);
+      }
+    }
   };
 
   return (
     <>
       <div
         ref={tileRef}
-        draggable
+        draggable={!isDragging}
         onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
         className={cn(
-          "relative group aspect-square rounded-lg overflow-hidden bg-neutral-900 border-2 cursor-pointer transition-all",
+          "relative group aspect-square rounded-lg overflow-hidden bg-neutral-900 border-2 transition-all",
           selected ? "border-blue-500 ring-2 ring-blue-400/30" : "border-transparent hover:shadow-lg hover:border-neutral-700",
+          isDragging ? "opacity-50 cursor-grabbing" : "cursor-pointer",
           className
         )}
         title={selected ? "Selected" : ""}
-        onClick={(e) => {
-          e.stopPropagation();
-          if (onToggleSelection) {
-            onToggleSelection(item.id);
-          }
-        }}
+        onClick={handleClick}
       >
         <div className="absolute inset-0 flex items-center justify-center">
           {item.image && (
