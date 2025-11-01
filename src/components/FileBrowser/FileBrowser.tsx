@@ -89,7 +89,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [draggedOver, setDraggedOver] = useState(false);
   const [editingImage, setEditingImage] = useState<UploadedImage | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showHidden, setShowHidden] = useState(false);
@@ -274,56 +273,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       return sortOrder === 'asc' ? comparison : -comparison;
     });
 
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setDraggedOver(false);
-    const files = Array.from(e.dataTransfer.files);
-
-    // Separate slideshow files from image files
-    const slideshowFiles = files.filter(file => file.name.endsWith('.slideshow'));
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
-
-    // Handle slideshow files
-    if (slideshowFiles.length > 0) {
-      for (const file of slideshowFiles) {
-        try {
-          const { slideshowService } = await import('@/lib/slideshowService');
-          const slideshow = await slideshowService.loadSlideshowFromFile(file);
-          if (onSlideshowLoad) {
-            onSlideshowLoad(slideshow);
-            toast.success(`Loaded slideshow: ${slideshow.title}`);
-          }
-        } catch (error) {
-          console.error('Failed to load slideshow:', error);
-          toast.error(`Failed to load slideshow: ${file.name}`);
-        }
-      }
-    }
-
-    // Handle image files
-    if (imageFiles.length > 0) {
-      const uploadPromise = new Promise<UploadedImage[]>(async (resolve, reject) => {
-        try {
-          const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, currentFolderId || undefined));
-          const newImages = await Promise.all(uploadPromises);
-          onImagesUploaded([...images, ...newImages]);
-          resolve(newImages);
-        } catch (error) {
-          reject(error);
-        }
-      });
-
-      toast.promise(uploadPromise, {
-        loading: `Uploading ${imageFiles.length} images...`,
-        success: (newImages) => `Successfully uploaded ${newImages.length} images!`,
-        error: 'Upload failed. Please try again.',
-      });
-    }
-  }, [images, onImagesUploaded, currentFolderId, onSlideshowLoad]);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDraggedOver(true); }, []);
-  const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDraggedOver(false); }, []);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -1065,10 +1014,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         </div>
 
         <div
-          className={cn("flex-1 relative overflow-auto bg-background", draggedOver && "bg-blue-900/20")}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
+          className="flex-1 relative overflow-auto bg-background"
           onContextMenu={(e) => {
             e.preventDefault();
             setContextMenu({
