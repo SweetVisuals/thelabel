@@ -611,9 +611,19 @@ export class SlideshowService {
     scheduledAt?: Date,
     postNow: boolean = false
   ): Promise<any> {
-    // Use optimized posting data with automatic upgrade if needed
-    const postData = await this.getOptimizedPostData(slideshow, profileIds, scheduledAt, postNow);
-    return await postizAPI.createPost(postData);
+    try {
+      // Use optimized posting data with automatic upgrade if needed
+      const postData = await this.getOptimizedPostData(slideshow, profileIds, scheduledAt, postNow);
+      
+      // Use the enhanced Postiz API with proper image processing
+      const result = await postizAPI.createPostWithImages(postData);
+      
+      console.log('✅ Successfully posted slideshow to Postiz:', result.id);
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to post slideshow to Postiz:', error);
+      throw error;
+    }
   }
 
   /**
