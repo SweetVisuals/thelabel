@@ -176,6 +176,8 @@ export const postizAPI = {
       const requestBody = {
         type: postNow ? 'now' : (scheduledAt ? 'schedule' : 'now'),
         date: scheduledAt ? scheduledAt.toISOString() : new Date().toISOString(),
+        shortLink: false, // Required top-level field
+        tags: [], // Required top-level field as empty array
         posts: [{
           integration: {
             id: integrationId
@@ -189,8 +191,15 @@ export const postizAPI = {
           }],
           group: `slideshow_${Date.now()}`, // Unique group ID for batch posts
           settings: {
-            shortLink: false,
-            privacy_level: 'PUBLIC_TO_EVERYONE'
+            shortLink: false, // Required in settings
+            privacy_level: 'PUBLIC_TO_EVERYONE',
+            duet: false, // Required boolean
+            stitch: false, // Required boolean
+            comment: true, // Required boolean
+            autoAddMusic: 'no', // Required: 'yes' or 'no' (lowercase)
+            brand_content_toggle: false, // Required boolean
+            brand_organic_toggle: false, // Required boolean
+            content_posting_method: 'DIRECT_POST' // Required: 'DIRECT_POST' or 'UPLOAD'
           }
         }]
       };
