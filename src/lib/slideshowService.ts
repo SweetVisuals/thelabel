@@ -331,14 +331,14 @@ async saveSlideshow(
     // Check memory first
     console.log('🔍 Checking memory for slideshow:', slideshowId);
     let slideshow = this.slideshows.get(slideshowId);
-    console.log('🧠 Memory result:', { found: !!slideshow, title: slideshow?.title });
+    console.log('🧠 Memory result:', { found: !!slideshow, title: slideshow?.title, postTitle: slideshow?.postTitle });
 
     if (!slideshow) {
       console.log('📁 Not in memory, trying localStorage...');
       // Try to load from localStorage
       this.loadFromLocalStorage();
       slideshow = this.slideshows.get(slideshowId);
-      console.log('💾 localStorage result:', { found: !!slideshow, title: slideshow?.title });
+      console.log('💾 localStorage result:', { found: !!slideshow, title: slideshow?.title, postTitle: slideshow?.postTitle });
     }
 
     if (!slideshow) {
@@ -352,7 +352,7 @@ async saveSlideshow(
         if (session?.user?.id) {
           await this.loadFromDatabase(session.user.id);
           slideshow = this.slideshows.get(slideshowId);
-          console.log('🗄️ Database result:', { found: !!slideshow, title: slideshow?.title });
+          console.log('🗄️ Database result:', { found: !!slideshow, title: slideshow?.title, postTitle: slideshow?.postTitle });
         }
       } catch (error) {
         console.error('❌ Failed to get user session for database load:', error);
@@ -364,7 +364,7 @@ async saveSlideshow(
       // Try to load from file system - this is now the primary load method
       const loadedSlideshow = await this.loadFromFileSystem(slideshowId);
       slideshow = loadedSlideshow || undefined;
-      console.log('💻 File system result:', { found: !!loadedSlideshow, title: loadedSlideshow?.title });
+      console.log('💻 File system result:', { found: !!loadedSlideshow, title: loadedSlideshow?.title, postTitle: loadedSlideshow?.postTitle });
     }
 
     const finalResult = slideshow || null;
@@ -372,6 +372,7 @@ async saveSlideshow(
       slideshowId,
       found: !!finalResult,
       title: finalResult?.title,
+      postTitle: finalResult?.postTitle,
       condensedSlidesCount: finalResult?.condensedSlides?.length || 0
     });
     
@@ -392,15 +393,18 @@ async saveSlideshow(
         throw new Error('Invalid slideshow file format');
       }
 
-      // Ensure folder_id exists for backward compatibility
+      // Ensure backward compatibility fields exist
       if (!('folder_id' in slideshow)) {
         (slideshow as any).folder_id = null;
       }
+      
+      // Ensure postTitle exists for backward compatibility (fix for missing postTitle)
+      if (!('postTitle' in slideshow)) {
+        (slideshow as any).postTitle = slideshow.title; // Fallback to title
+      }
 
       console.log('Parsed slideshow:', slideshow.title, 'with', slideshow.condensedSlides.length, 'slides');
-
-      // IMPORTANT: Don't save condensed images as separate files when loading from file
-      // They should only exist in the slideshow metadata
+      console.log('📝 Post title loaded:', slideshow.postTitle);
 
       // Store in memory for future reference
       this.slideshows.set(slideshow.id, slideshow);
@@ -1067,7 +1071,9 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
             created_at: dbSlideshow.created_at,
             updated_at: dbSlideshow.updated_at,
             user_id: dbSlideshow.user_id,
-            folder_id: metadata.folder_id || null
+            folder_id: metadata.folder_id || null,
+            // Ensure postTitle exists - fallback to title if not in metadata
+            postTitle: metadata.postTitle || dbSlideshow.title
           };
 
           // Store in memory - IMPORTANT: Don't create separate image files for condensed slides
@@ -1135,9 +1141,14 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       console.log('🔄 Loading slideshow from file data...');
       const slideshow = JSON.parse(fileData) as SlideshowMetadata;
 
-      // Ensure folder_id exists for backward compatibility
+      // Ensure backward compatibility fields exist
       if (!('folder_id' in slideshow)) {
         (slideshow as any).folder_id = null;
+      }
+      
+      // Ensure postTitle exists for backward compatibility (fix for missing postTitle)
+      if (!('postTitle' in slideshow)) {
+        (slideshow as any).postTitle = slideshow.title; // Fallback to title
       }
 
       // Validate the slideshow structure
@@ -1146,6 +1157,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       }
 
       console.log('✅ Parsed slideshow from file data:', slideshow.title, 'with', slideshow.condensedSlides.length, 'slides');
+      console.log('📝 Post title loaded:', slideshow.postTitle);
 
       // Store in memory for future reference
       this.slideshows.set(slideshow.id, slideshow);
@@ -1233,9 +1245,14 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
     try {
       const slideshow = JSON.parse(fileData) as SlideshowMetadata;
       
-      // Ensure folder_id exists for backward compatibility
+      // Ensure backward compatibility fields exist
       if (!('folder_id' in slideshow)) {
         (slideshow as any).folder_id = null;
+      }
+      
+      // Ensure postTitle exists for backward compatibility (fix for missing postTitle)
+      if (!('postTitle' in slideshow)) {
+        (slideshow as any).postTitle = slideshow.title; // Fallback to title
       }
 
       // Validate the slideshow structure
@@ -1244,6 +1261,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       }
 
       console.log('✅ Parsed slideshow from file data with folder support:', slideshow.title, 'with', slideshow.condensedSlides.length, 'slides');
+      console.log('📝 Post title loaded:', slideshow.postTitle);
 
       // Store in memory for future reference
       this.slideshows.set(slideshow.id, slideshow);

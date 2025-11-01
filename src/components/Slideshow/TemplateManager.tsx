@@ -67,7 +67,7 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
   }, [slideshow]);
 
   const handleSave = async () => {
-    if (!name.trim() || !slideshow) return;
+    if (!name.trim()) return; // Only require name, slideshow is optional now
     
     setIsSaving(true);
     try {
@@ -82,7 +82,7 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
     }
   };
 
-  if (!isOpen || !slideshow) return null;
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -126,26 +126,53 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
             <div className="bg-muted/50 rounded-lg p-4">
               <h4 className="font-medium text-sm mb-2">Template Preview</h4>
               <div className="space-y-2 text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-3 h-3" />
-                  <span>Title: {slideshow.title}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Hash className="w-3 h-3" />
-                  <span>{slideshow.hashtags.length} hashtags</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <ImageIcon className="w-3 h-3" />
-                  <span>{slideshow.condensedSlides.length} slides</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Palette className="w-3 h-3" />
-                  <span>Text overlays: {slideshow.textOverlays.length}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Zap className="w-3 h-3" />
-                  <span>Aspect ratio: {slideshow.aspectRatio}</span>
-                </div>
+                {slideshow ? (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-3 h-3" />
+                      <span>Title: {slideshow.title}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Hash className="w-3 h-3" />
+                      <span>{slideshow.hashtags.length} hashtags</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-3 h-3" />
+                      <span>{slideshow.condensedSlides.length} slides</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Palette className="w-3 h-3" />
+                      <span>Text overlays: {slideshow.textOverlays.length}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-3 h-3" />
+                      <span>Aspect ratio: {slideshow.aspectRatio}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-3 h-3" />
+                      <span>Title: From current settings</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Hash className="w-3 h-3" />
+                      <span>Hashtags: From current settings</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-3 h-3" />
+                      <span>Slides: Based on selected images</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Palette className="w-3 h-3" />
+                      <span>Text overlays: From current settings</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-3 h-3" />
+                      <span>Aspect ratio: From current settings</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
