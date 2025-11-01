@@ -1418,8 +1418,7 @@ const FolderTile: React.FC<{
     id: item.id,
     data: {
       type: 'folder',
-      folderId: item.id,
-      accepts: ['file', 'slideshow'] // Explicitly define what can be dropped
+      folderId: item.id
     }
   });
   
