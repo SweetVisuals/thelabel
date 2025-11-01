@@ -487,19 +487,23 @@ export class SlideshowService {
     for (const slide of slideshow.condensedSlides) {
       let url = '';
       
-      // Priority 1: Use original image URL if available
-      if (slide.originalImageUrl) {
+      // CRITICAL FIX: Priority 1 - Use CONsolidated image URL (with text overlays)
+      if (slide.condensedImageUrl) {
+        if (slide.condensedImageUrl.startsWith('data:')) {
+          // For base64 data, we need to upload this as a blob to Postiz
+          console.log(`📝 Using base64 condensed image (with text) for slide ${slide.id}`);
+          url = slide.condensedImageUrl;
+          hasLargeDataUrl = true;
+        } else {
+          // For regular URLs (should not happen normally)
+          console.log(`🖼️ Using condensed image URL (with text) for slide ${slide.id}`);
+          url = slide.condensedImageUrl;
+        }
+      }
+      // Priority 2 - Fallback to original image URL ONLY if no condensed image
+      else if (slide.originalImageUrl) {
+        console.warn(`⚠️ Fallback to original image (NO TEXT) for slide ${slide.id} - condensed image missing!`);
         url = slide.originalImageUrl;
-      }
-      // Priority 2: Use condensed image URL if it's not base64
-      else if (slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:')) {
-        url = slide.condensedImageUrl;
-      }
-      // Priority 3: Fallback to condensed image URL (may be base64)
-      else if (slide.condensedImageUrl) {
-        console.warn(`⚠️ Slide ${slide.id} still using base64 data - payload will be large`);
-        url = slide.condensedImageUrl;
-        hasLargeDataUrl = true;
       }
 
       urls.push(url);
@@ -518,6 +522,11 @@ export class SlideshowService {
     // Check if payload might be too large (rough threshold)
     const hasLargePayload = hasLargeDataUrl || totalSize > 1000000; // 1MB threshold
 
+    console.log('📊 Payload optimization result:', {
+      urlsCount: urls.length,
+      hasLargePayload,
+      usingConsolidatedImages: urls.some(url => !url.includes('i.ibb.co')) // Check if we're NOT using original imgbb URLs
+    });
     return { optimizedUrls: urls, hasLargePayload };
   }
 
