@@ -111,6 +111,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   // Use external currentFolderId
   const currentFolderId = externalCurrentFolderId;
 
+  // Debugging: Log changes to images and folders props
+  useEffect(() => {
+    console.log('🔄 FileBrowser props updated:', {
+      imagesCount: images.length,
+      foldersCount: folders.length,
+      currentFolderId,
+    });
+  }, [images, folders, currentFolderId]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -122,8 +130,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         ]);
         onImagesUploaded(loadedImages);
         onFoldersChange?.(loadedFolders);
+        console.log('✅ Initial data loaded:', { loadedImagesCount: loadedImages.length, loadedFoldersCount: loadedFolders.length });
       } catch (error) {
-        console.error('Failed to load data:', error);
+        console.error('❌ Failed to load data:', error);
         onImagesUploaded([]);
         onFoldersChange?.([]);
       } finally {
@@ -136,7 +145,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   // Force re-render when slideshows change (triggered by saving)
   const [, forceUpdate] = useState({});
-  const triggerReRender = useCallback(() => forceUpdate({}), []);
+  const triggerReRender = useCallback(() => {
+    console.log('🔄 Triggering FileBrowser re-render due to slideshow update.');
+    forceUpdate({});
+  }, []);
 
   // Listen for slideshow changes in localStorage
   useEffect(() => {
@@ -1040,51 +1052,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                      onSlideshowClick={handleSlideshowClick}
                      onContextMenu={handleSlideshowContextMenu}
                      selected={selectedSlideshows.includes(item.id)}
-                     onToggleSelection={(id) => {
-                       if (onSlideshowSelectionChange) {
-                         const wasSelected = selectedSlideshows.includes(id);
-                         const willBeSelected = !wasSelected;
-                         
-                         const newSelection = wasSelected
-                           ? selectedSlideshows.filter(sid => sid !== id)
-                           : [...selectedSlideshows, id];
-                         onSlideshowSelectionChange(newSelection);
-                         
-                         if (willBeSelected) {
-                           toast.success('Slideshow selected - loading...');
-                         } else {
-                           toast.success('Slideshow deselected');
-                         }
-                         
-                         if (willBeSelected) {
-                           setTimeout(async () => {
-                             try {
-                               const slideshowItem = fileItems.find(item => item.id === id && item.type === 'slideshow');
-                               if (slideshowItem && onSlideshowLoad) {
-                                 if (slideshowItem.slideshow && slideshowItem.slideshow.id && slideshowItem.slideshow.title) {
-                                   await onSlideshowLoad(slideshowItem.slideshow);
-                                 } else {
-                                   const loadedSlideshow = await slideshowService.loadSlideshow(id);
-                                   if (loadedSlideshow) {
-                                     await onSlideshowLoad(loadedSlideshow);
-                                   } else {
-                                     toast.error('Failed to load slideshow - no data found');
-                                   }
-                                 }
-                               }
-                             } catch (error) {
-                               toast.error('Failed to load slideshow');
-                             }
-                           }, 0);
-                         } else {
-                           if (onSlideshowUnload) {
-                             onSlideshowUnload();
-                           }
-                         }
-                       } else {
-                         toggleSelection(id);
-                       }
-                     }}
+                     onToggleSelection={toggleSelection}
                      renamingSlideshowId={renamingSlideshowId}
                      renameSlideshowInputValue={renameSlideshowInputValue}
                      setRenameSlideshowInputValue={setRenameSlideshowInputValue}
