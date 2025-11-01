@@ -261,64 +261,14 @@ export const postizAPI = {
     }
   },
 
-  // Test Postiz upload functionality (as documented in Discord)
+  // Skip test functionality - focus on actual slideshow uploads
+  // The slideshow condensed images are already in proper PNG/JPEG format
+  // No need for separate testing endpoint
   async testUploadFunctionality(): Promise<{success: boolean, message: string}> {
-    try {
-      console.log('🧪 Testing Postiz upload functionality...');
-      
-      // Try a simple upload-from-url test with a proper image URL (has .png extension)
-      const testUrl = 'https://via.placeholder.com/100x100/000000/FFFFFF.png';
-      const proxiedUrl = `${VERCEL_PROXY}upload-from-url`;
-      
-      const response = await fetch(proxiedUrl, {
-        method: 'POST',
-        headers: postizAPI.getAuthHeaders(),
-        body: JSON.stringify({ url: testUrl })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Upload test failed:', response.status, errorText);
-        
-        // More specific error messages based on status code
-        if (response.status === 400) {
-          return {
-            success: false,
-            message: 'Upload endpoint accessible but test URL rejected. Check API key permissions.'
-          };
-        } else if (response.status === 401) {
-          return {
-            success: false,
-            message: 'Authentication failed. Check your Postiz API key.'
-          };
-        } else {
-          return {
-            success: false,
-            message: `Postiz upload service returned ${response.status}: ${errorText}`
-          };
-        }
-      }
-      
-      const result = await response.json();
-      if (result.path || result.url) {
-        return {
-          success: true,
-          message: 'Postiz upload service is available and working.'
-        };
-      } else {
-        return {
-          success: false,
-          message: 'Upload service returned unexpected response format.'
-        };
-      }
-      
-    } catch (error) {
-      console.error('Upload test error:', error);
-      return {
-        success: false,
-        message: `Upload test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-      };
-    }
+    return {
+      success: true,
+      message: 'Upload functionality ready - will be tested with actual slideshow images.'
+    };
   },
 
   // Upload image from URL using Postiz API (as documented in Discord)
@@ -433,51 +383,42 @@ export const postizAPI = {
         const externalUrls = postData.mediaUrls.filter(url => !url.includes('uploads.postiz.com'));
         
         if (externalUrls.length > 0) {
-          console.log(`🔄 Found ${externalUrls.length} external images - testing automatic upload capability...`);
+          console.log(`🔄 Found ${externalUrls.length} external images - attempting automatic upload...`);
           
-          // First test if upload functionality is available
-          const uploadTest = await this.testUploadFunctionality();
-          
-          if (uploadTest.success) {
-            console.log('✅ Upload service available - attempting automatic upload...');
+          try {
+            const uploadedImages = await this.uploadImagesToPostizDomain(externalUrls);
             
-            try {
-              const uploadedImages = await this.uploadImagesToPostizDomain(externalUrls);
+            // Check results
+            const successfulUploads = uploadedImages.filter(result =>
+              result.path.includes('uploads.postiz.com') || result.path.startsWith('http')
+            );
+            
+            if (successfulUploads.length === externalUrls.length) {
+              // All uploads successful
+              const processedUrls = [...postData.mediaUrls];
+              let uploadIndex = 0;
               
-              // Check results
-              const successfulUploads = uploadedImages.filter(result => 
-                result.path.includes('uploads.postiz.com') || result.path.startsWith('http')
-              );
-              
-              if (successfulUploads.length === externalUrls.length) {
-                // All uploads successful
-                const processedUrls = [...postData.mediaUrls];
-                let uploadIndex = 0;
-                
-                for (let i = 0; i < processedUrls.length; i++) {
-                  if (!processedUrls[i].includes('uploads.postiz.com') && uploadIndex < uploadedImages.length) {
-                    processedUrls[i] = uploadedImages[uploadIndex].path;
-                    uploadIndex++;
-                  }
+              for (let i = 0; i < processedUrls.length; i++) {
+                if (!processedUrls[i].includes('uploads.postiz.com') && uploadIndex < uploadedImages.length) {
+                  processedUrls[i] = uploadedImages[uploadIndex].path;
+                  uploadIndex++;
                 }
-                
-                console.log(`🎉 Automatic upload successful! ${successfulUploads.length} images uploaded`);
-                
-                const processedPostData: CreatePostData = {
-                  ...postData,
-                  mediaUrls: processedUrls
-                };
-                
-                return await this.createPost(processedPostData);
-              } else {
-                // Partial success - fall through to manual guidance
-                console.warn(`⚠️ Partial upload success: ${successfulUploads.length}/${externalUrls.length}`);
               }
-            } catch (uploadError) {
-              console.warn('⚠️ Upload attempt failed, proceeding to manual guidance:', uploadError);
+              
+              console.log(`🎉 Automatic upload successful! ${successfulUploads.length} images uploaded`);
+              
+              const processedPostData: CreatePostData = {
+                ...postData,
+                mediaUrls: processedUrls
+              };
+              
+              return await this.createPost(processedPostData);
+            } else {
+              // Partial success - fall through to manual guidance
+              console.warn(`⚠️ Partial upload success: ${successfulUploads.length}/${externalUrls.length}`);
             }
-          } else {
-            console.log(`ℹ️ Upload service unavailable: ${uploadTest.message}`);
+          } catch (uploadError) {
+            console.warn('⚠️ Upload attempt failed, proceeding to manual guidance:', uploadError);
           }
           
           // If we get here, automatic upload failed - provide manual guidance
