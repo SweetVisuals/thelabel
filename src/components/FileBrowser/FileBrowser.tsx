@@ -1773,8 +1773,15 @@ const FileTile: React.FC<{
         style={style}
         {...attributes}
         {...listeners}
-        onClick={() => {
+        onClick={(e) => {
           // Ensure we only select the image, never load a slideshow
+          e.stopPropagation();
+          if (onToggleSelection) {
+            onToggleSelection(item.id);
+          }
+        }}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
           if (onToggleSelection) {
             onToggleSelection(item.id);
           }
