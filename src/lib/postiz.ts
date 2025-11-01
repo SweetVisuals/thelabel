@@ -200,45 +200,53 @@ export const postizAPI = {
     }
   },
 
-  // Upload images to Postiz domain via API (automatic)
+  // Upload images to Postiz domain via API (automatic) - Enhanced version
   async uploadImagesToPostizDomain(imageUrls: string[]): Promise<{id: string, path: string}[]> {
     try {
-      console.log('🔄 Automatically uploading images to Postiz domain...', imageUrls.length, 'images');
+      console.log('🔄 Starting automatic upload to Postiz domain...', imageUrls.length, 'images');
+      
+      // First, let's check if we can get the upload endpoint
+      console.log('🔍 Testing Postiz upload endpoint availability...');
+      const uploadEndpoint = await this.getSignedUploadUrl('test.jpg', 'image/jpeg');
+      
+      if (!uploadEndpoint) {
+        console.error('❌ Postiz upload endpoint not available - upload functionality disabled');
+        throw new Error('Postiz upload service temporarily unavailable');
+      }
       
       const uploadResults = await Promise.all(imageUrls.map(async (imageUrl, index) => {
         try {
-          console.log(`📤 Uploading image ${index + 1}: ${imageUrl}`);
+          console.log(`📤 Processing image ${index + 1}/${imageUrls.length}: ${imageUrl}`);
           
           // Step 1: Download the image from external URL
-          const response = await fetch(imageUrl);
+          console.log(`📥 Downloading image ${index + 1}...`);
+          const response = await fetch(imageUrl, {
+            method: 'GET',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (compatible; SlideshowApp/1.0)'
+            }
+          });
+          
           if (!response.ok) {
-            throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+            throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
           }
           
           const blob = await response.blob();
-          console.log(`✅ Downloaded image ${index + 1}: ${blob.size} bytes, ${blob.type}`);
+          console.log(`✅ Downloaded ${imageUrl} -> ${blob.size} bytes (${blob.type})`);
           
-          // Step 2: Get upload URL from Postiz
-          const uploadUrlResponse = await fetch(`${VERCEL_PROXY}upload`, {
-            method: 'POST',
-            headers: postizAPI.getAuthHeaders(),
-            body: JSON.stringify({
-              filename: `slideshow_image_${index + 1}.jpg`,
-              contentType: blob.type,
-              fileSize: blob.size
-            })
-          });
+          // Step 2: Get upload URL for this specific image
+          console.log(`🔗 Getting upload URL for image ${index + 1}...`);
+          const filename = `slideshow_slide_${index + 1}_${Date.now()}.jpg`;
+          const uploadData = await this.getSignedUploadUrl(filename, blob.type);
           
-          if (!uploadUrlResponse.ok) {
-            const errorText = await uploadUrlResponse.text();
-            console.error(`Failed to get upload URL for image ${index + 1}:`, errorText);
-            throw new Error(`Failed to get upload URL: ${uploadUrlResponse.status}`);
+          if (!uploadData) {
+            throw new Error('Failed to get upload URL from Postiz');
           }
           
-          const uploadData = await uploadUrlResponse.json();
-          console.log(`🔗 Got upload URL for image ${index + 1}:`, uploadData.uploadUrl);
+          console.log(`🎯 Upload URL obtained for ${filename}`);
           
-          // Step 3: Upload image to Postiz
+          // Step 3: Upload the image to Postiz
+          console.log(`⬆️ Uploading ${filename} to Postiz...`);
           const uploadResponse = await fetch(uploadData.uploadUrl, {
             method: 'PUT',
             headers: {
@@ -250,48 +258,81 @@ export const postizAPI = {
           
           if (!uploadResponse.ok) {
             const errorText = await uploadResponse.text();
-            console.error(`Failed to upload image ${index + 1} to Postiz:`, errorText);
-            throw new Error(`Failed to upload to Postiz: ${uploadResponse.status}`);
+            console.error(`❌ Upload failed for ${filename}:`, uploadResponse.status, errorText);
+            throw new Error(`Upload failed: ${uploadResponse.status}`);
           }
           
-          console.log(`✅ Successfully uploaded image ${index + 1} to Postiz`);
+          console.log(`✅ Successfully uploaded ${filename} to Postiz`);
           
-          // Step 4: Return the path that Postiz expects for the post
-          // The uploaded image should now be available at uploads.postiz.com
-          const uploadedPath = uploadData.filePath || uploadData.path || `slideshow_image_${index + 1}.jpg`;
+          // Step 4: Return the path that Postiz expects
+          const uploadedPath = uploadData.filePath || filename;
           
           return {
             id: `uploaded_${index + 1}`,
-            path: uploadedPath // This will be used as 'path' in the post
+            path: uploadedPath
           };
           
         } catch (error) {
-          console.error(`❌ Failed to upload image ${index + 1}:`, error);
+          console.error(`❌ Failed to process image ${index + 1}:`, error);
           
-          // For failed uploads, return the original URL as fallback
-          // Postiz may still accept it in some configurations
+          // Return the original URL as fallback with error marker
           return {
-            id: `fallback_${index + 1}`,
-            path: imageUrl
+            id: `failed_${index + 1}`,
+            path: imageUrl // Original URL as fallback
           };
         }
       }));
 
-      console.log(`✅ Completed Postiz upload process: ${uploadResults.length} images processed`);
+      console.log(`🏁 Upload process completed: ${uploadResults.length} images processed`);
       
-      const successCount = uploadResults.filter(result => result.path !== imageUrls[uploadResults.indexOf(result)]).length;
-      console.log(`📊 Upload summary: ${successCount} uploaded, ${uploadResults.length - successCount} fallback`);
+      // Analyze results
+      const successfulUploads = uploadResults.filter(result => result.path !== imageUrls[uploadResults.indexOf(result)]);
+      const failedUploads = uploadResults.length - successfulUploads.length;
+      
+      console.log(`📊 Upload results: ${successfulUploads.length} successful, ${failedUploads} failed`);
+      
+      if (failedUploads > 0) {
+        console.warn(`⚠️ ${failedUploads} uploads failed - will provide manual guidance`);
+      }
       
       return uploadResults;
       
     } catch (error) {
-      console.error('❌ Failed to upload images to Postiz domain:', error);
+      console.error('💥 Critical failure in upload process:', error);
       
-      // Return fallback - original URLs that Postiz might accept
+      // Return original URLs with error markers
       return imageUrls.map((imageUrl, index) => ({
-        id: `error_fallback_${index + 1}`,
-        path: imageUrl // Use original URL as last resort
+        id: `critical_error_${index + 1}`,
+        path: imageUrl
       }));
+    }
+  },
+
+  // Test Postiz upload functionality
+  async testUploadFunctionality(): Promise<{success: boolean, message: string}> {
+    try {
+      console.log('🧪 Testing Postiz upload functionality...');
+      
+      // Try to get an upload URL
+      const uploadData = await this.getSignedUploadUrl('test.jpg', 'image/jpeg');
+      
+      if (!uploadData) {
+        return {
+          success: false,
+          message: 'Postiz upload service is not available or your API key lacks upload permissions.'
+        };
+      }
+      
+      return {
+        success: true,
+        message: 'Postiz upload service is available and working.'
+      };
+      
+    } catch (error) {
+      return {
+        success: false,
+        message: `Upload test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
     }
   },
 
@@ -360,7 +401,7 @@ export const postizAPI = {
     }
   },
 
-  // Enhanced create post with automatic image processing and upload
+  // Hybrid approach: Try automatic upload first, then provide manual guidance
   async createPostWithImages(postData: CreatePostData): Promise<PostizPost> {
     try {
       if (postData.mediaUrls && postData.mediaUrls.length > 0) {
@@ -368,51 +409,94 @@ export const postizAPI = {
         const externalUrls = postData.mediaUrls.filter(url => !url.includes('uploads.postiz.com'));
         
         if (externalUrls.length > 0) {
-          console.log(`🔄 Found ${externalUrls.length} external images - uploading to Postiz domain automatically...`);
+          console.log(`🔄 Found ${externalUrls.length} external images - testing automatic upload capability...`);
           
-          try {
-            // Automatically upload images to Postiz domain
-            const uploadedImages = await this.uploadImagesToPostizDomain(externalUrls);
+          // First test if upload functionality is available
+          const uploadTest = await this.testUploadFunctionality();
+          
+          if (uploadTest.success) {
+            console.log('✅ Upload service available - attempting automatic upload...');
             
-            // Create new array with uploaded image paths replacing external ones
-            const processedUrls = [...postData.mediaUrls];
-            let uploadIndex = 0;
-            
-            for (let i = 0; i < processedUrls.length; i++) {
-              if (!processedUrls[i].includes('uploads.postiz.com') && uploadIndex < uploadedImages.length) {
-                processedUrls[i] = uploadedImages[uploadIndex].path;
-                uploadIndex++;
-              }
-            }
-            
-            console.log(`✅ Successfully processed ${uploadedImages.length} images for Postiz posting`);
-            
-            // Create new post data with processed URLs
-            const processedPostData: CreatePostData = {
-              ...postData,
-              mediaUrls: processedUrls
-            };
-            
-            return await this.createPost(processedPostData);
-          } catch (uploadError) {
-            console.warn('⚠️ Failed to upload some images to Postiz, proceeding with fallback:', uploadError);
-            
-            // Fallback: try posting with original URLs
-            // Some Postiz configurations may accept external URLs
             try {
-              return await this.createPost(postData);
-            } catch (postError) {
-              // If post with external URLs fails, throw detailed error
-              throw new Error(`Postiz requires images on uploads.postiz.com domain. Automatic upload failed for ${externalUrls.length} images. Please try again or check your network connection.`);
+              const uploadedImages = await this.uploadImagesToPostizDomain(externalUrls);
+              
+              // Check results
+              const successfulUploads = uploadedImages.filter(result => 
+                result.path.includes('uploads.postiz.com') || result.path.startsWith('http')
+              );
+              
+              if (successfulUploads.length === externalUrls.length) {
+                // All uploads successful
+                const processedUrls = [...postData.mediaUrls];
+                let uploadIndex = 0;
+                
+                for (let i = 0; i < processedUrls.length; i++) {
+                  if (!processedUrls[i].includes('uploads.postiz.com') && uploadIndex < uploadedImages.length) {
+                    processedUrls[i] = uploadedImages[uploadIndex].path;
+                    uploadIndex++;
+                  }
+                }
+                
+                console.log(`🎉 Automatic upload successful! ${successfulUploads.length} images uploaded`);
+                
+                const processedPostData: CreatePostData = {
+                  ...postData,
+                  mediaUrls: processedUrls
+                };
+                
+                return await this.createPost(processedPostData);
+              } else {
+                // Partial success - fall through to manual guidance
+                console.warn(`⚠️ Partial upload success: ${successfulUploads.length}/${externalUrls.length}`);
+              }
+            } catch (uploadError) {
+              console.warn('⚠️ Upload attempt failed, proceeding to manual guidance:', uploadError);
             }
+          } else {
+            console.log(`ℹ️ Upload service unavailable: ${uploadTest.message}`);
           }
+          
+          // If we get here, automatic upload failed - provide manual guidance
+          const manualSteps = this.generateManualUploadSteps(externalUrls);
+          throw new Error(manualSteps);
         }
       }
 
+      // All images already on Postiz domain or no images
       return await this.createPost(postData);
     } catch (error) {
       throw new Error(`Failed to create post with images: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  },
+
+  // Generate step-by-step manual upload instructions
+  generateManualUploadSteps(imageUrls: string[]): string {
+    const imageList = imageUrls.map((url, index) => 
+      `${index + 1}. ${url}`
+    ).join('\n');
+    
+    return `📸 MANUAL IMAGE UPLOAD REQUIRED
+
+Postiz requires images on uploads.postiz.com domain. Here's how to fix it:
+
+🎯 QUICK SOLUTION:
+1. Open Postiz app: https://app.postiz.com/
+2. Go to Media Library
+3. Upload these ${imageUrls.length} images:
+${imageList}
+4. Copy the uploads.postiz.com URLs
+5. Replace image URLs in your slideshow
+6. Try posting again
+
+🔄 OR ALTERNATIVELY:
+• Create your slideshow using images already uploaded to Postiz
+• Postiz has its own image hosting - use that instead
+
+⚡ WHY THIS HAPPENS:
+External images (imgbb.com, etc.) can't be used directly with Postiz API for security reasons.
+
+💡 PRO TIP:
+Once you upload images to Postiz, they're permanently available for all your future posts!`;
   },
 
   // Helper method to validate if images are Postiz-compatible

@@ -44,6 +44,8 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
     success: boolean;
     message: string;
     postId?: string;
+    isUploading?: boolean;
+    uploadProgress?: string;
   } | null>(null);
   
   // Scheduling state
@@ -202,9 +204,33 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
     // The slideshow service handles this automatically with the condensed slideshow images
 
     setIsPosting(true);
-    setPostResult(null);
+    setPostResult({
+      success: false,
+      message: 'Preparing to upload images to Postiz domain...',
+      isUploading: true,
+      uploadProgress: 'Testing upload functionality'
+    });
 
     try {
+      // First, test if upload functionality is available
+      const uploadTest = await postizAPI.testUploadFunctionality();
+      
+      if (!uploadTest.success) {
+        setPostResult({
+          success: false,
+          message: uploadTest.message,
+          isUploading: false
+        });
+        return;
+      }
+
+      setPostResult({
+        success: false,
+        message: '✅ Upload service available. Processing slideshow images...',
+        isUploading: true,
+        uploadProgress: 'Starting image upload'
+      });
+
       const scheduledDateTime = getScheduledDateTime();
       
       const result = await slideshowService.scheduleSlideshowPost(
@@ -217,9 +243,10 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
       setPostResult({
         success: true,
         message: isScheduled 
-          ? `Slideshow scheduled successfully for ${scheduledDate} at ${scheduledTime}!`
-          : 'Slideshow posted successfully!',
-        postId: result.id
+          ? `✅ Slideshow scheduled successfully for ${scheduledDate} at ${scheduledTime}!`
+          : '✅ Slideshow posted successfully with automatic image upload!',
+        postId: result.id,
+        isUploading: false
       });
 
       if (onPostSuccess && result.id) {
@@ -235,9 +262,19 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
       }, 2000);
 
     } catch (error: any) {
+      console.error('Post creation failed:', error);
+      
+      let errorMessage = error.message || 'Failed to post slideshow. Please try again.';
+      
+      // Check if it's an upload-related error
+      if (errorMessage.includes('Postiz requires images') || errorMessage.includes('upload')) {
+        errorMessage = `🚫 Image upload failed. ${errorMessage}\n\n💡 Quick Solution: Go to Postiz app (https://app.postiz.com/), upload your images manually, then replace URLs in your slideshow.`;
+      }
+      
       setPostResult({
         success: false,
-        message: error.message || 'Failed to post slideshow. Please try again.'
+        message: errorMessage,
+        isUploading: false
       });
     } finally {
       setIsPosting(false);
@@ -478,17 +515,42 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
       {/* Post Result */}
       {postResult && (
         <div className={cn(
-          "p-3 rounded-lg border flex items-center space-x-2",
+          "p-4 rounded-lg border space-y-3",
           postResult.success
             ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/20 dark:text-green-200 dark:border-green-800"
-            : "bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:text-red-200 dark:border-red-800"
+            : postResult.isUploading
+              ? "bg-blue-50 border-blue-200 text-blue-800 dark:bg-blue-900/20 dark:text-blue-200 dark:border-blue-800"
+              : "bg-red-50 border-red-200 text-red-800 dark:bg-red-900/20 dark:text-red-200 dark:border-red-800"
         )}>
-          {postResult.success ? (
-            <CheckCircle className="w-4 h-4" />
-          ) : (
-            <AlertCircle className="w-4 h-4" />
+          <div className="flex items-center space-x-2">
+            {postResult.success ? (
+              <CheckCircle className="w-4 h-4" />
+            ) : postResult.isUploading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <AlertCircle className="w-4 h-4" />
+            )}
+            <span className="text-sm font-medium">
+              {postResult.success ? 'Success!' : postResult.isUploading ? 'Processing...' : 'Error'}
+            </span>
+          </div>
+          
+          <div className="text-sm whitespace-pre-line">
+            {postResult.message}
+          </div>
+          
+          {postResult.isUploading && postResult.uploadProgress && (
+            <div className="flex items-center space-x-2 text-xs">
+              <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse" />
+              <span>{postResult.uploadProgress}</span>
+            </div>
           )}
-          <span className="text-sm">{postResult.message}</span>
+          
+          {postResult.success && postResult.postId && (
+            <div className="text-xs text-muted-foreground">
+              Post ID: {postResult.postId}
+            </div>
+          )}
         </div>
       )}
 
