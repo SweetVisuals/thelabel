@@ -8,10 +8,10 @@ const isDevelopment = import.meta.env.DEV;
 // Get the appropriate proxy URL based on environment
 const getProxyUrl = (path: string): string => {
   if (isDevelopment) {
-    // In development, use the direct proxy path without query parameter
+    // In development, use direct proxy path (works with Vite proxy)
     return `/api/postiz-proxy/${path}`;
   }
-  // In production, use the original Vercel proxy format
+  // In production, use query parameter format (works with Vercel functions)
   return `${VERCEL_PROXY}${path}`;
 };
 

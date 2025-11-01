@@ -9,11 +9,9 @@ export class PostizUploadService {
   async uploadImgbbImagesToPostiz(slideshow: SlideshowMetadata): Promise<{id: string, path: string}[]> {
     console.log('🔄 Starting upload of imgbb images to Postiz storage...');
     
-    const postizMedia: {id: string, path: string}[] = [];
-    
-    // Extract imgbb URLs from the slideshow
     const imgbbUrls: string[] = [];
     
+    // Extract imgbb URLs from the slideshow
     for (const slide of slideshow.condensedSlides) {
       // Priority 1: Use condensed image URL if it's imgbb
       if (slide.condensedImageUrl?.includes('i.ibb.co')) {
@@ -30,13 +28,12 @@ export class PostizUploadService {
       else if (slide.originalImageUrl?.startsWith('http')) {
         imgbbUrls.push(slide.originalImageUrl);
       }
-      // Last resort: skip this slide
-      else {
-        console.warn(`⚠️ No suitable imgbb URL found for slide ${slide.id}`);
-      }
     }
     
     console.log('📋 Found imgbb URLs to upload:', imgbbUrls);
+    
+    const postizMedia: {id: string, path: string}[] = [];
+    let successCount = 0;
     
     for (let i = 0; i < imgbbUrls.length; i++) {
       const imgbbUrl = imgbbUrls[i];
@@ -52,21 +49,21 @@ export class PostizUploadService {
           path: postizResponse.path
         });
         
+        successCount++;
         console.log(`✅ Successfully uploaded imgbb image ${i + 1} to Postiz:`, postizResponse.path);
         
       } catch (error) {
         console.error(`❌ Failed to upload imgbb image ${i + 1}:`, error);
-        
-        // Create a placeholder entry for failed uploads
-        postizMedia.push({
-          id: `placeholder_${i + 1}`,
-          path: imgbbUrl // Keep the original imgbb URL as fallback
-        });
+        // Don't add failed uploads - this will cause the posting to fail and provide proper error message
       }
     }
     
-    console.log(`🎉 Completed upload of ${postizMedia.length} images to Postiz storage`);
-    console.log('📊 Postiz media items:', postizMedia);
+    console.log(`🎉 Upload completed: ${successCount}/${imgbbUrls.length} images successfully uploaded to Postiz`);
+    
+    if (successCount === 0) {
+      throw new Error('All image uploads to Postiz storage failed. Please try again or check your Postiz API configuration.');
+    }
+    
     return postizMedia;
   }
   
@@ -76,30 +73,50 @@ export class PostizUploadService {
   private async uploadUrlToPostiz(imageUrl: string): Promise<{id: string, path: string}> {
     console.log(`🌐 Uploading to Postiz from URL: ${imageUrl}`);
     
-    const response = await fetch('/api/postiz-proxy/upload-from-url', {
-      method: 'POST',
-      headers: {
-        'Authorization': postizAPI.getApiKey() || '',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ url: imageUrl })
-    });
-    
-    console.log(`📊 Upload response status: ${response.status}`);
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Postiz upload error:', errorText);
-      throw new Error(`URL upload failed: ${response.status} - ${errorText}`);
+    try {
+      const response = await fetch('/api/postiz-proxy/upload-from-url', {
+        method: 'POST',
+        headers: {
+          'Authorization': postizAPI.getApiKey() || '',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ url: imageUrl })
+      });
+      
+      console.log(`📊 Upload response status: ${response.status}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Postiz upload error:', errorText);
+        
+        // Provide specific error messages for different failure types
+        if (response.status === 404) {
+          throw new Error('Upload endpoint not found. The Postiz API proxy may not be configured correctly.');
+        } else if (response.status === 401) {
+          throw new Error('Authentication failed. Please check your Postiz API key.');
+        } else {
+          throw new Error(`Upload failed (${response.status}): ${errorText}`);
+        }
+      }
+      
+      const result = await response.json();
+      console.log('✅ Postiz upload successful:', result);
+      
+      // Validate that the result contains proper Postiz domain paths
+      const uploadPath = result.path || result.url;
+      if (!uploadPath.includes('uploads.postiz.com')) {
+        throw new Error('Upload succeeded but returned invalid domain. Expected uploads.postiz.com domain.');
+      }
+      
+      return {
+        id: result.id || `upload_${Date.now()}`,
+        path: uploadPath
+      };
+      
+    } catch (error) {
+      console.error('❌ Upload request failed:', error);
+      throw error;
     }
-    
-    const result = await response.json();
-    console.log('✅ Postiz upload successful:', result);
-    
-    return {
-      id: result.id || `upload_${Date.now()}`,
-      path: result.path || result.url
-    };
   }
   
   /**
@@ -114,8 +131,12 @@ export class PostizUploadService {
   ) {
     console.log('🔄 Creating Postiz post data with imgbb → Postiz storage flow...');
     
-    // Step 1: Upload imgbb images to Postiz storage
+    // Step 1: Upload imgbb images to Postiz storage (required for posting)
     const postizMedia = await this.uploadImgbbImagesToPostiz(slideshow);
+    
+    if (postizMedia.length === 0) {
+      throw new Error('No images were successfully uploaded to Postiz storage. Cannot create post without images.');
+    }
     
     const postData = {
       text: this.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags),

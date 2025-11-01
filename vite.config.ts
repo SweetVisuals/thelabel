@@ -17,7 +17,7 @@ export default defineConfig({
     proxy: {
       // Proxy Postiz API calls to handle CORS in development
       '/api/postiz-proxy': {
-        target: 'https://api.postiz.com',
+        target: 'https://api.postiz.com/public/v1',
         changeOrigin: true,
         secure: true,
         headers: {
@@ -30,11 +30,11 @@ export default defineConfig({
           if (path.includes('path=')) {
             const url = new URL(`http://localhost${path}`);
             const pathParam = url.searchParams.get('path');
-            return pathParam ? `/${pathParam}` : '/';
+            return pathParam || 'posts'; // Default to posts endpoint
           }
           // If it's direct path like '/api/postiz-proxy/integrations'
-          const cleanPath = path.replace('/api/postiz-proxy', '');
-          return cleanPath || '/';
+          const cleanPath = path.replace('/api/postiz-proxy/', '');
+          return cleanPath || 'posts'; // Default to posts endpoint
         },
       },
     },
