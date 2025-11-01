@@ -940,7 +940,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             </div>
           ) : viewMode === 'grid' ? (
            <div className="p-6">
-             {currentFolderId && <RootMoveZone />}
+             {currentFolderId && <RootMoveZone selectedImages={selectedImages} handleMoveImagesToRoot={handleMoveImagesToRoot} handleMoveSlideshowToFolder={handleMoveSlideshowToFolder} />}
              <div
                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 relative"
              >
@@ -958,6 +958,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                      handleRenameSubmit={handleRenameSubmit}
                      onImagesUploaded={onImagesUploaded}
                      currentImages={currentImages}
+                     selectedImages={selectedImages}
+                     handleMoveImagesToFolder={handleMoveImagesToFolder}
+                     handleMoveSlideshowToFolder={handleMoveSlideshowToFolder}
                    />
                  ) : item.type === 'slideshow' ? (
                    <SlideshowTile
@@ -1241,7 +1244,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   );
 };
 
-const RootMoveZone: React.FC = () => {
+const RootMoveZone: React.FC<{
+  selectedImages: string[];
+  handleMoveImagesToRoot: (imageIds: string[]) => void;
+  handleMoveSlideshowToFolder: (slideshowId: string, folderId: string | null) => void;
+}> = ({ selectedImages, handleMoveImagesToRoot, handleMoveSlideshowToFolder }) => {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
