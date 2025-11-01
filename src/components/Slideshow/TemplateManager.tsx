@@ -161,7 +161,7 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
                     </div>
                     <div className="flex items-center gap-2">
                       <ImageIcon className="w-3 h-3" />
-                      <span>Slides: Based on selected images</span>
+                      <span>Images: Not included (template only)</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Palette className="w-3 h-3" />

@@ -1483,7 +1483,7 @@ async createOptimizedSlideshow(
     userId: string
   ): Promise<SlideshowTemplate> {
     const template: SlideshowTemplate = {
-      id: `template_${crypto.randomUUID()}`,
+      id: `template_${crypto.randomUUID()}`, // Full ID for memory/localStorage
       name,
       description,
       user_id: userId,
@@ -1506,7 +1506,7 @@ async createOptimizedSlideshow(
     // Save to localStorage
     this.saveTemplatesToLocalStorage();
 
-    // Save to database
+    // Save to database (use clean UUID without prefix)
     await this.saveTemplateToDatabase(template);
 
     // Dispatch event to update UI
@@ -1529,12 +1529,17 @@ async createOptimizedSlideshow(
    * Load template by ID
    */
   async loadTemplate(templateId: string): Promise<SlideshowTemplate | null> {
-    // Check memory first
+    // Check memory first (with prefix)
     let template = this.templates.get(templateId);
     if (!template) {
       // Try to load from localStorage
       this.loadTemplatesFromLocalStorage();
       template = this.templates.get(templateId);
+      
+      // If not found and templateId doesn't have prefix, try with prefix
+      if (!template && !templateId.startsWith('template_')) {
+        template = this.templates.get(`template_${templateId}`);
+      }
     }
     return template || null;
   }
@@ -1702,10 +1707,15 @@ async createOptimizedSlideshow(
         throw new Error('User not authenticated');
       }
 
+      // Extract clean UUID (remove "template_" prefix) for database compatibility
+      const cleanTemplateId = template.id.startsWith('template_')
+        ? template.id.replace('template_', '')
+        : template.id;
+
       const { error } = await supabase
         .from('slideshow_templates')
         .upsert({
-          id: template.id,
+          id: cleanTemplateId, // Use clean UUID for database
           user_id: template.user_id,
           name: template.name,
           description: template.description,
@@ -1725,9 +1735,11 @@ async createOptimizedSlideshow(
 
       if (error) {
         console.error('Failed to save template to database:', error);
+        throw error; // Propagate error for better error handling
       }
     } catch (error) {
       console.error('Failed to save template to database:', error);
+      throw error; // Propagate error for better error handling
     }
   }
 
@@ -1737,10 +1749,16 @@ async createOptimizedSlideshow(
   private async deleteTemplateFromDatabase(templateId: string): Promise<void> {
     try {
       const { supabase } = await import('./supabase');
+      
+      // Extract clean UUID (remove "template_" prefix) for database compatibility
+      const cleanTemplateId = templateId.startsWith('template_')
+        ? templateId.replace('template_', '')
+        : templateId;
+
       const { error } = await supabase
         .from('slideshow_templates')
         .delete()
-        .eq('id', templateId);
+        .eq('id', cleanTemplateId); // Use clean UUID for database
 
       if (error) {
         console.error('Failed to delete template from database:', error);
@@ -1782,8 +1800,11 @@ async createOptimizedSlideshow(
 
       // Convert database format to SlideshowTemplate
       templates?.forEach(dbTemplate => {
+        // Add "template_" prefix to match internal ID format
+        const templateId = `template_${dbTemplate.id}`;
+        
         const template: SlideshowTemplate = {
-          id: dbTemplate.id,
+          id: templateId, // Use prefixed ID for memory/localStorage consistency
           name: dbTemplate.name,
           description: dbTemplate.description,
           user_id: dbTemplate.user_id,
