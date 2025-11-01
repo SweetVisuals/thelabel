@@ -775,7 +775,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
     try {
       const data = Array.from(this.slideshows.entries());
       localStorage.setItem('savedSlideshows', JSON.stringify(data));
-      console.log('Saved slideshows to localStorage:', data.length);
+      console.log('💾 Saved slideshows to localStorage:', data.length);
     } catch (error) {
       console.error('Failed to save to localStorage:', error);
     }
@@ -790,7 +790,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       if (data) {
         const entries = JSON.parse(data);
         this.slideshows = new Map(entries);
-        
+        console.log('💾 Loaded slideshows from localStorage:', entries.length);
       }
     } catch (error) {
       console.error('Failed to load from localStorage:', error);
@@ -1040,7 +1040,13 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         return;
       }
 
-      console.log('Loaded slideshows from database:', slideshows?.length || 0);
+      // Only log if slideshow count changed
+      const currentCount = this.slideshows.size;
+      const newCount = slideshows?.length || 0;
+      
+      if (currentCount !== newCount || currentCount === 0) {
+        console.log('📊 Slideshows loaded:', newCount);
+      }
 
       // Convert database format to SlideshowMetadata
       slideshows?.forEach(dbSlideshow => {
@@ -1066,7 +1072,11 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
 
           // Store in memory - IMPORTANT: Don't create separate image files for condensed slides
           this.slideshows.set(slideshow.id, slideshow);
-          console.log('Loaded slideshow from database:', slideshow.title, 'with', slideshow.condensedSlides.length, 'slides');
+          
+          // Only log individual slideshows on initial load or major changes
+          if (currentCount !== newCount) {
+            console.log('📋 Loaded slideshow:', slideshow.title, 'with', slideshow.condensedSlides.length, 'slides');
+          }
         } catch (parseError) {
           console.error('Failed to parse slideshow metadata:', parseError);
         }
@@ -1075,7 +1085,10 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       // Save to localStorage for faster access
       this.saveToLocalStorage();
 
-      console.log('Total slideshows after database load:', this.slideshows.size);
+      // Only log total count if changed
+      if (currentCount !== this.slideshows.size) {
+        console.log('📊 Total slideshows after database load:', this.slideshows.size);
+      }
     } catch (error) {
       console.error('Failed to load slideshows from database:', error);
     }
@@ -1638,7 +1651,7 @@ async createOptimizedSlideshow(
     try {
       const data = Array.from(this.templates.entries());
       localStorage.setItem('savedTemplates', JSON.stringify(data));
-      console.log('Saved templates to localStorage:', data.length);
+      console.log('💾 Saved templates to localStorage:', data.length);
     } catch (error) {
       console.error('Failed to save templates to localStorage:', error);
     }
@@ -1653,7 +1666,7 @@ async createOptimizedSlideshow(
       if (data) {
         const entries = JSON.parse(data);
         this.templates = new Map(entries);
-        console.log('Loaded templates from localStorage:', this.templates.size);
+        console.log('💾 Loaded templates from localStorage:', this.templates.size);
       }
     } catch (error) {
       console.error('Failed to load templates from localStorage:', error);
@@ -1736,7 +1749,13 @@ async createOptimizedSlideshow(
         return;
       }
 
-      console.log('Loaded templates from database:', templates?.length || 0);
+      // Only log if templates count changed or on first load
+      const currentCount = Array.from(this.templates.values()).filter(t => t.user_id === userId).length;
+      const newCount = templates?.length || 0;
+      
+      if (currentCount !== newCount || currentCount === 0) {
+        console.log('📊 Templates loaded:', newCount);
+      }
 
       // Clear existing templates for this user first
       const userTemplates = Array.from(this.templates.values()).filter(t => t.user_id !== userId);
@@ -1769,10 +1788,11 @@ async createOptimizedSlideshow(
 
       // Save to localStorage for faster access
       this.saveTemplatesToLocalStorage();
-      console.log('Total templates after database load:', this.templates.size);
       
-      // Dispatch custom event to update template UI
-      window.dispatchEvent(new CustomEvent('templatesUpdated'));
+      // Only dispatch event if count changed
+      if (currentCount !== newCount) {
+        window.dispatchEvent(new CustomEvent('templatesUpdated'));
+      }
     } catch (error) {
       console.error('Failed to load templates from database:', error);
     }
