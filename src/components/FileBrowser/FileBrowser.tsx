@@ -671,8 +671,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       active: active.id,
       over: over?.id,
       activeId,
-      dragDuration,
-      timestamp: Date.now() - dragStartTime
+      dragDuration
     });
 
     // If drag was very short (less than 300ms) and no drop target, treat as click
@@ -697,74 +696,55 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       return;
     }
 
-    // Only process drag operations if we have an active drag
-    if (activeId) {
+    // Only process drag operations if we have a drop target
+    if (over) {
       const draggedItem = fileItems.find(item => item.id === active.id);
       
       console.log('🔄 Processing drag - active:', active.id, 'over:', over?.id, 'draggedItem:', draggedItem);
       
+      // Handle drop into root move zone
+      if (over.id === 'root-move-zone') {
+        if (draggedItem?.type === 'file') {
+          const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
+          console.log('📤 Moving images to root:', itemsToMove);
+          handleMoveImagesToRoot(itemsToMove);
+        } else if (draggedItem?.type === 'slideshow') {
+          console.log('📤 Moving slideshow to root:', active.id);
+          handleMoveSlideshowToFolder(active.id as string, null);
+        }
+        setActiveId(null);
+        return;
+      }
+      
+      // Handle drop into folders
       if (draggedItem?.type === 'file') {
         // Handle image file dragging
         const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
         console.log('🖼️ Processing image drag - items to move:', itemsToMove, 'target:', over?.id);
         
-        if (over?.id === 'root-move-zone') {
-          // Moving images to root
-          console.log('📤 Moving images to root:', itemsToMove);
-          handleMoveImagesToRoot(itemsToMove);
-        } else if (over) {
-          // Check if the drop target is a folder (even if not in fileItems since folders aren't draggable)
-          const overData = (over as any)?.data;
-          
-          console.log('📁 Drop target analysis:', {
-            overId: over.id,
-            overData,
-            isFolder: overData?.type === 'folder',
-            folderIdFromData: overData?.folderId
-          });
-          
-          if (overData?.type === 'folder') {
-            // Use folder ID from drop data
-            const folderId = overData.folderId || over.id;
-            console.log('✅ Moving to folder (via data):', folderId);
-            handleMoveImagesToFolder(folderId, itemsToMove);
-          } else {
-            console.log('❌ Invalid drop target for images:', over?.id, 'Data:', overData);
-          }
+        // Check if the drop target is a folder
+        if (folders.find(f => f.id === over.id)) {
+          console.log('✅ Moving images to folder:', over.id);
+          handleMoveImagesToFolder(over.id as string, itemsToMove);
+        } else {
+          console.log('❌ Invalid drop target for images:', over?.id);
         }
       } else if (draggedItem?.type === 'slideshow') {
         // Handle slideshow file dragging
         console.log('🎬 Processing slideshow drag - target:', over?.id);
         
-        if (over?.id === 'root-move-zone') {
-          // Moving slideshow to root
-          console.log('📤 Moving slideshow to root:', active.id);
-          handleMoveSlideshowToFolder(active.id as string, null);
-        } else if (over) {
-          // Check if the drop target is a folder (even if not in fileItems since folders aren't draggable)
-          const overData = (over as any)?.data;
-          
-          console.log('📁 Slideshow drop target analysis:', {
-            overId: over.id,
-            overData,
-            isFolder: overData?.type === 'folder',
-            folderIdFromData: overData?.folderId
-          });
-          
-          if (overData?.type === 'folder') {
-            // Use folder ID from drop data
-            const folderId = overData.folderId || over.id;
-            console.log('✅ Moving slideshow to folder (via data):', folderId);
-            handleMoveSlideshowToFolder(active.id as string, folderId);
-          } else {
-            console.log('❌ Invalid drop target for slideshow:', over?.id, 'Data:', overData);
-          }
+        // Check if the drop target is a folder
+        if (folders.find(f => f.id === over.id)) {
+          console.log('✅ Moving slideshow to folder:', over.id);
+          handleMoveSlideshowToFolder(active.id as string, over.id as string);
+        } else {
+          console.log('❌ Invalid drop target for slideshow:', over?.id);
         }
       } else {
         console.log('❌ Dragged item not found or not draggable:', active.id, draggedItem);
       }
     } else {
-      console.log('❌ No active drag:', { over: over?.id, activeId });
+      console.log('❌ No drop target, canceling drag');
     }
 
     setActiveId(null);
@@ -1456,6 +1436,7 @@ const FolderTile: React.FC<{
       folderId: item.id
     }
   });
+  
   // NOTE: Folders are NOT draggable - only clickable for opening
   // This prevents drag/click interference
   const isRenaming = renamingFolderId === item.id;
@@ -1494,25 +1475,18 @@ const FolderTile: React.FC<{
         zIndex: isOver ? 50 : 1,
         cursor: isRenaming ? 'text' : 'pointer'
       }}
-      ref={setNodeRef}
+      ref={setNodeRef} // setNodeRef should be on the main droppable element
     >
       {/* Drop zone overlay for better visual feedback */}
       {isOver && (
-        <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+        <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10">
           <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
             Drop here
           </div>
         </div>
       )}
       
-      {/* Expanded drop zone area - extends beyond the visual folder */}
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          margin: '-8px', // Extends drop zone 8px beyond the folder bounds
-          zIndex: isOver ? 5 : 1
-        }}
-      />
+      {/* The main div itself is the droppable area, no need for a separate expanded div with pointer-events: none */}
       
       <div className="flex flex-col items-center justify-center h-full relative z-10">
         <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
@@ -1653,6 +1627,14 @@ const FileTile: React.FC<{
     disabled: false
   });
 
+  const { isOver, setNodeRef: setDropNodeRef } = useDroppable({
+    id: item.id,
+    data: {
+      type: 'image',
+      imageId: item.id
+    }
+  });
+
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
   } : {};
@@ -1670,6 +1652,7 @@ const FileTile: React.FC<{
       <div
         ref={(node) => {
           setNodeRef(node);
+          setDropNodeRef(node);
           tileRef(node);
         }}
         style={style}
@@ -1679,6 +1662,7 @@ const FileTile: React.FC<{
           "relative group aspect-square rounded-lg overflow-hidden bg-neutral-900 border-2 cursor-pointer transition-all",
           selected ? "border-blue-500 ring-2 ring-blue-400/30" : "border-transparent hover:shadow-lg hover:border-neutral-700",
           isDragging && "opacity-50",
+          isOver && "border-green-500 ring-2 ring-green-400/30 bg-green-900/20",
           className
         )}
         title={selected ? "Selected" : ""}
@@ -1692,6 +1676,15 @@ const FileTile: React.FC<{
           }
         }}
       >
+        {/* Drop zone overlay for better visual feedback */}
+        {isOver && (
+          <div className="absolute inset-0 bg-green-500/20 border-2 border-green-400 rounded-lg flex items-center justify-center z-10">
+            <div className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
+              Drop here
+            </div>
+          </div>
+        )}
+        
         <div className="absolute inset-0 flex items-center justify-center">
           {item.image && (
             <img src={item.image.url} alt={item.name} className="w-full h-full object-cover transition-transform hover:scale-105" />
