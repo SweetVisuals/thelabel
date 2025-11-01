@@ -649,27 +649,45 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }
   };
 
-  // Simple drag and drop implementation without dnd-kit
+  // Enhanced drag and drop state management
+  const [draggedItem, setDraggedItem] = useState<{ type: string; id: string; name: string } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Handle drag start from file and slideshow tiles
   const handleDragStart = (e: React.DragEvent, item: FileItem) => {
-    e.dataTransfer.setData('application/json', JSON.stringify({
+    const dragData = {
       type: item.type,
       id: item.id,
       name: item.name
-    }));
+    };
+    
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
+    
+    // Set drag state for better visual feedback
+    setDraggedItem(dragData);
+    setIsDragging(true);
+    
+    // Clean up after drag operation starts
+    setTimeout(() => setIsDragging(false), 100);
   };
 
+  // Handle drag over for general drop zones
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
   };
 
+  // Enhanced drop handler with better error handling
   const handleDrop = async (e: React.DragEvent, targetFolderId: string) => {
     e.preventDefault();
+    e.stopPropagation();
 
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/json'));
       const { type, id, name } = data;
+
+      console.log('🎯 Drop detected:', { type, id, name, targetFolderId });
 
       if (type === 'file') {
         // Move image to folder
@@ -681,6 +699,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       }
     } catch (error) {
       console.error('Failed to handle drop:', error);
+      toast.error('Failed to move item. Please try again.');
     }
   };
 
@@ -1342,28 +1361,46 @@ const FolderTile: React.FC<{
     if (!isRenaming) {
       e.preventDefault();
       e.stopPropagation();
-      onFolderClick(item.id);
+      
+      // Only trigger click if not currently dragging
+      if (!isDragOver) {
+        onFolderClick(item.id);
+      }
     }
   };
 
-  // Handle internal drag and drop (from file tiles)
+  // Enhanced drag and drop handlers for internal items (files and slideshows)
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(true);
+    
+    // Ensure proper visual feedback during drag
+    if (e.dataTransfer.types.includes('application/json')) {
+      e.dataTransfer.dropEffect = 'move';
+    }
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOver(false);
+    e.stopPropagation();
+    
+    // Only clear drag over if we're actually leaving the folder area
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
   };
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     setIsDragOver(false);
 
     try {
       const data = JSON.parse(e.dataTransfer.getData('application/json'));
       const { type, id } = data;
+
+      console.log('🎯 Folder drop detected:', { type, id, folderId: item.id });
 
       if (type === 'file' && handleMoveImagesToFolder) {
         const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
@@ -1372,7 +1409,8 @@ const FolderTile: React.FC<{
         await handleMoveSlideshowToFolder(id, item.id);
       }
     } catch (error) {
-      console.error('Failed to handle drop:', error);
+      console.error('Failed to handle folder drop:', error);
+      toast.error('Failed to move item to folder. Please try again.');
     }
   };
 
@@ -1380,6 +1418,8 @@ const FolderTile: React.FC<{
   const handleExternalDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Only show drag over for actual file drops
     if (e.dataTransfer.types.includes('Files')) {
       setIsDragOver(true);
     }
@@ -1388,7 +1428,11 @@ const FolderTile: React.FC<{
   const handleExternalDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragOver(false);
+    
+    // Only clear drag over if we're actually leaving the folder area
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOver(false);
+    }
   };
 
   const handleExternalDrop = async (e: React.DragEvent) => {
@@ -1402,9 +1446,18 @@ const FolderTile: React.FC<{
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
     const slideshowFiles = files.filter(file => file.name.endsWith('.slideshow'));
 
+    console.log('📁 External files dropped to folder:', {
+      folderId: item.id,
+      folderName: item.name,
+      imageFilesCount: imageFiles.length,
+      slideshowFilesCount: slideshowFiles.length
+    });
+
     try {
       // Handle image files
       if (imageFiles.length > 0) {
+        toast.loading(`Uploading ${imageFiles.length} images to ${item.name}...`);
+        
         const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, item.id));
         const newImages = await Promise.all(uploadPromises);
 
@@ -1448,19 +1501,21 @@ const FolderTile: React.FC<{
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all cursor-pointer",
-        isDragOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50"
+        "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 transition-all cursor-pointer",
+        isDragOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105 shadow-2xl shadow-blue-500/25" : "border-transparent hover:shadow-lg hover:border-blue-400/50"
       )}
       style={{
         zIndex: isDragOver ? 50 : 1,
-        cursor: isRenaming ? 'text' : 'pointer'
+        cursor: isRenaming ? 'text' : 'pointer',
+        transform: isDragOver ? 'scale(1.05)' : 'scale(1)',
       }}
     >
-      {/* Drop zone overlay for better visual feedback */}
+      {/* Enhanced drop zone overlay for better visual feedback */}
       {isDragOver && (
-        <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
-          <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
-            Drop here
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/30 to-blue-400/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none backdrop-blur-sm animate-pulse">
+          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl border border-blue-300 flex items-center space-x-2">
+            <Move className="w-4 h-4" />
+            <span>Drop here</span>
           </div>
         </div>
       )}
@@ -1530,12 +1585,17 @@ const SlideshowTile: React.FC<{
   };
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('application/json', JSON.stringify({
+    const dragData = {
       type: 'slideshow',
       id: item.id,
       name: item.name
-    }));
+    };
+    
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
+    
+    // Add visual feedback during drag
+    e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
   };
 
   return (
@@ -1612,12 +1672,17 @@ const FileTile: React.FC<{
   }, [item.id, fileTileRefs]);
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('application/json', JSON.stringify({
+    const dragData = {
       type: 'file',
       id: item.id,
       name: item.name
-    }));
+    };
+    
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
     e.dataTransfer.effectAllowed = 'move';
+    
+    // Add visual feedback during drag
+    e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
   };
 
   return (
