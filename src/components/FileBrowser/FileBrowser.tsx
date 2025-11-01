@@ -1493,9 +1493,6 @@ const FolderTile: React.FC<{
   setRenamingFolderId,
   handleRenameSubmit
 }) => {
-  const [clickStartPos, setClickStartPos] = useState<{x: number, y: number} | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  
   const { isOver, setNodeRef } = useDroppable({
     id: item.id,
     data: {
@@ -1503,7 +1500,7 @@ const FolderTile: React.FC<{
       folderId: item.id
     }
   });
-  const { attributes, listeners, setNodeRef: dragSetNodeRef, transform } = useDraggable({
+  const { attributes, listeners, setNodeRef: dragSetNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
     disabled: false
   });
@@ -1517,33 +1514,6 @@ const FolderTile: React.FC<{
     }
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    setClickStartPos({ x: e.clientX, y: e.clientY });
-    setIsDragging(false);
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!clickStartPos) return;
-    
-    const distance = Math.sqrt(
-      Math.pow(e.clientX - clickStartPos.x, 2) + Math.pow(e.clientY - clickStartPos.y, 2)
-    );
-    
-    if (distance > 3) { // Lowered threshold for better responsiveness
-      setIsDragging(true);
-    }
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    // Don't trigger click if we're dragging or renaming
-    if (!isDragging && !isRenaming) {
-      e.stopPropagation();
-      onFolderClick(item.id);
-    }
-    setClickStartPos(null);
-    setIsDragging(false);
-  };
-
   console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}, isDragging: ${isDragging}`);
 
   const style = transform ? {
@@ -1552,9 +1522,6 @@ const FolderTile: React.FC<{
 
   return (
     <div
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1577,6 +1544,13 @@ const FolderTile: React.FC<{
           ...style,
           zIndex: isOver ? 50 : 1,
           cursor: isRenaming ? 'text' : 'pointer'
+        }}
+        onClick={(e) => {
+          // Handle click separately from drag - only trigger if not renaming and not dragging
+          if (!isRenaming && !isDragging) {
+            e.stopPropagation();
+            onFolderClick(item.id);
+          }
         }}
       >
         {/* Drop zone overlay for better visual feedback */}
@@ -1644,7 +1618,6 @@ const SlideshowTile: React.FC<{
   handleRenameSlideshowSubmit,
   debugSelected
 }) => {
-  const [clickStartPos, setClickStartPos] = useState<{x: number, y: number} | null>(null);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: item.id,
     disabled: false
@@ -1657,8 +1630,6 @@ const SlideshowTile: React.FC<{
   const isRenaming = renamingSlideshowId === item.id;
   const hasValidSlideshow = item.slideshow && item.slideshow.id && item.slideshow.title;
 
-  
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleRenameSlideshowSubmit(item.id, renameSlideshowInputValue);
@@ -1667,31 +1638,8 @@ const SlideshowTile: React.FC<{
     }
   };
 
-  const handleSingleClick = (e: React.MouseEvent) => {
-    // SINGLE CLICK: Let parent component handle everything (selection + loading/unloading)
-    // Prevent event bubbling to avoid conflicts with drag handlers
-    e.stopPropagation();
-    
-    if (!isRenaming) {
-      onToggleSelection(item.id);
-    }
-  };
-
   return (
     <div
-      onClick={(e) => {
-        // Handle regular click - load slideshow
-        if (!isRenaming) {
-          handleSingleClick(e);
-        }
-      }}
-      onDoubleClick={async (e) => {
-        e.stopPropagation();
-        if (!isRenaming) {
-          // DOUBLE CLICK: Handle selection (for bulk operations)
-          onToggleSelection(item.id);
-        }
-      }}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1707,6 +1655,13 @@ const SlideshowTile: React.FC<{
         isDragging && "opacity-50"
       )}
       title={`Slideshow: ${item.slideshow?.title || 'Loading...'}`}
+      onClick={(e) => {
+        // Handle click separately from drag - only trigger if not renaming and not dragging
+        if (!isRenaming && !isDragging) {
+          e.stopPropagation();
+          onToggleSelection(item.id);
+        }
+      }}
     >
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center mb-2">
@@ -1778,19 +1733,6 @@ const FileTile: React.FC<{
         style={style}
         {...attributes}
         {...listeners}
-        onClick={(e) => {
-          // Ensure we only select the image, never load a slideshow
-          e.stopPropagation();
-          if (onToggleSelection) {
-            onToggleSelection(item.id);
-          }
-        }}
-        onDoubleClick={(e) => {
-          e.stopPropagation();
-          if (onToggleSelection) {
-            onToggleSelection(item.id);
-          }
-        }}
         className={cn(
           "relative group aspect-square rounded-lg overflow-hidden bg-neutral-900 border-2 cursor-pointer transition-all",
           selected ? "border-blue-500 ring-2 ring-blue-400/30" : "border-transparent hover:shadow-lg hover:border-neutral-700",
@@ -1798,6 +1740,15 @@ const FileTile: React.FC<{
           className
         )}
         title={selected ? "Selected" : ""}
+        onClick={(e) => {
+          // Handle click separately from drag - only trigger if not dragging
+          if (!isDragging) {
+            e.stopPropagation();
+            if (onToggleSelection) {
+              onToggleSelection(item.id);
+            }
+          }
+        }}
       >
         <div className="absolute inset-0 flex items-center justify-center">
           {item.image && (
