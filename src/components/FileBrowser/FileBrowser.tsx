@@ -1397,17 +1397,26 @@ const FolderTile: React.FC<{
     e.stopPropagation();
     setIsDragOver(false);
 
+    console.log('🎯 Folder drop event fired for:', item.name, item.id);
+    console.log('📊 Drop dataTransfer types:', Array.from(e.dataTransfer.types));
+    
     try {
-      const data = JSON.parse(e.dataTransfer.getData('application/json'));
-      const { type, id } = data;
+      // Handle both internal drag/drop and external file drops
+      if (e.dataTransfer.types.includes('application/json')) {
+        const data = JSON.parse(e.dataTransfer.getData('application/json'));
+        const { type, id } = data;
 
-      console.log('🎯 Folder drop detected:', { type, id, folderId: item.id });
+        console.log('🎯 Internal drop detected:', { type, id, folderId: item.id });
 
-      if (type === 'file' && handleMoveImagesToFolder) {
-        const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
-        await handleMoveImagesToFolder(item.id, itemsToMove);
-      } else if (type === 'slideshow' && handleMoveSlideshowToFolder) {
-        await handleMoveSlideshowToFolder(id, item.id);
+        if (type === 'file' && handleMoveImagesToFolder) {
+          const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
+          await handleMoveImagesToFolder(item.id, itemsToMove);
+        } else if (type === 'slideshow' && handleMoveSlideshowToFolder) {
+          await handleMoveSlideshowToFolder(id, item.id);
+        }
+      } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        console.log('📁 External file drop detected');
+        await handleExternalDrop(e);
       }
     } catch (error) {
       console.error('Failed to handle folder drop:', error);
@@ -1501,12 +1510,20 @@ const FolderTile: React.FC<{
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      onDropCapture={(e) => {
-        // Handle external file drops from OS
+      onDragEnter={(e) => {
+        e.preventDefault();
+        console.log('🎯 Folder drag enter:', item.name);
+        setIsDragOver(true);
+      }}
+      onDropCapture={async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        console.log('🎯 Folder drop capture:', item.name, item.id);
+        
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          handleExternalDrop(e);
+          await handleExternalDrop(e);
+        } else {
+          await handleDrop(e);
         }
       }}
       className={cn(
