@@ -242,7 +242,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     if (draggedItem && (draggedItem.type === 'file' || draggedItem.type === 'slideshow' || draggedItem.type === 'folder')) {
       setActiveId(event.active.id as string);
       setDragStartTime(Date.now());
-      // Note: We'll detect clicks in handleDragEnd if the drag was very short
     }
   };
 
@@ -667,13 +666,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     const { active, over } = event;
     const dragDuration = Date.now() - dragStartTime;
 
-    console.log('🔄 Drag end event:', {
-      active: active.id,
-      over: over?.id,
-      activeId,
-      dragDuration
-    });
-
     // If drag was very short (less than 300ms) and no drop target, treat as click
     if (!over && dragDuration < 300) {
       const clickedItem = fileItems.find(item => item.id === active.id);
@@ -700,51 +692,33 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     if (over) {
       const draggedItem = fileItems.find(item => item.id === active.id);
       
-      console.log('🔄 Processing drag - active:', active.id, 'over:', over?.id, 'draggedItem:', draggedItem);
-      
       // Handle drop into root move zone
       if (over.id === 'root-move-zone') {
         if (draggedItem?.type === 'file') {
           const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
-          console.log('📤 Moving images to root:', itemsToMove);
           handleMoveImagesToRoot(itemsToMove);
         } else if (draggedItem?.type === 'slideshow') {
-          console.log('📤 Moving slideshow to root:', active.id);
           handleMoveSlideshowToFolder(active.id as string, null);
         }
         setActiveId(null);
         return;
       }
       
-      // Handle drop into folders
-      if (draggedItem?.type === 'file') {
+      // Handle drop into folders - both images and slideshows use the same detection logic
+      if (draggedItem?.type === 'slideshow') {
+        // Handle slideshow file dragging
+        const targetFolder = folders.find(f => f.id === over.id || f.id === String(over.id));
+        if (targetFolder) {
+          handleMoveSlideshowToFolder(active.id as string, targetFolder.id);
+        }
+      } else if (draggedItem?.type === 'file') {
         // Handle image file dragging
         const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
-        console.log('🖼️ Processing image drag - items to move:', itemsToMove, 'target:', over?.id);
-        
-        // Check if the drop target is a folder
-        if (folders.find(f => f.id === over.id)) {
-          console.log('✅ Moving images to folder:', over.id);
-          handleMoveImagesToFolder(over.id as string, itemsToMove);
-        } else {
-          console.log('❌ Invalid drop target for images:', over?.id);
+        const targetFolder = folders.find(f => f.id === over.id || f.id === String(over.id));
+        if (targetFolder) {
+          handleMoveImagesToFolder(targetFolder.id, itemsToMove);
         }
-      } else if (draggedItem?.type === 'slideshow') {
-        // Handle slideshow file dragging
-        console.log('🎬 Processing slideshow drag - target:', over?.id);
-        
-        // Check if the drop target is a folder
-        if (folders.find(f => f.id === over.id)) {
-          console.log('✅ Moving slideshow to folder:', over.id);
-          handleMoveSlideshowToFolder(active.id as string, over.id as string);
-        } else {
-          console.log('❌ Invalid drop target for slideshow:', over?.id);
-        }
-      } else {
-        console.log('❌ Dragged item not found or not draggable:', active.id, draggedItem);
       }
-    } else {
-      console.log('❌ No drop target, canceling drag');
     }
 
     setActiveId(null);
