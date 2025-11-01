@@ -1374,11 +1374,11 @@ const FolderTile: React.FC<{
     e.preventDefault();
     e.stopPropagation();
     
-    // Only show drag over for our specific drag data
-    if (e.dataTransfer.types.includes('application/json')) {
+    // Check for both internal drags and external file drags
+    if (e.dataTransfer.types.includes('application/json') || e.dataTransfer.types.includes('Files')) {
       setIsDragOver(true);
       e.dataTransfer.dropEffect = 'move';
-      console.log('📁 Folder drag over:', item.name, item.id);
+      console.log('📁 Folder drag over:', item.name, item.id, 'types:', Array.from(e.dataTransfer.types));
     }
   };
 
@@ -1501,6 +1501,14 @@ const FolderTile: React.FC<{
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
+      onDropCapture={(e) => {
+        // Handle external file drops from OS
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          handleExternalDrop(e);
+        }
+      }}
       className={cn(
         "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 transition-all cursor-pointer",
         isDragOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105 shadow-2xl shadow-blue-500/25" : "border-transparent hover:shadow-lg hover:border-blue-400/50"
@@ -1525,9 +1533,6 @@ const FolderTile: React.FC<{
       <div
         className="flex flex-col items-center justify-center h-full relative z-0"
         onClick={handleClick}
-        onDragOver={handleExternalDragOver}
-        onDragLeave={handleExternalDragLeave}
-        onDrop={handleExternalDrop}
       >
         <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
         {isRenaming ? (
