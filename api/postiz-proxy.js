@@ -1,27 +1,32 @@
 // Vercel Edge Function for Postiz API proxy (Vite compatible)
 // This replaces the CORS proxy to handle large payloads for slideshow posting
+// Updated to support Postiz upload endpoints as documented in Discord
 
 const POSTIZ_API_BASE = 'https://api.postiz.com/public/v1';
+
+export async function OPTIONS(request) {
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+    'Access-Control-Allow-Credentials': 'true'
+  };
+
+  return new Response(null, { status: 200, headers: corsHeaders });
+}
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const targetPath = searchParams.get('path') || 'posts';
   const targetUrl = `${POSTIZ_API_BASE}/${targetPath}`;
   
-  // Handle CORS
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
   };
 
-  // Handle preflight requests
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
   try {
-    // Get authorization from request headers
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Authorization header required' }), {
@@ -64,20 +69,13 @@ export async function POST(request) {
   const targetPath = searchParams.get('path') || 'posts';
   const targetUrl = `${POSTIZ_API_BASE}/${targetPath}`;
   
-  // Handle CORS
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 
-  // Handle preflight requests
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
   try {
-    // Get authorization from request headers
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Authorization header required' }), {
@@ -86,17 +84,36 @@ export async function POST(request) {
       });
     }
 
-    const headers = {
+    // Handle different content types
+    const contentType = request.headers.get('content-type') || '';
+    
+    let headers = {
       'Authorization': authHeader,
-      'Content-Type': 'application/json',
     };
 
-    const requestBody = await request.text();
+    let body;
+
+    if (contentType.includes('multipart/form-data')) {
+      // For file uploads, pass through the form data as-is
+      headers['Content-Type'] = contentType;
+      body = request.body;
+    } else {
+      // For JSON requests, parse and re-stringify
+      headers['Content-Type'] = 'application/json';
+      const requestBody = await request.text();
+      
+      if (targetPath === 'upload-from-url') {
+        // Special handling for URL upload endpoint
+        body = requestBody;
+      } else {
+        body = requestBody;
+      }
+    }
 
     const response = await fetch(targetUrl, {
       method: 'POST',
       headers,
-      body: requestBody,
+      body,
     });
 
     const data = await response.text();
@@ -130,20 +147,13 @@ export async function DELETE(request) {
     targetUrl = `${POSTIZ_API_BASE}/${targetPath}`;
   }
   
-  // Handle CORS
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
     'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
   };
 
-  // Handle preflight requests
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
-
   try {
-    // Get authorization from request headers
     const authHeader = request.headers.get('authorization');
     if (!authHeader) {
       return new Response(JSON.stringify({ error: 'Authorization header required' }), {

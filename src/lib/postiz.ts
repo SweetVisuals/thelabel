@@ -200,107 +200,60 @@ export const postizAPI = {
     }
   },
 
-  // Upload images to Postiz domain via API (automatic) - Enhanced version
+// Upload images to Postiz domain via API (as documented in Discord)
   async uploadImagesToPostizDomain(imageUrls: string[]): Promise<{id: string, path: string}[]> {
     try {
       console.log('🔄 Starting automatic upload to Postiz domain...', imageUrls.length, 'images');
-      
-      // First, let's check if we can get the upload endpoint
-      console.log('🔍 Testing Postiz upload endpoint availability...');
-      const uploadEndpoint = await this.getSignedUploadUrl('test.jpg', 'image/jpeg');
-      
-      if (!uploadEndpoint) {
-        console.error('❌ Postiz upload endpoint not available - upload functionality disabled');
-        throw new Error('Postiz upload service temporarily unavailable');
-      }
       
       const uploadResults = await Promise.all(imageUrls.map(async (imageUrl, index) => {
         try {
           console.log(`📤 Processing image ${index + 1}/${imageUrls.length}: ${imageUrl}`);
           
-          // Step 1: Download the image from external URL
-          console.log(`📥 Downloading image ${index + 1}...`);
-          const response = await fetch(imageUrl, {
-            method: 'GET',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (compatible; SlideshowApp/1.0)'
-            }
-          });
+          // Method 1: Try upload from URL (preferred method)
+          console.log(`🌐 Attempting upload from URL for image ${index + 1}...`);
+          const urlUploadResult = await this.uploadImageFromUrl(imageUrl, index);
           
-          if (!response.ok) {
-            throw new Error(`Failed to download: ${response.status} ${response.statusText}`);
+          if (urlUploadResult.success) {
+            console.log(`✅ Successfully uploaded ${imageUrl} via URL method`);
+            return {
+              id: `uploaded_${index + 1}`,
+              path: urlUploadResult.path
+            };
           }
           
-          const blob = await response.blob();
-          console.log(`✅ Downloaded ${imageUrl} -> ${blob.size} bytes (${blob.type})`);
+          // Method 2: Fallback to multipart upload if URL method fails
+          console.log(`📁 Falling back to multipart upload for image ${index + 1}...`);
+          const fileUploadResult = await this.uploadImageFile(imageUrl, index);
           
-          // Step 2: Get upload URL for this specific image
-          console.log(`🔗 Getting upload URL for image ${index + 1}...`);
-          const filename = `slideshow_slide_${index + 1}_${Date.now()}.jpg`;
-          const uploadData = await this.getSignedUploadUrl(filename, blob.type);
-          
-          if (!uploadData) {
-            throw new Error('Failed to get upload URL from Postiz');
+          if (fileUploadResult.success) {
+            console.log(`✅ Successfully uploaded ${imageUrl} via file method`);
+            return {
+              id: `uploaded_${index + 1}`,
+              path: fileUploadResult.path
+            };
           }
           
-          console.log(`🎯 Upload URL obtained for ${filename}`);
-          
-          // Step 3: Upload the image to Postiz
-          console.log(`⬆️ Uploading ${filename} to Postiz...`);
-          const uploadResponse = await fetch(uploadData.uploadUrl, {
-            method: 'PUT',
-            headers: {
-              'Content-Type': blob.type,
-              'Content-Length': blob.size.toString()
-            },
-            body: blob
-          });
-          
-          if (!uploadResponse.ok) {
-            const errorText = await uploadResponse.text();
-            console.error(`❌ Upload failed for ${filename}:`, uploadResponse.status, errorText);
-            throw new Error(`Upload failed: ${uploadResponse.status}`);
-          }
-          
-          console.log(`✅ Successfully uploaded ${filename} to Postiz`);
-          
-          // Step 4: Return the path that Postiz expects
-          const uploadedPath = uploadData.filePath || filename;
-          
+          // If both methods fail, return original URL with error marker
+          console.warn(`⚠️ Both upload methods failed for ${imageUrl}, using original URL`);
           return {
-            id: `uploaded_${index + 1}`,
-            path: uploadedPath
+            id: `fallback_${index + 1}`,
+            path: imageUrl
           };
           
         } catch (error) {
           console.error(`❌ Failed to process image ${index + 1}:`, error);
-          
-          // Return the original URL as fallback with error marker
           return {
             id: `failed_${index + 1}`,
-            path: imageUrl // Original URL as fallback
+            path: imageUrl
           };
         }
       }));
 
       console.log(`🏁 Upload process completed: ${uploadResults.length} images processed`);
-      
-      // Analyze results
-      const successfulUploads = uploadResults.filter(result => result.path !== imageUrls[uploadResults.indexOf(result)]);
-      const failedUploads = uploadResults.length - successfulUploads.length;
-      
-      console.log(`📊 Upload results: ${successfulUploads.length} successful, ${failedUploads} failed`);
-      
-      if (failedUploads > 0) {
-        console.warn(`⚠️ ${failedUploads} uploads failed - will provide manual guidance`);
-      }
-      
       return uploadResults;
       
     } catch (error) {
       console.error('💥 Critical failure in upload process:', error);
-      
-      // Return original URLs with error markers
       return imageUrls.map((imageUrl, index) => ({
         id: `critical_error_${index + 1}`,
         path: imageUrl
@@ -308,27 +261,45 @@ export const postizAPI = {
     }
   },
 
-  // Test Postiz upload functionality
+  // Test Postiz upload functionality (as documented in Discord)
   async testUploadFunctionality(): Promise<{success: boolean, message: string}> {
     try {
       console.log('🧪 Testing Postiz upload functionality...');
       
-      // Try to get an upload URL
-      const uploadData = await this.getSignedUploadUrl('test.jpg', 'image/jpeg');
+      // Try a simple upload-from-url test with a small image
+      const testUrl = 'https://via.placeholder.com/100x100/000000/FFFFFF?text=TEST';
+      const proxiedUrl = `${VERCEL_PROXY}upload-from-url`;
       
-      if (!uploadData) {
+      const response = await fetch(proxiedUrl, {
+        method: 'POST',
+        headers: postizAPI.getAuthHeaders(),
+        body: JSON.stringify({ url: testUrl })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Upload test failed:', response.status, errorText);
         return {
           success: false,
           message: 'Postiz upload service is not available or your API key lacks upload permissions.'
         };
       }
       
-      return {
-        success: true,
-        message: 'Postiz upload service is available and working.'
-      };
+      const result = await response.json();
+      if (result.path || result.url) {
+        return {
+          success: true,
+          message: 'Postiz upload service is available and working.'
+        };
+      } else {
+        return {
+          success: false,
+          message: 'Upload service returned unexpected response format.'
+        };
+      }
       
     } catch (error) {
+      console.error('Upload test error:', error);
       return {
         success: false,
         message: `Upload test failed: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -336,34 +307,73 @@ export const postizAPI = {
     }
   },
 
-  // Get signed upload URL from Postiz
-  async getSignedUploadUrl(filename: string, contentType: string): Promise<{uploadUrl: string, filePath: string} | null> {
+  // Upload image from URL using Postiz API (as documented in Discord)
+  async uploadImageFromUrl(imageUrl: string, index: number): Promise<{success: boolean, path: string}> {
     try {
-      const response = await fetch(`${VERCEL_PROXY}upload-url`, {
+      const proxiedUrl = `${VERCEL_PROXY}upload-from-url`;
+      
+      const response = await fetch(proxiedUrl, {
         method: 'POST',
-        headers: {
-          ...postizAPI.getAuthHeaders(),
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          filename,
-          contentType
-        })
+        headers: postizAPI.getAuthHeaders(),
+        body: JSON.stringify({ url: imageUrl })
       });
 
       if (!response.ok) {
-        console.error('Failed to get signed upload URL:', response.status);
-        return null;
+        console.error(`❌ URL upload failed for ${imageUrl}:`, response.status);
+        return { success: false, path: imageUrl };
       }
 
-      const data = await response.json();
+      const result = await response.json();
       return {
-        uploadUrl: data.uploadUrl,
-        filePath: data.filePath || data.path
+        success: true,
+        path: result.path || result.url || `upload_${Date.now()}_${index + 1}`
       };
     } catch (error) {
-      console.error('Error getting signed upload URL:', error);
-      return null;
+      console.error(`❌ URL upload error for ${imageUrl}:`, error);
+      return { success: false, path: imageUrl };
+    }
+  },
+
+  // Upload image file using Postiz API multipart upload (as documented in Discord)
+  async uploadImageFile(imageUrl: string, index: number): Promise<{success: boolean, path: string}> {
+    try {
+      // Download the image first
+      const imageResponse = await fetch(imageUrl);
+      if (!imageResponse.ok) {
+        throw new Error(`Failed to download: ${imageResponse.status}`);
+      }
+
+      const blob = await imageResponse.blob();
+      const filename = `slideshow_slide_${index + 1}_${Date.now()}.jpg`;
+
+      // Create form data for multipart upload
+      const formData = new FormData();
+      formData.append('file', blob, filename);
+
+      const proxiedUrl = `${VERCEL_PROXY}upload`;
+
+      const response = await fetch(proxiedUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': postizAPI.getAuthHeaders().Authorization
+          // Don't set Content-Type for FormData, let browser set it with boundary
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        console.error(`❌ File upload failed for ${imageUrl}:`, response.status);
+        return { success: false, path: imageUrl };
+      }
+
+      const result = await response.json();
+      return {
+        success: true,
+        path: result.path || result.url || filename
+      };
+    } catch (error) {
+      console.error(`❌ File upload error for ${imageUrl}:`, error);
+      return { success: false, path: imageUrl };
     }
   },
 
@@ -508,30 +518,6 @@ Once you upload images to Postiz, they're permanently available for all your fut
       needsUpload: externalUrls.length > 0,
       externalUrls
     };
-  },
-
-  // Get upload endpoint from Postiz
-  async getUploadEndpoint(): Promise<{uploadUrl: string, uploadPath: string} | null> {
-    try {
-      const response = await fetch(`${VERCEL_PROXY}upload-url`, {
-        method: 'GET',
-        headers: postizAPI.getAuthHeaders(),
-      });
-
-      if (!response.ok) {
-        console.warn('Failed to get upload endpoint from Postiz:', response.status);
-        return null;
-      }
-
-      const data = await response.json();
-      return {
-        uploadUrl: data.uploadUrl,
-        uploadPath: data.uploadPath || data.path
-      };
-    } catch (error) {
-      console.error('Failed to get upload endpoint:', error);
-      return null;
-    }
   },
 
   // Get user's posts
