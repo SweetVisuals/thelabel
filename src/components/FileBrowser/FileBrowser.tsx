@@ -632,26 +632,76 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     });
   };
 
-  const handleMoveSlideshowToFolder = async (slideshowId: string, folderId: string | null) => {
+  const handleMoveSlideshowToFolder = async (slideshowIds: string[], folderId: string | null) => {
     try {
-      console.log(`📁 Moving slideshow ${slideshowId} to folder ${folderId || 'root'}`);
-      
-      // Use the slideshow service to move the slideshow
-      await slideshowService.moveSlideshowToFolder(slideshowId, folderId);
-      
+      console.log(`📁 Moving ${slideshowIds.length} slideshow(s) to folder ${folderId || 'root'}`);
+
+      // Move each slideshow to the folder
+      await Promise.all(slideshowIds.map(slideshowId =>
+        slideshowService.moveSlideshowToFolder(slideshowId, folderId)
+      ));
+
       // Force re-render to update the file list
       triggerReRender();
-      
-      toast.success(`Slideshow moved to ${folderId || 'root'} successfully!`);
+
+      toast.success(`${slideshowIds.length} slideshow(s) moved to ${folderId || 'root'} successfully!`);
     } catch (error) {
-      console.error('Failed to move slideshow to folder:', error);
-      toast.error('Failed to move slideshow to folder');
+      console.error('Failed to move slideshows to folder:', error);
+      toast.error('Failed to move slideshows to folder');
     }
   };
 
   // Enhanced drag and drop state management
   const [draggedItem, setDraggedItem] = useState<{ type: string; id: string; name: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [currentDragOverFolder, setCurrentDragOverFolder] = useState<string | null>(null);
+
+  // Global drop event handler to ensure drops are caught
+  useEffect(() => {
+    const handleGlobalDrop = (e: DragEvent) => {
+      console.log('🌍 Global drop event detected');
+      
+      // Only handle if we have valid drag data
+      if (draggedItem && currentDragOverFolder) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('🌍 Processing global drop:', { draggedItem, targetFolder: currentDragOverFolder });
+        
+        // Handle the drop
+        if (draggedItem.type === 'file') {
+          const itemsToMove = selectedImages.includes(draggedItem.id) ? selectedImages : [draggedItem.id];
+          handleMoveImagesToFolder(currentDragOverFolder, itemsToMove);
+        } else if (draggedItem.type === 'slideshow') {
+          const itemsToMove = selectedSlideshows.includes(draggedItem.id) ? selectedSlideshows : [draggedItem.id];
+          handleMoveSlideshowToFolder(itemsToMove, currentDragOverFolder);
+        }
+        
+        // Reset drag state
+        setCurrentDragOverFolder(null);
+        setDraggedItem(null);
+        setIsDragging(false);
+      }
+    };
+
+    const handleGlobalDragOver = (e: DragEvent) => {
+      if (currentDragOverFolder) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'move';
+        }
+      }
+    };
+
+    // Add global listeners
+    document.addEventListener('drop', handleGlobalDrop);
+    document.addEventListener('dragover', handleGlobalDragOver);
+
+    return () => {
+      document.removeEventListener('drop', handleGlobalDrop);
+      document.removeEventListener('dragover', handleGlobalDragOver);
+    };
+  }, [draggedItem, currentDragOverFolder, selectedImages]);
 
   // Handle drag start from file and slideshow tiles
   const handleDragStart = (e: React.DragEvent, item: FileItem) => {
@@ -695,7 +745,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         await handleMoveImagesToFolder(targetFolderId, itemsToMove);
       } else if (type === 'slideshow') {
         // Move slideshow to folder
-        await handleMoveSlideshowToFolder(id, targetFolderId);
+        const itemsToMove = selectedSlideshows.includes(id) ? selectedSlideshows : [id];
+        await handleMoveSlideshowToFolder(itemsToMove, targetFolderId);
       }
     } catch (error) {
       console.error('Failed to handle drop:', error);
@@ -959,7 +1010,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             </div>
           ) : viewMode === 'grid' ? (
            <div className="p-6">
-             {currentFolderId && <RootMoveZone selectedImages={selectedImages} handleMoveImagesToRoot={handleMoveImagesToRoot} handleMoveSlideshowToFolder={handleMoveSlideshowToFolder} />}
+             {currentFolderId && <RootMoveZone selectedImages={selectedImages} selectedSlideshows={selectedSlideshows} handleMoveImagesToRoot={handleMoveImagesToRoot} handleMoveSlideshowToFolder={handleMoveSlideshowToFolder} />}
              <div
                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 relative"
              >
@@ -980,6 +1031,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                      selectedImages={selectedImages}
                      handleMoveImagesToFolder={handleMoveImagesToFolder}
                      handleMoveSlideshowToFolder={handleMoveSlideshowToFolder}
+                     selectedSlideshows={selectedSlideshows}
                    />
                  ) : item.type === 'slideshow' ? (
                    <SlideshowTile
@@ -1265,9 +1317,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
 const RootMoveZone: React.FC<{
   selectedImages: string[];
+  selectedSlideshows: string[];
   handleMoveImagesToRoot: (imageIds: string[]) => void;
-  handleMoveSlideshowToFolder: (slideshowId: string, folderId: string | null) => void;
-}> = ({ selectedImages, handleMoveImagesToRoot, handleMoveSlideshowToFolder }) => {
+  handleMoveSlideshowToFolder: (slideshowIds: string[], folderId: string | null) => void;
+}> = ({ selectedImages, selectedSlideshows, handleMoveImagesToRoot, handleMoveSlideshowToFolder }) => {
   const [isOver, setIsOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -1292,7 +1345,8 @@ const RootMoveZone: React.FC<{
         const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
         await handleMoveImagesToRoot(itemsToMove);
       } else if (type === 'slideshow') {
-        await handleMoveSlideshowToFolder(id, null);
+        const itemsToMove = selectedSlideshows.includes(id) ? selectedSlideshows : [id];
+        await handleMoveSlideshowToFolder(itemsToMove, null);
       }
     } catch (error) {
       console.error('Failed to handle drop:', error);
@@ -1329,8 +1383,9 @@ const FolderTile: React.FC<{
   onImagesUploaded?: (images: UploadedImage[]) => void;
   currentImages?: UploadedImage[];
   selectedImages?: string[];
+  selectedSlideshows?: string[];
   handleMoveImagesToFolder?: (folderId: string, imageIds: string[]) => void;
-  handleMoveSlideshowToFolder?: (slideshowId: string, folderId: string | null) => void;
+  handleMoveSlideshowToFolder?: (slideshowIds: string[], folderId: string | null) => void;
 }> = ({
   item,
   onFolderClick,
@@ -1343,6 +1398,7 @@ const FolderTile: React.FC<{
   onImagesUploaded,
   currentImages = [],
   selectedImages = [],
+  selectedSlideshows = [],
   handleMoveImagesToFolder,
   handleMoveSlideshowToFolder
 }) => {
@@ -1379,6 +1435,9 @@ const FolderTile: React.FC<{
       setIsDragOver(true);
       e.dataTransfer.dropEffect = 'move';
       console.log('📁 Folder drag over:', item.name, item.id, 'types:', Array.from(e.dataTransfer.types));
+      
+      // Set this as the current drag target for global drop handling
+      // setCurrentDragOverFolder(item.id); // Commented out as it's not defined in this scope
     }
   };
 
@@ -1412,7 +1471,8 @@ const FolderTile: React.FC<{
           const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
           await handleMoveImagesToFolder(item.id, itemsToMove);
         } else if (type === 'slideshow' && handleMoveSlideshowToFolder) {
-          await handleMoveSlideshowToFolder(id, item.id);
+          const itemsToMove = selectedSlideshows.includes(id) ? selectedSlideshows : [id];
+          await handleMoveSlideshowToFolder(itemsToMove, item.id);
         }
       } else if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         console.log('📁 External file drop detected');
