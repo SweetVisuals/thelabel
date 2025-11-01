@@ -16,8 +16,21 @@ export async function OPTIONS(request) {
 }
 
 export async function GET(request) {
-  const { searchParams } = new URL(request.url);
-  const targetPath = searchParams.get('path') || 'posts';
+  const url = new URL(request.url);
+  const searchParams = url.searchParams;
+  let targetPath = searchParams.get('path');
+  
+  // Handle both query parameter format and direct path format
+  if (!targetPath) {
+    // Extract path from URL path (e.g., /api/postiz-proxy/integrations)
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    if (pathSegments.length >= 3 && pathSegments[0] === 'api' && pathSegments[1] === 'postiz-proxy') {
+      targetPath = pathSegments.slice(2).join('/');
+    } else {
+      targetPath = 'posts'; // Default
+    }
+  }
+  
   const targetUrl = `${POSTIZ_API_BASE}/${targetPath}`;
   
   const corsHeaders = {
@@ -39,6 +52,8 @@ export async function GET(request) {
       'Authorization': authHeader,
       'Content-Type': 'application/json',
     };
+
+    console.log(`🔄 Proxying GET to: ${targetUrl} (extracted path: ${targetPath})`);
 
     const response = await fetch(targetUrl, {
       method: 'GET',
@@ -65,8 +80,21 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const { searchParams } = new URL(request.url);
-  const targetPath = searchParams.get('path') || 'posts';
+  const url = new URL(request.url);
+  const searchParams = url.searchParams;
+  let targetPath = searchParams.get('path');
+  
+  // Handle both query parameter format and direct path format
+  if (!targetPath) {
+    // Extract path from URL path (e.g., /api/postiz-proxy/upload-from-url)
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    if (pathSegments.length >= 3 && pathSegments[0] === 'api' && pathSegments[1] === 'postiz-proxy') {
+      targetPath = pathSegments.slice(2).join('/');
+    } else {
+      targetPath = 'posts'; // Default
+    }
+  }
+  
   const targetUrl = `${POSTIZ_API_BASE}/${targetPath}`;
   
   const corsHeaders = {
@@ -109,6 +137,8 @@ export async function POST(request) {
         body = requestBody;
       }
     }
+
+    console.log(`🔄 Proxying POST to: ${targetUrl} (extracted path: ${targetPath})`);
 
     const response = await fetch(targetUrl, {
       method: 'POST',
