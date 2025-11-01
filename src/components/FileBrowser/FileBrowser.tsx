@@ -188,7 +188,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       // Get slideshows directly from memory
       const allSlideshows = Array.from((slideshowService as any)['slideshows'].values());
       
-      return allSlideshows.map((slideshow: any) => {
+      // Filter slideshows by current folder for proper folder display
+      const filteredSlideshows = currentFolderId === null
+        ? allSlideshows.filter((slideshow: any) => !slideshow.folder_id)
+        : allSlideshows.filter((slideshow: any) => slideshow.folder_id === currentFolderId);
+      
+      return filteredSlideshows.map((slideshow: any) => {
         return {
           id: slideshow.id,
           name: `${slideshow.title || 'Untitled'}.slideshow`,
@@ -630,17 +635,71 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const handleMoveSlideshowToFolder = async (slideshowId: string, folderId: string | null) => {
     try {
+      // Get the current slideshow data to check its current folder
+      const allSlideshows = getSlideshowsFromService();
+      const slideshowItem = allSlideshows.find(item => item.id === slideshowId);
+      if (!slideshowItem || !slideshowItem.slideshow) {
+        throw new Error('Slideshow not found');
+      }
+      
+      const slideshow = slideshowItem.slideshow;
+      const currentFolderId = slideshow.folder_id;
+      
+      // Don't do anything if moving to the same folder
+      if (currentFolderId === folderId) {
+        return;
+      }
+      
+      console.log(`📁 Moving slideshow "${slideshow.title}" from folder ${currentFolderId || 'root'} to folder ${folderId || 'root'}`);
+      
+      // Update the slideshow service
       await slideshowService.moveSlideshowToFolder(slideshowId, folderId);
       
-      // Also update the localStorage slideshow file entry for proper folder display
-      const fileKey = `slideshow_file_${slideshowId}`;
-      const fileData = localStorage.getItem(fileKey);
-      if (fileData) {
-        const parsedFileData = JSON.parse(fileData);
-        parsedFileData.folderId = folderId;
-        parsedFileData.updated = new Date().toISOString();
-        localStorage.setItem(fileKey, JSON.stringify(parsedFileData));
+      // CRITICAL: Update ALL slideshow file entries in localStorage
+      // First, find all file entries for this slideshow
+      const slideshowFileKeys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('slideshow_file_')) {
+          const fileData = localStorage.getItem(key);
+          if (fileData) {
+            try {
+              const parsed = JSON.parse(fileData);
+              // Match by slideshow ID (remove the "slideshow_" prefix if present)
+              const fileSlideshowId = parsed.id.startsWith('slideshow_') ? parsed.id : `slideshow_${parsed.id}`;
+              if (fileSlideshowId === slideshowId) {
+                slideshowFileKeys.push(key);
+              }
+            } catch (error) {
+              console.warn('Failed to parse slideshow file data:', key, error);
+            }
+          }
+        }
       }
+      
+      console.log(`🔍 Found ${slideshowFileKeys.length} file entries for slideshow ${slideshowId}`);
+      
+      // Update all found file entries to the new folder
+      slideshowFileKeys.forEach(fileKey => {
+        try {
+          const fileData = localStorage.getItem(fileKey);
+          if (fileData) {
+            const parsedFileData = JSON.parse(fileData);
+            parsedFileData.folderId = folderId;
+            parsedFileData.updated = new Date().toISOString();
+            localStorage.setItem(fileKey, JSON.stringify(parsedFileData));
+            console.log(`✅ Updated file entry ${fileKey} to folder ${folderId || 'root'}`);
+          }
+        } catch (error) {
+          console.error(`Failed to update file entry ${fileKey}:`, error);
+        }
+      });
+      
+      // Dispatch storage event to trigger re-render
+      window.dispatchEvent(new StorageEvent('storage', {
+        key: 'savedSlideshows',
+        newValue: localStorage.getItem('savedSlideshows')
+      }));
       
       // Force re-render to update the file list
       triggerReRender();
