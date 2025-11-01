@@ -40,8 +40,6 @@ import { ImageEditor } from '../ImageEditor/ImageEditor';
 import { motion, AnimatePresence } from 'framer-motion';
 import { imageService } from '@/lib/imageService';
 import { slideshowService } from '@/lib/slideshowService';
-import { DndContext, useDraggable, useDroppable, DragEndEvent, DragStartEvent, DragOverlay } from '@dnd-kit/core';
-import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { PostizPoster } from '../Postiz/PostizPoster';
 
@@ -100,9 +98,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [renameInputValue, setRenameInputValue] = useState('');
   const [renamingSlideshowId, setRenamingSlideshowId] = useState<string | null>(null);
   const [renameSlideshowInputValue, setRenameSlideshowInputValue] = useState('');
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [dragStartTime, setDragStartTime] = useState<number>(0);
-  const [dragStartPosition, setDragStartPosition] = useState<{x: number, y: number} | null>(null);
   const [showPostizPoster, setShowPostizPoster] = useState(false);
   const [slideshowToPost, setSlideshowToPost] = useState<SlideshowMetadata | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -234,14 +229,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const handleFolderClick = (folderId: string) => {
     if (onCurrentFolderIdChange) {
       onCurrentFolderIdChange(folderId);
-    }
-  };
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const draggedItem = fileItems.find(item => item.id === event.active.id);
-    if (draggedItem && (draggedItem.type === 'file' || draggedItem.type === 'slideshow' || draggedItem.type === 'folder')) {
-      setActiveId(event.active.id as string);
-      setDragStartTime(Date.now());
     }
   };
 
@@ -662,77 +649,39 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    const dragDuration = Date.now() - dragStartTime;
+  // Simple drag and drop implementation without dnd-kit
+  const handleDragStart = (e: React.DragEvent, item: FileItem) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      type: item.type,
+      id: item.id,
+      name: item.name
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
 
-    console.log('🎯 Drag ended:', {
-      activeId: active.id,
-      overId: over?.id,
-      dragDuration,
-      availableFolders: folders.map(f => ({ id: f.id, name: f.name }))
-    });
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+  };
 
-    // If drag was very short (less than 300ms) and no drop target, treat as click
-    if (!over && dragDuration < 300) {
-      const clickedItem = fileItems.find(item => item.id === active.id);
-      if (clickedItem?.type === 'file') {
-        toggleSelection(active.id as string);
-      } else if (clickedItem?.type === 'slideshow') {
-        // Use the same selection logic as regular clicks
-        if (onSlideshowSelectionChange && clickedItem) {
-          const wasSelected = selectedSlideshows.includes(clickedItem.id);
-          if (wasSelected) {
-            // Deselect - this should trigger unload
-            onSlideshowSelectionChange(selectedSlideshows.filter(id => id !== clickedItem.id));
-          } else {
-            // Select and load
-            onSlideshowSelectionChange([...selectedSlideshows, clickedItem.id]);
-          }
-        }
+  const handleDrop = async (e: React.DragEvent, targetFolderId: string) => {
+    e.preventDefault();
+
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      const { type, id, name } = data;
+
+      if (type === 'file') {
+        // Move image to folder
+        const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
+        await handleMoveImagesToFolder(targetFolderId, itemsToMove);
+      } else if (type === 'slideshow') {
+        // Move slideshow to folder
+        await handleMoveSlideshowToFolder(id, targetFolderId);
       }
-      setActiveId(null);
-      return;
+    } catch (error) {
+      console.error('Failed to handle drop:', error);
     }
-
-    // Only process drag operations if we have a drop target
-    if (over) {
-      const draggedItem = fileItems.find(item => item.id === active.id);
-      console.log('📦 Dragged item:', draggedItem?.type, draggedItem?.name);
-      
-      // Handle drop into root move zone
-      if (over.id === 'root-move-zone') {
-        console.log('📤 Dropping to root');
-        if (draggedItem?.type === 'file') {
-          const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
-          handleMoveImagesToRoot(itemsToMove);
-        } else if (draggedItem?.type === 'slideshow') {
-          handleMoveSlideshowToFolder(active.id as string, null);
-        }
-        setActiveId(null);
-        return;
-      }
-      
-      // Handle drop into folders - check if the drop target is a folder
-      const targetFolder = folders.find(f => f.id === over.id);
-      
-      console.log('🎯 Target folder found:', targetFolder?.name, 'for drop id:', over.id);
-      
-      if (targetFolder) {
-        if (draggedItem?.type === 'slideshow') {
-          console.log('📺 Moving slideshow to folder:', targetFolder.name);
-          handleMoveSlideshowToFolder(active.id as string, targetFolder.id);
-        } else if (draggedItem?.type === 'file') {
-          console.log('🖼️ Moving image(s) to folder:', targetFolder.name);
-          const itemsToMove = selectedImages.includes(active.id as string) ? selectedImages : [active.id as string];
-          handleMoveImagesToFolder(targetFolder.id, itemsToMove);
-        }
-      } else {
-        console.log('⚠️ No target folder found for drop id:', over.id);
-      }
-    }
-
-    setActiveId(null);
   };
 
   const handleNavigateUp = () => onCurrentFolderIdChange?.(folders.find(f => f.id === currentFolderId)?.parent_id || null);
@@ -811,10 +760,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   };
   const formatDate = (date: Date) => date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const activeItem = activeId ? fileItems.find(item => item.id === activeId) : null;
-
   return (
-    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <div className="h-full flex flex-col bg-background">
       <div className="h-full flex flex-col bg-background">
         {/* Enhanced Toolbar */}
         <div className="flex flex-col p-3 border-b border-neutral-800 bg-background">
@@ -1045,82 +992,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           )}
         </div>
 
-        {createPortal(
-          <DragOverlay style={{ zIndex: 9999 }}>
-            {activeItem && activeItem.type === 'file' && activeItem.image ? (
-              (() => {
-                const isActiveSelected = selectedImages.includes(activeItem.id);
-                const itemsToShow = isActiveSelected ? Math.min(selectedImages.length, 4) : 1;
-                const itemsDragging = isActiveSelected
-                  ? fileItems.filter(item => selectedImages.includes(item.id) && item.type === 'file')
-                  : [activeItem];
-
-                return (
-                  <div className="relative pointer-events-none">
-                    {itemsDragging.slice(0, itemsToShow).map((item, index) => (
-                      <FileTile
-                        key={item.id}
-                        item={item}
-                        selected={selectedImages.includes(item.id)}
-                        onToggleSelection={toggleSelection}
-                        className={cn(
-                          "absolute pointer-events-none",
-                          itemsToShow > 1 && index > 0 && `top-${index * 2} left-${index * 2} scale-90`
-                        )}
-                      />
-                    ))}
-                    {isActiveSelected && itemsDragging.length > 4 && (
-                      <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center border-2 border-black pointer-events-none">
-                        +{itemsDragging.length - 3}
-                      </div>
-                    )}
-                    {isActiveSelected && (
-                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded mb-1 pointer-events-none">
-                        Drag {itemsDragging.length} file{itemsDragging.length !== 1 ? 's' : ''}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()
-            ) : activeItem && activeItem.type === 'slideshow' ? (
-              <div className="relative pointer-events-none">
-                <SlideshowTile
-                  item={activeItem}
-                  onSlideshowClick={() => {}}
-                  onContextMenu={() => {}}
-                  selected={false} // Don't show selected state in drag overlay
-                  onToggleSelection={() => {}}
-                  renamingSlideshowId={null}
-                  renameSlideshowInputValue={''}
-                  setRenameSlideshowInputValue={() => {}}
-                  setRenamingSlideshowId={() => {}}
-                  handleRenameSlideshowSubmit={async () => {}}
-                  debugSelected={false}
-                />
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded mb-1 pointer-events-none">
-                  Drag slideshow
-                </div>
-              </div>
-            ) : activeItem && activeItem.type === 'folder' ? (
-              <div className="relative pointer-events-none">
-                <FolderTile
-                  item={activeItem}
-                  onFolderClick={() => {}} // No click handling for drag overlay
-                  onContextMenu={() => {}} // No context menu for drag overlay
-                  renamingFolderId={null}
-                  renameInputValue={''}
-                  setRenameInputValue={() => {}}
-                  setRenamingFolderId={() => {}}
-                  handleRenameSubmit={() => {}}
-                />
-                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded mb-1 pointer-events-none">
-                  Drag folder
-                </div>
-              </div>
-            ) : null}
-          </DragOverlay>,
-          document.body
-        )}
 
         {/* Context Menu */}
         <AnimatePresence>
@@ -1366,24 +1237,47 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           </div>
         )}
       </div>
-    </DndContext>
-  );
-};
-
-const RootDropZone: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isOver, setNodeRef } = useDroppable({ id: 'root-drop-zone' });
-  return (
-    <div ref={setNodeRef} className={cn("h-full relative", isOver && "bg-green-50/20 border-2 border-green-500 border-dashed")}>
-      {children}
     </div>
   );
 };
 
 const RootMoveZone: React.FC = () => {
-  const { isOver, setNodeRef } = useDroppable({ id: 'root-move-zone' });
+  const [isOver, setIsOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsOver(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsOver(false);
+
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      const { type, id } = data;
+
+      if (type === 'file') {
+        const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
+        await handleMoveImagesToRoot(itemsToMove);
+      } else if (type === 'slideshow') {
+        await handleMoveSlideshowToFolder(id, null);
+      }
+    } catch (error) {
+      console.error('Failed to handle drop:', error);
+    }
+  };
+
   return (
     <div
-      ref={setNodeRef}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
       className={cn(
         "flex items-center justify-center p-4 border-2 border-dashed border-neutral-700 rounded-lg mb-4 transition-colors",
         isOver ? "border-blue-500 bg-blue-900/20" : "hover:border-neutral-600"
@@ -1408,6 +1302,9 @@ const FolderTile: React.FC<{
   handleRenameSubmit: (folderId: string, newName: string) => void;
   onImagesUploaded?: (images: UploadedImage[]) => void;
   currentImages?: UploadedImage[];
+  selectedImages?: string[];
+  handleMoveImagesToFolder?: (folderId: string, imageIds: string[]) => void;
+  handleMoveSlideshowToFolder?: (slideshowId: string, folderId: string | null) => void;
 }> = ({
   item,
   onFolderClick,
@@ -1418,20 +1315,13 @@ const FolderTile: React.FC<{
   setRenamingFolderId,
   handleRenameSubmit,
   onImagesUploaded,
-  currentImages = []
+  currentImages = [],
+  selectedImages = [],
+  handleMoveImagesToFolder,
+  handleMoveSlideshowToFolder
 }) => {
-  const { isOver, setNodeRef } = useDroppable({
-    id: item.id,
-    data: {
-      type: 'folder',
-      folderId: item.id
-    }
-  });
-
-  // NOTE: Folders are NOT draggable - only clickable for opening
-  // This prevents drag/click interference
   const isRenaming = renamingFolderId === item.id;
-  const [isExternalDragOver, setIsExternalDragOver] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -1449,25 +1339,55 @@ const FolderTile: React.FC<{
     }
   };
 
-  // Handle external file drops (from OS file browser)
+  // Handle internal drag and drop (from file tiles)
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
-      setIsExternalDragOver(true);
-    }
+    setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
-    e.stopPropagation();
-    setIsExternalDragOver(false);
+    setIsDragOver(false);
   };
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
+    setIsDragOver(false);
+
+    try {
+      const data = JSON.parse(e.dataTransfer.getData('application/json'));
+      const { type, id } = data;
+
+      if (type === 'file' && handleMoveImagesToFolder) {
+        const itemsToMove = selectedImages.includes(id) ? selectedImages : [id];
+        await handleMoveImagesToFolder(item.id, itemsToMove);
+      } else if (type === 'slideshow' && handleMoveSlideshowToFolder) {
+        await handleMoveSlideshowToFolder(id, item.id);
+      }
+    } catch (error) {
+      console.error('Failed to handle drop:', error);
+    }
+  };
+
+  // Handle external file drops (from OS file browser)
+  const handleExternalDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
     e.stopPropagation();
-    setIsExternalDragOver(false);
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOver(true);
+    }
+  };
+
+  const handleExternalDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  };
+
+  const handleExternalDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
 
     if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
 
@@ -1492,11 +1412,8 @@ const FolderTile: React.FC<{
     }
   };
 
-  console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}, isExternalDragOver: ${isExternalDragOver}`);
-
   return (
     <div
-      ref={setNodeRef}
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -1507,15 +1424,15 @@ const FolderTile: React.FC<{
       onDrop={handleDrop}
       className={cn(
         "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent transition-all cursor-pointer",
-        (isOver || isExternalDragOver) ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50"
+        isDragOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105" : "hover:shadow-lg hover:border-blue-400/50"
       )}
       style={{
-        zIndex: (isOver || isExternalDragOver) ? 50 : 1,
+        zIndex: isDragOver ? 50 : 1,
         cursor: isRenaming ? 'text' : 'pointer'
       }}
     >
       {/* Drop zone overlay for better visual feedback */}
-      {(isOver || isExternalDragOver) && (
+      {isDragOver && (
         <div className="absolute inset-0 bg-blue-500/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none">
           <div className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-medium shadow-lg">
             Drop here
@@ -1527,6 +1444,9 @@ const FolderTile: React.FC<{
       <div
         className="flex flex-col items-center justify-center h-full relative z-0"
         onClick={handleClick}
+        onDragOver={handleExternalDragOver}
+        onDragLeave={handleExternalDragLeave}
+        onDrop={handleExternalDrop}
       >
         <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
         {isRenaming ? (
@@ -1573,19 +1493,6 @@ const SlideshowTile: React.FC<{
   handleRenameSlideshowSubmit,
   debugSelected
 }) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: item.id,
-    data: {
-      type: 'slideshow',
-      itemId: item.id
-    },
-    disabled: false
-  });
-
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : {};
-
   const isRenaming = renamingSlideshowId === item.id;
   const hasValidSlideshow = item.slideshow && item.slideshow.id && item.slideshow.title;
 
@@ -1597,6 +1504,15 @@ const SlideshowTile: React.FC<{
     }
   };
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      type: 'slideshow',
+      id: item.id,
+      name: item.name
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
   return (
     <div
       onContextMenu={(e) => {
@@ -1604,19 +1520,16 @@ const SlideshowTile: React.FC<{
         e.stopPropagation();
         if (!isRenaming) onContextMenu(item.id, e.clientX, e.clientY);
       }}
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
+      draggable={!isRenaming}
+      onDragStart={handleDragStart}
       className={cn(
         "relative group aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-blue-900/20 border-2 cursor-pointer transition-all",
-        selected ? "border-purple-500 ring-2 ring-purple-400/30" : "border-transparent hover:shadow-lg hover:border-purple-400/50",
-        isDragging && "opacity-50"
+        selected ? "border-purple-500 ring-2 ring-purple-400/30" : "border-transparent hover:shadow-lg hover:border-purple-400/50"
       )}
       title={`Slideshow: ${item.slideshow?.title || 'Loading...'}`}
       onClick={(e) => {
-        // Handle click separately from drag - only trigger if not renaming and not dragging
-        if (!isRenaming && !isDragging) {
+        // Handle click separately from drag - only trigger if not renaming
+        if (!isRenaming) {
           e.stopPropagation();
           onToggleSelection(item.id);
         }
@@ -1628,10 +1541,10 @@ const SlideshowTile: React.FC<{
         </div>
         {/* Add visual indicator even when not selected */}
         <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center z-10 transition-all"
-             style={{
-               backgroundColor: selected ? 'rgb(147 51 234)' : 'transparent',
-               border: selected ? '2px solid rgb(147 51 234)' : '2px solid transparent'
-             }}>
+              style={{
+                backgroundColor: selected ? 'rgb(147 51 234)' : 'transparent',
+                border: selected ? '2px solid rgb(147 51 234)' : '2px solid transparent'
+              }}>
           {selected ? <CheckSquare className="w-3 h-3 text-white" /> : null}
         </div>
         {isRenaming ? (
@@ -1665,19 +1578,6 @@ const FileTile: React.FC<{
   className?: string;
   fileTileRefs?: React.MutableRefObject<Map<string, HTMLDivElement>>;
 }> = ({ item, selected, onToggleSelection, className, fileTileRefs }) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: item.id,
-    data: {
-      type: 'file',
-      itemId: item.id
-    },
-    disabled: false
-  });
-
-  const style = transform ? {
-    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-  } : {};
-
   const tileRef = useCallback((node: HTMLDivElement | null) => {
     if (node && fileTileRefs) {
       fileTileRefs.current.set(item.id, node);
@@ -1686,30 +1586,31 @@ const FileTile: React.FC<{
     }
   }, [item.id, fileTileRefs]);
 
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('application/json', JSON.stringify({
+      type: 'file',
+      id: item.id,
+      name: item.name
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
   return (
     <>
       <div
-        ref={(node) => {
-          setNodeRef(node);
-          tileRef(node);
-        }}
-        style={style}
-        {...attributes}
-        {...listeners}
+        ref={tileRef}
+        draggable
+        onDragStart={handleDragStart}
         className={cn(
           "relative group aspect-square rounded-lg overflow-hidden bg-neutral-900 border-2 cursor-pointer transition-all",
           selected ? "border-blue-500 ring-2 ring-blue-400/30" : "border-transparent hover:shadow-lg hover:border-neutral-700",
-          isDragging && "opacity-50",
           className
         )}
         title={selected ? "Selected" : ""}
         onClick={(e) => {
-          // Handle click separately from drag - only trigger if not dragging
-          if (!isDragging) {
-            e.stopPropagation();
-            if (onToggleSelection) {
-              onToggleSelection(item.id);
-            }
+          e.stopPropagation();
+          if (onToggleSelection) {
+            onToggleSelection(item.id);
           }
         }}
       >
