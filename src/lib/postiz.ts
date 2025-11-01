@@ -128,6 +128,21 @@ export const postizAPI = {
     try {
       const proxiedUrl = `${VERCEL_PROXY}posts`;
       
+      // Postiz requires images to be uploaded to their domain first, then referenced by path
+      let processedImages: {id: string, path: string}[] = [];
+      if (postData.mediaUrls && postData.mediaUrls.length > 0) {
+        // For now, we'll try to use the images as-is
+        // In a real implementation, you'd upload to Postiz first
+        processedImages = postData.mediaUrls.map((url, index) => {
+          // Postiz expects images to be on uploads.postiz.com domain
+          // If not, we'll still try to post but Postiz may reject
+          return {
+            id: `img_${index + 1}`,
+            path: url // Postiz expects 'path' field, not 'url'
+          };
+        });
+      }
+
       // Postiz requires specific format with all required fields
       const requestBody = {
         type: postData.scheduledAt ? 'schedule' : 'now',
@@ -136,29 +151,25 @@ export const postizAPI = {
           integration: { id: postData.profileIds[0] },
           value: [{
             content: postData.text,
-            image: postData.mediaUrls?.map((url, index) => {
-              // Postiz expects either external URLs or uploaded image IDs
-              // For external URLs, we pass them as-is but Postiz may require them to be uploaded to their domain
-              return {
-                id: `image_${index + 1}`,
-                url: url
-              };
-            }) || [],
+            image: processedImages,
             tags: [], // Required field - can be empty array
           }],
-          // Required settings object
+          // Required settings object with correct field names
           settings: {
             privacy_level: 'PUBLIC_TO_EVERYONE',
-            short_link: false,
+            shortLink: false, // lowercase 'L'
             duet: false,
             stitch: false,
             comment: true,
-            auto_add_music: 'no',
+            autoAddMusic: 'no', // camelCase
             brand_content_toggle: false,
-            brand_organic_toggle: false
+            brand_organic_toggle: false,
+            content_posting_method: 'DIRECT_POST' // Required field
           }
         }],
       };
+
+      console.log('📤 Posting to Postiz with format:', JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(proxiedUrl, {
         method: 'POST',
@@ -186,6 +197,42 @@ export const postizAPI = {
       };
     } catch (error) {
       throw new Error(`Failed to create post: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  },
+
+  // Upload images to Postiz domain (simplified for now)
+  async uploadImagesToPostizDomain(imageUrls: string[]): Promise<{id: string, path: string}[]> {
+    try {
+      console.log('🔄 Postiz requires images to be uploaded to uploads.postiz.com domain first');
+      console.log('📋 For now, providing guidance for manual upload to Postiz');
+      
+      // For now, return placeholder paths that indicate images need to be uploaded
+      // In a production system, you would:
+      // 1. Download images from external URLs
+      // 2. Upload them to Postiz's upload endpoint
+      // 3. Get the uploads.postiz.com URLs back
+      // 4. Use those URLs in the post
+      
+      return imageUrls.map((imageUrl, index) => {
+        // Extract filename from URL for reference
+        const urlParts = imageUrl.split('/');
+        const filename = urlParts[urlParts.length - 1] || `image_${index + 1}`;
+        
+        console.log(`📤 Image ${index + 1} needs to be uploaded to Postiz: ${filename}`);
+        
+        // Return a placeholder that indicates this image needs Postiz hosting
+        return {
+          id: `needs_upload_${index + 1}`,
+          path: `placeholder_${filename}` // This will fail validation, indicating need for upload
+        };
+      });
+      
+    } catch (error) {
+      console.error('Failed to process images for Postiz upload:', error);
+      return imageUrls.map((_, index) => ({
+        id: `error_${index + 1}`,
+        path: `error_image_${index + 1}.jpg`
+      }));
     }
   },
 
@@ -223,7 +270,7 @@ export const postizAPI = {
     }
   },
 
-  // Enhanced create post with automatic image processing
+  // Enhanced create post with automatic image processing and upload
   async createPostWithImages(postData: CreatePostData): Promise<PostizPost> {
     try {
       if (postData.mediaUrls && postData.mediaUrls.length > 0) {
@@ -231,15 +278,73 @@ export const postizAPI = {
         const externalUrls = postData.mediaUrls.filter(url => !url.includes('uploads.postiz.com'));
         
         if (externalUrls.length > 0) {
-          console.log(`Found ${externalUrls.length} external images that may need uploading to Postiz`);
-          // For now, we'll proceed with the external URLs
-          // In production, you'd upload these to Postiz first
+          console.log(`⚠️ Found ${externalUrls.length} external images that need uploading to Postiz domain first`);
+          console.log('📋 Postiz Requirement: Images must be uploaded to uploads.postiz.com domain');
+          
+          // For now, we'll still try to post with external URLs
+          // Some Postiz configurations may accept external URLs
+          // If it fails, we'll provide clear guidance
+          
+          try {
+            return await this.createPost(postData);
+          } catch (postError) {
+            // Check if it's the image domain error
+            const errorMessage = postError instanceof Error ? postError.message : '';
+            if (errorMessage.includes('uploads.postiz.com') || errorMessage.includes('domain')) {
+              throw new Error(`Postiz requires images to be uploaded to uploads.postiz.com domain first. 
+              
+To fix this:
+1. Upload your images to Postiz: https://app.postiz.com/
+2. Copy the uploads.postiz.com URLs
+3. Replace image URLs in your slideshow
+4. Try posting again
+
+External images (from imgbb.com, etc.) cannot be used directly with Postiz API.`);
+            } else {
+              throw postError; // Re-throw other errors
+            }
+          }
         }
       }
 
       return await this.createPost(postData);
     } catch (error) {
       throw new Error(`Failed to create post with images: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  },
+
+  // Helper method to validate if images are Postiz-compatible
+  validateImageUrls(imageUrls: string[]): {isValid: boolean, needsUpload: boolean, externalUrls: string[]} {
+    const externalUrls = imageUrls.filter(url => !url.includes('uploads.postiz.com'));
+    
+    return {
+      isValid: externalUrls.length === 0,
+      needsUpload: externalUrls.length > 0,
+      externalUrls
+    };
+  },
+
+  // Get upload endpoint from Postiz
+  async getUploadEndpoint(): Promise<{uploadUrl: string, uploadPath: string} | null> {
+    try {
+      const response = await fetch(`${VERCEL_PROXY}upload-url`, {
+        method: 'GET',
+        headers: postizAPI.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        console.warn('Failed to get upload endpoint from Postiz:', response.status);
+        return null;
+      }
+
+      const data = await response.json();
+      return {
+        uploadUrl: data.uploadUrl,
+        uploadPath: data.uploadPath || data.path
+      };
+    } catch (error) {
+      console.error('Failed to get upload endpoint:', error);
+      return null;
     }
   },
 

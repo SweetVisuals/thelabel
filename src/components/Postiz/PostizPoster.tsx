@@ -198,6 +198,31 @@ export const PostizPoster: React.FC<PostizPosterProps> = ({
       return;
     }
 
+    // Check if images need to be uploaded to Postiz domain
+    if (slideshow.condensedSlides) {
+      const imageUrls = slideshow.condensedSlides
+        .map(slide => slide.originalImageUrl || slide.condensedImageUrl)
+        .filter(Boolean);
+      
+      const imageValidation = postizAPI.validateImageUrls(imageUrls);
+      
+      if (imageValidation.needsUpload) {
+        setPostResult({
+          success: false,
+          message: `⚠️ Postiz requires images to be uploaded to uploads.postiz.com domain first. 
+
+Please:
+1. Go to Postiz app (https://app.postiz.com/)
+2. Upload your images to your media library
+3. Copy the uploads.postiz.com URLs
+4. Replace image URLs in your slideshow
+
+Current external images: ${imageValidation.externalUrls.length}`
+        });
+        return;
+      }
+    }
+
     setIsPosting(true);
     setPostResult(null);
 
