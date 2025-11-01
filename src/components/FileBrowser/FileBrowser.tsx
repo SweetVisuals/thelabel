@@ -216,7 +216,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const handleDragStart = (event: DragStartEvent) => {
     const draggedItem = fileItems.find(item => item.id === event.active.id);
-    if (draggedItem && (draggedItem.type === 'file' || draggedItem.type === 'slideshow')) {
+    if (draggedItem && (draggedItem.type === 'file' || draggedItem.type === 'slideshow' || draggedItem.type === 'folder')) {
       setActiveId(event.active.id as string);
       setDragStartTime(Date.now());
       // Note: We'll detect clicks in handleDragEnd if the drag was very short
@@ -1244,16 +1244,21 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 </div>
               </div>
             ) : activeItem && activeItem.type === 'folder' ? (
-              <FolderTile
-                item={activeItem}
-                onFolderClick={handleFolderClick}
-                onContextMenu={() => {}} // No context menu for drag overlay
-                renamingFolderId={null}
-                renameInputValue={''}
-                setRenameInputValue={() => {}}
-                setRenamingFolderId={() => {}}
-                handleRenameSubmit={() => {}}
-              />
+              <div className="relative pointer-events-none">
+                <FolderTile
+                  item={activeItem}
+                  onFolderClick={() => {}} // No click handling for drag overlay
+                  onContextMenu={() => {}} // No context menu for drag overlay
+                  renamingFolderId={null}
+                  renameInputValue={''}
+                  setRenameInputValue={() => {}}
+                  setRenamingFolderId={() => {}}
+                  handleRenameSubmit={() => {}}
+                />
+                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded mb-1 pointer-events-none">
+                  Drag folder
+                </div>
+              </div>
             ) : null}
           </DragOverlay>,
           document.body
@@ -1560,6 +1565,10 @@ const FolderTile: React.FC<{
       folderId: item.id
     }
   });
+  const { attributes, listeners, setNodeRef: dragSetNodeRef, transform, isDragging } = useDraggable({
+    id: item.id,
+    disabled: false
+  });
   const isRenaming = renamingFolderId === item.id;
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1572,13 +1581,22 @@ const FolderTile: React.FC<{
 
   console.log(`📁 FolderTile render: ${item.name} (${item.id}) - isOver: ${isOver}`);
 
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+  } : {};
+
   return (
     <div onClick={(e) => {
       e.stopPropagation();
       if (!isRenaming) onFolderClick(item.id);
     }}>
       <div
-        ref={setNodeRef}
+        ref={(node) => {
+          setNodeRef(node);
+          dragSetNodeRef(node);
+        }}
+        {...attributes}
+        {...listeners}
         onContextMenu={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -1586,9 +1604,11 @@ const FolderTile: React.FC<{
         }}
         className={cn(
           "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 border-transparent cursor-pointer transition-all",
-          isOver ? "border-blue-500 ring-2 ring-blue-400/30 bg-blue-500/20" : "hover:shadow-lg hover:border-blue-400/50"
+          isOver ? "border-blue-500 ring-2 ring-blue-400/30 bg-blue-500/20" : "hover:shadow-lg hover:border-blue-400/50",
+          isDragging && "opacity-50"
         )}
         style={{
+          ...style,
           zIndex: isOver ? 50 : 1,
         }}
       >
