@@ -74,7 +74,8 @@ export class PostizUploadService {
     console.log(`🌐 Uploading to Postiz from URL: ${imageUrl}`);
     
     try {
-      const response = await fetch('/api/postiz-proxy/upload-from-url', {
+      // Try direct Postiz API call first (no proxy needed)
+      const response = await fetch('https://api.postiz.com/public/v1/upload-from-url', {
         method: 'POST',
         headers: {
           'Authorization': postizAPI.getApiKey() || '',
@@ -91,7 +92,7 @@ export class PostizUploadService {
         
         // Provide specific error messages for different failure types
         if (response.status === 404) {
-          throw new Error('Upload endpoint not found. The Postiz API proxy may not be configured correctly.');
+          throw new Error('Upload endpoint not found. The Postiz API endpoint may be incorrect.');
         } else if (response.status === 401) {
           throw new Error('Authentication failed. Please check your Postiz API key.');
         } else {
