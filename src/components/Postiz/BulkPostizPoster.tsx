@@ -139,7 +139,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     const schedule: PostingSchedule[] = [];
     
     if (postingStrategy === 'first-now') {
-      // First post now, rest at intervals from start time
+      // First post now, rest at intervals from first post time
       const now = new Date();
       schedule.push({
         slideshowId: slideshows[0].id,
@@ -148,10 +148,13 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         status: 'pending'
       });
       
-      // Generate subsequent posts from start time
-      let currentTime = new Date(startTime);
+      // Generate subsequent posts from first post time (now)
+      let currentTime = new Date(now);
       
       for (let i = 1; i < slideshows.length; i++) {
+        // Move to next interval
+        currentTime = new Date(currentTime.getTime() + (intervalHours * 60 * 60 * 1000));
+        
         // Apply time constraints
         const constrainedTime = applyScheduleConstraints(currentTime);
         
@@ -166,9 +169,6 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           scheduledTime: constrainedTime,
           status: 'pending'
         });
-        
-        // Move to next interval
-        currentTime = new Date(currentTime.getTime() + (intervalHours * 60 * 60 * 1000));
       }
     } else {
       // All posts scheduled at intervals from start time
