@@ -12,7 +12,6 @@ import {
   Move,
   Grid3X3,
   List,
-  Search,
   Filter,
   SortAsc,
   SortDesc,
@@ -95,7 +94,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [editingImage, setEditingImage] = useState<UploadedImage | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
   const [showHidden, setShowHidden] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; items: string[]; type: 'general' | 'folder' | 'slideshow'; targetId?: string } | null>(null);
   const [showCreateFolderDialog, setShowCreateFolderDialog] = useState(false);
@@ -111,6 +109,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [bulkSlideshowsToPost, setBulkSlideshowsToPost] = useState<SlideshowMetadata[]>([]);
   const [isCreatingFromTemplate, setIsCreatingFromTemplate] = useState(false);
   const [showTemplateSelectionDialog, setShowTemplateSelectionDialog] = useState(false);
+  const [remixOrder, setRemixOrder] = useState<string[] | null>(null); // Store remixed order for images
+  const [isRemixed, setIsRemixed] = useState(false); // Track if current order is remixed
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileTileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -265,13 +265,14 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       size: img.file.size,
       modified: new Date(img.file.lastModified),
       image: img,
+      // Add original index for remixed order display
+      _originalIndex: img.id,
     })),
     // Add slideshow files from service (loaded in memory)
     ...getSlideshowsFromService()
   ];
 
   const filteredAndSortedItems = [...fileItems]
-    .filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
     .sort((a, b) => {
       // Sort by type: folders first, then slideshows, then files
       const typeOrder = { folder: 0, slideshow: 1, file: 2 };
@@ -802,20 +803,68 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
   };
 
   const handleRemixImages = () => {
-    if (selectedImages.length < 2) {
-      toast.error('Need at least 2 selected images to remix');
+    if (currentImages.length < 2) {
+      toast.error('Need at least 2 images to remix');
       return;
     }
 
-    // Shuffle the selected images order
-    const shuffledImages = [...selectedImages];
+    // Shuffle all current images to create a new visual order
+    const shuffledImages = [...currentImages];
     for (let i = shuffledImages.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
     }
 
-    onSelectionChange(shuffledImages);
-    toast.success('Images remixed! Create new template variations');
+    // Create new selection based on remixed order, preserving selected status
+    const remixedIds = shuffledImages.map(img => img.id);
+    const newSelection = selectedImages
+      .map(id => remixedIds.indexOf(id))
+      .filter(index => index !== -1)
+      .sort((a, b) => a - b)
+      .map(index => remixedIds[index]);
+
+    // Update selection with remixed order
+    onSelectionChange(newSelection);
+    setRemixOrder(remixedIds);
+    setIsRemixed(true);
+    
+    // Update the images to show remixed order visually
+    if (currentFolderId === null) {
+      // Update root images
+      onImagesUploaded(shuffledImages);
+    } else {
+      // Update folder images
+      const updatedFolders = folders.map(f =>
+        f.id === currentFolderId
+          ? { ...f, images: shuffledImages }
+          : f
+      );
+      onFoldersChange?.(updatedFolders);
+    }
+
+    toast.success('Images remixed! Order shuffled for template variations');
+  };
+
+  const handleUnremixImages = () => {
+    // Reset to original order by reloading from storage
+    const loadOriginalOrder = async () => {
+      try {
+        const [loadedImages, loadedFolders] = await Promise.all([
+          imageService.loadImages(),
+          imageService.loadFolders(),
+        ]);
+        onImagesUploaded(loadedImages);
+        onFoldersChange?.(loadedFolders);
+        setRemixOrder(null);
+        setIsRemixed(false);
+        toast.success('Images restored to original order');
+      } catch (error) {
+        console.error('Failed to restore original order:', error);
+        toast.error('Failed to restore original order');
+      }
+    };
+    
+    loadOriginalOrder();
   };
 
   const handleTemplateSelectionConfirm = async (templateId: string, aspectRatio: string) => {
@@ -846,13 +895,14 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         return;
       }
 
-      // Split selected images into chunks based on cut length
+      // Split selected images into chunks based on cut length, respecting remixed order
+      const orderedImages = remixOrder
+        ? selectedImages.map(id => images.find(img => img.id === id)).filter(img => img !== undefined) as UploadedImage[]
+        : selectedImages.map(id => images.find(img => img.id === id)).filter(img => img !== undefined) as UploadedImage[];
+        
       const imageChunks: UploadedImage[][] = [];
-      for (let i = 0; i < selectedImages.length; i += cutLength) {
-        const chunk = selectedImages
-          .slice(i, i + cutLength)
-          .map(id => images.find(img => img.id === id))
-          .filter(img => img !== undefined) as UploadedImage[];
+      for (let i = 0; i < orderedImages.length; i += cutLength) {
+        const chunk = orderedImages.slice(i, i + cutLength);
         
         if (chunk.length > 0) {
           imageChunks.push(chunk);
@@ -944,6 +994,10 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       } else {
         toast.error(`Failed to create any slideshows. Please try again.`);
       }
+
+      // Reset remix order after template creation
+      setRemixOrder(null);
+      setIsRemixed(false);
 
     } catch (error) {
       console.error('Failed to create slideshows from template:', error);
@@ -1406,36 +1460,32 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
 
           </div>
 
-          {/* Bottom Row - Search, Sort, View */}
+          {/* Bottom Row - Sort, View */}
           <div className="flex items-center justify-between">
-            {/* Left side - Search */}
-            <div className="relative flex-1 max-w-xs">
-              <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400" />
-              <input
-                type="text"
-                placeholder="Search files..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 text-sm bg-neutral-800 border border-neutral-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent w-full text-white placeholder-neutral-400"
-              />
+            {/* Left side - Remix Button */}
+            <div className="flex items-center space-x-3">
+              {/* Remix Button */}
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={isRemixed ? handleUnremixImages : handleRemixImages}
+                disabled={!isRemixed && currentImages.length < 2}
+                className={cn(
+                  "flex items-center space-x-2 px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                  isRemixed
+                    ? "bg-orange-600 hover:bg-orange-700 text-white"
+                    : "bg-purple-600 hover:bg-purple-700 text-white"
+                )}
+                title={isRemixed ? "Restore images to original order" : "Shuffle all images for different template variations"}
+              >
+                <Shuffle className="w-4 h-4" />
+                <span>{isRemixed ? "Restore Order" : "Remix Images"}</span>
+              </Button>
             </div>
 
             <div className="flex items-center space-x-3">
               {/* Slideshow Controls */}
               <div className="flex items-center space-x-2 border-r border-neutral-700 pr-3">
-                {/* Remix Button */}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleRemixImages}
-                  disabled={selectedImages.length < 2}
-                  className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Shuffle selected images for different template variations"
-                >
-                  <Shuffle className="w-4 h-4" />
-                  <span>Remix</span>
-                </Button>
-
                 {/* Slideshow Limit Dropdown */}
                 <div className="flex items-center space-x-2">
                   <label className="text-xs text-neutral-400 whitespace-nowrap">Cut Length:</label>
