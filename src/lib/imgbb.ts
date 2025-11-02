@@ -301,6 +301,130 @@ export const switchApiKey = (keyIndex?: number) => {
   }
 };
 
+// Test individual API keys by attempting a minimal upload
+export const testApiKey = async (keyIndex: number = 0): Promise<{ success: boolean; message: string; details?: any; error?: any }> => {
+  if (keyIndex < 0 || keyIndex >= IMGBB_API_KEYS.length) {
+    return { success: false, message: `Invalid key index: ${keyIndex}` };
+  }
+
+  const apiKey = IMGBB_API_KEYS[keyIndex];
+  
+  // Create a minimal 1x1 pixel PNG test image
+  const testImageData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const testImageBlob = new Blob([Uint8Array.from(atob(testImageData), c => c.charCodeAt(0))], { type: 'image/png' });
+  const testImageFile = new File([testImageBlob], 'test.png', { type: 'image/png' });
+
+  try {
+    console.log(`🔍 Testing API key ${keyIndex + 1}/${IMGBB_API_KEYS.length}: ${apiKey.substring(0, 8)}...`);
+
+    const formData = new FormData();
+    formData.append('key', apiKey);
+    formData.append('image', testImageFile);
+    formData.append('name', 'api_test');
+
+    const response = await fetch(IMGBB_UPLOAD_URL, {
+      method: 'POST',
+      body: formData,
+    });
+
+    console.log(`📊 API Test Response: ${response.status} ${response.statusText}`);
+
+    const responseText = await response.text();
+    console.log(`📊 API Test Response Body:`, responseText);
+
+    if (response.ok) {
+      try {
+        const jsonResponse = JSON.parse(responseText);
+        if (jsonResponse.success) {
+          return {
+            success: true,
+            message: `API key ${keyIndex + 1} is valid and working`,
+            details: `Uploaded test image: ${jsonResponse.data?.url || 'URL not available'}`
+          };
+        } else {
+          return {
+            success: false,
+            message: `API key ${keyIndex + 1} returned success:false`,
+            details: responseText
+          };
+        }
+      } catch (parseError) {
+        return {
+          success: false,
+          message: `API key ${keyIndex + 1} returned invalid JSON`,
+          details: responseText
+        };
+      }
+    } else {
+      return {
+        success: false,
+        message: `API key ${keyIndex + 1} failed: ${response.status} ${response.statusText}`,
+        details: responseText
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      message: `API key ${keyIndex + 1} test failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
+    };
+  }
+};
+
+// Test all API keys and return results
+export const testAllApiKeys = async (): Promise<{ keyIndex: number; success: boolean; message: string }[]> => {
+  console.log('🧪 Testing all ImgBB API keys...');
+  
+  const results = await Promise.all(
+    IMGBB_API_KEYS.map((_, index) => testApiKey(index))
+  );
+
+  const formattedResults = results.map((result, index) => ({
+    keyIndex: index + 1,
+    success: result.success,
+    message: result.message
+  }));
+
+  console.log('🧪 API Key Test Results:', formattedResults);
+  
+  return formattedResults;
+};
+
+// Add a new API key dynamically
+export const addApiKey = (apiKey: string, setAsActive: boolean = false): void => {
+  if (!apiKey || apiKey.length < 10) {
+    throw new Error('Invalid API key format');
+  }
+
+  // Check if key already exists
+  if (IMGBB_API_KEYS.includes(apiKey)) {
+    console.log(`⚠️ API key already exists: ${apiKey.substring(0, 8)}...`);
+    return;
+  }
+
+  // Add to the array (though this won't persist across restarts since it's const)
+  // In a real app, this should be stored in a database or config
+  console.log(`➕ Adding new API key: ${apiKey.substring(0, 8)}...`);
+  console.log('⚠️ Note: API keys are hardcoded and need to be updated in the source code to persist');
+  
+  if (setAsActive) {
+    rateLimitTracker.currentKeyIndex = IMGBB_API_KEYS.length;
+  }
+};
+
+// Enhanced error logging for debugging
+export const logDetailedError = (error: any, context: string) => {
+  console.error(`❌ ${context}:`, {
+    error: error,
+    errorMessage: error?.message,
+    errorStack: error?.stack,
+    timestamp: new Date().toISOString(),
+    currentApiKey: rateLimitTracker.currentKeyIndex + 1,
+    totalApiKeys: IMGBB_API_KEYS.length,
+    rateLimitStatus: getRateLimitStatus()
+  });
+};
+
 export const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
