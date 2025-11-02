@@ -155,18 +155,18 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         // Move to next interval
         currentTime = new Date(currentTime.getTime() + (intervalHours * 60 * 60 * 1000));
         
-        // Apply time constraints
-        const constrainedTime = applyScheduleConstraints(currentTime);
+        // Apply time constraints and continue from adjusted time
+        currentTime = applyScheduleConstraints(currentTime);
         
         // Skip if after 10pm
-        if (constrainedTime.getHours() > 22) {
+        if (currentTime.getHours() > 22) {
           continue; // Skip this slideshow
         }
         
         schedule.push({
           slideshowId: slideshows[i].id,
           slideshowTitle: slideshows[i].title,
-          scheduledTime: constrainedTime,
+          scheduledTime: currentTime,
           status: 'pending'
         });
       }
@@ -175,18 +175,18 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       let currentTime = new Date(startTime);
       
       for (let i = 0; i < slideshows.length; i++) {
-        // Apply time constraints
-        const constrainedTime = applyScheduleConstraints(currentTime);
+        // Apply time constraints and continue from adjusted time
+        currentTime = applyScheduleConstraints(currentTime);
         
         // Skip if after 10pm
-        if (constrainedTime.getHours() > 22) {
+        if (currentTime.getHours() > 22) {
           continue; // Skip this slideshow
         }
         
         schedule.push({
           slideshowId: slideshows[i].id,
           slideshowTitle: slideshows[i].title,
-          scheduledTime: constrainedTime,
+          scheduledTime: currentTime,
           status: 'pending'
         });
         
@@ -726,18 +726,18 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
               <select
                 value={intervalHours}
                 onChange={(e) => setIntervalHours(Number(e.target.value))}
-                className="w-full px-4 py-3 bg-white dark:bg-slate-900 text-foreground rounded-xl border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+                className="w-full px-4 py-3 bg-white dark:bg-slate-900 text-foreground rounded-xl border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all [&>option]:bg-white [&>option]:dark:bg-slate-800 [&>option]:text-foreground"
               >
-                <option value={0.5}>30 minutes</option>
-                <option value={1}>1 hour</option>
-                <option value={1.5}>1.5 hours</option>
-                <option value={2}>2 hours</option>
-                <option value={2.5}>2.5 hours</option>
-                <option value={3}>3 hours</option>
-                <option value={4}>4 hours</option>
-                <option value={6}>6 hours</option>
-                <option value={12}>12 hours</option>
-                <option value={24}>24 hours</option>
+                <option value={0.5} className="dark:bg-slate-800 dark:text-slate-100">30 minutes</option>
+                <option value={1} className="dark:bg-slate-800 dark:text-slate-100">1 hour</option>
+                <option value={1.5} className="dark:bg-slate-800 dark:text-slate-100">1.5 hours</option>
+                <option value={2} className="dark:bg-slate-800 dark:text-slate-100">2 hours</option>
+                <option value={2.5} className="dark:bg-slate-800 dark:text-slate-100">2.5 hours</option>
+                <option value={3} className="dark:bg-slate-800 dark:text-slate-100">3 hours</option>
+                <option value={4} className="dark:bg-slate-800 dark:text-slate-100">4 hours</option>
+                <option value={6} className="dark:bg-slate-800 dark:text-slate-100">6 hours</option>
+                <option value={12} className="dark:bg-slate-800 dark:text-slate-100">12 hours</option>
+                <option value={24} className="dark:bg-slate-800 dark:text-slate-100">24 hours</option>
               </select>
               <p className="text-xs text-muted-foreground">
                 Optimal TikTok posting: 3-6 hours recommended
@@ -752,7 +752,10 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                   min={new Date().toISOString().slice(0, 16)}
-                  className="w-full px-4 py-3 bg-white dark:bg-slate-900 text-foreground rounded-xl border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-900 text-foreground rounded-xl border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all [&::-webkit-calendar-picker-indicator]:dark:filter [&::-webkit-calendar-picker-indicator]:dark:invert"
+                  style={{
+                    colorScheme: 'light dark'
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">
                   All posts will be scheduled from this time
