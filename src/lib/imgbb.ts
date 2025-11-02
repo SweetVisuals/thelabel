@@ -1,7 +1,9 @@
 // ImgBB API Keys with automatic fallback
 const IMGBB_API_KEYS = [
   '424cc4e82ae2d9d31f09dc79f1fe8276', // Primary key
-  '52473df17c0bb10090ca74a0d50ad884'  // Backup key
+  '52473df17c0bb10090ca74a0d50ad884', // Backup key
+  'f87254710198f566746ed01f0115dbce', // Third key for enhanced resilience
+  '0d3ed300109c2db7fba6d3192190cbb3'  // Fourth key for maximum resilience
 ];
 
 // Rate limiting tracking per API key
