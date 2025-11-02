@@ -109,8 +109,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [bulkSlideshowsToPost, setBulkSlideshowsToPost] = useState<SlideshowMetadata[]>([]);
   const [isCreatingFromTemplate, setIsCreatingFromTemplate] = useState(false);
   const [showTemplateSelectionDialog, setShowTemplateSelectionDialog] = useState(false);
-  const [remixOrder, setRemixOrder] = useState<string[] | null>(null); // Store remixed order for images
-  const [isRemixed, setIsRemixed] = useState(false); // Track if current order is remixed
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileTileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -815,19 +813,6 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
     }
 
-    // Create new selection based on remixed order, preserving selected status
-    const remixedIds = shuffledImages.map(img => img.id);
-    const newSelection = selectedImages
-      .map(id => remixedIds.indexOf(id))
-      .filter(index => index !== -1)
-      .sort((a, b) => a - b)
-      .map(index => remixedIds[index]);
-
-    // Update selection with remixed order
-    onSelectionChange(newSelection);
-    setRemixOrder(remixedIds);
-    setIsRemixed(true);
-    
     // Update the images to show remixed order visually
     if (currentFolderId === null) {
       // Update root images
@@ -842,30 +827,10 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       onFoldersChange?.(updatedFolders);
     }
 
-    toast.success('Images remixed! Order shuffled for template variations');
+    toast.success('Images remixed! Click again for another shuffle');
   };
 
-  const handleUnremixImages = () => {
-    // Reset to original order by reloading from storage
-    const loadOriginalOrder = async () => {
-      try {
-        const [loadedImages, loadedFolders] = await Promise.all([
-          imageService.loadImages(),
-          imageService.loadFolders(),
-        ]);
-        onImagesUploaded(loadedImages);
-        onFoldersChange?.(loadedFolders);
-        setRemixOrder(null);
-        setIsRemixed(false);
-        toast.success('Images restored to original order');
-      } catch (error) {
-        console.error('Failed to restore original order:', error);
-        toast.error('Failed to restore original order');
-      }
-    };
-    
-    loadOriginalOrder();
-  };
+  
 
   const handleTemplateSelectionConfirm = async (templateId: string, aspectRatio: string) => {
     if (selectedImages.length === 0) {
@@ -895,14 +860,13 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         return;
       }
 
-      // Split selected images into chunks based on cut length, respecting remixed order
-      const orderedImages = remixOrder
-        ? selectedImages.map(id => images.find(img => img.id === id)).filter(img => img !== undefined) as UploadedImage[]
-        : selectedImages.map(id => images.find(img => img.id === id)).filter(img => img !== undefined) as UploadedImage[];
-        
+      // Split selected images into chunks based on cut length
       const imageChunks: UploadedImage[][] = [];
-      for (let i = 0; i < orderedImages.length; i += cutLength) {
-        const chunk = orderedImages.slice(i, i + cutLength);
+      for (let i = 0; i < selectedImages.length; i += cutLength) {
+        const chunk = selectedImages
+          .slice(i, i + cutLength)
+          .map(id => images.find(img => img.id === id))
+          .filter(img => img !== undefined) as UploadedImage[];
         
         if (chunk.length > 0) {
           imageChunks.push(chunk);
@@ -994,10 +958,6 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       } else {
         toast.error(`Failed to create any slideshows. Please try again.`);
       }
-
-      // Reset remix order after template creation
-      setRemixOrder(null);
-      setIsRemixed(false);
 
     } catch (error) {
       console.error('Failed to create slideshows from template:', error);
@@ -1468,18 +1428,13 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={isRemixed ? handleUnremixImages : handleRemixImages}
-                disabled={!isRemixed && currentImages.length < 2}
-                className={cn(
-                  "flex items-center space-x-2 px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
-                  isRemixed
-                    ? "bg-orange-600 hover:bg-orange-700 text-white"
-                    : "bg-purple-600 hover:bg-purple-700 text-white"
-                )}
-                title={isRemixed ? "Restore images to original order" : "Shuffle all images for different template variations"}
+                onClick={handleRemixImages}
+                disabled={currentImages.length < 2}
+                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Shuffle all images for different template variations (click multiple times)"
               >
                 <Shuffle className="w-4 h-4" />
-                <span>{isRemixed ? "Restore Order" : "Remix Images"}</span>
+                <span>Remix Images</span>
               </Button>
             </div>
 
