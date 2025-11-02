@@ -137,47 +137,79 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     if (!startTime) return;
     
     const schedule: PostingSchedule[] = [];
-    const startDate = new Date(startTime);
     
-    for (let i = 0; i < slideshows.length; i++) {
-      const slideshow = slideshows[i];
-      let scheduledTime: Date;
-      
-      if (postingStrategy === 'first-now') {
-        // First post now, rest at intervals
-        if (i === 0) {
-          scheduledTime = new Date(); // Now
-        } else {
-          scheduledTime = new Date(startDate.getTime() + ((i - 1) * intervalHours * 60 * 60 * 1000));
-        }
-      } else {
-        // All posts scheduled at intervals
-        scheduledTime = new Date(startDate.getTime() + (i * intervalHours * 60 * 60 * 1000));
-      }
-      
-      // Check if scheduled time falls in the forbidden window (12am-9am)
-      // If so, skip to 9am and continue from there
-      const hour = scheduledTime.getHours();
-      if (hour >= 0 && hour < 9) {
-        // Set to 9am on the same day
-        scheduledTime.setHours(9, 0, 0, 0);
-      }
-      
-      // Check if the scheduled time would be after 10pm
-      // If so, don't schedule this post (skip beyond 10pm)
-      if (scheduledTime.getHours() > 22) {
-        continue; // Skip this slideshow - would schedule after 10pm
-      }
-      
+    if (postingStrategy === 'first-now') {
+      // First post now, rest at intervals from start time
+      const now = new Date();
       schedule.push({
-        slideshowId: slideshow.id,
-        slideshowTitle: slideshow.title,
-        scheduledTime,
+        slideshowId: slideshows[0].id,
+        slideshowTitle: slideshows[0].title,
+        scheduledTime: now,
         status: 'pending'
       });
+      
+      // Generate subsequent posts from start time
+      let currentTime = new Date(startTime);
+      
+      for (let i = 1; i < slideshows.length; i++) {
+        // Apply time constraints
+        const constrainedTime = applyScheduleConstraints(currentTime);
+        
+        // Skip if after 10pm
+        if (constrainedTime.getHours() > 22) {
+          continue; // Skip this slideshow
+        }
+        
+        schedule.push({
+          slideshowId: slideshows[i].id,
+          slideshowTitle: slideshows[i].title,
+          scheduledTime: constrainedTime,
+          status: 'pending'
+        });
+        
+        // Move to next interval
+        currentTime = new Date(currentTime.getTime() + (intervalHours * 60 * 60 * 1000));
+      }
+    } else {
+      // All posts scheduled at intervals from start time
+      let currentTime = new Date(startTime);
+      
+      for (let i = 0; i < slideshows.length; i++) {
+        // Apply time constraints
+        const constrainedTime = applyScheduleConstraints(currentTime);
+        
+        // Skip if after 10pm
+        if (constrainedTime.getHours() > 22) {
+          continue; // Skip this slideshow
+        }
+        
+        schedule.push({
+          slideshowId: slideshows[i].id,
+          slideshowTitle: slideshows[i].title,
+          scheduledTime: constrainedTime,
+          status: 'pending'
+        });
+        
+        // Move to next interval
+        currentTime = new Date(currentTime.getTime() + (intervalHours * 60 * 60 * 1000));
+      }
     }
     
     setPostingSchedule(schedule);
+  };
+
+  const applyScheduleConstraints = (baseTime: Date): Date => {
+    const hour = baseTime.getHours();
+    
+    // If scheduled time falls in the forbidden window (12am-9am)
+    if (hour >= 0 && hour < 9) {
+      // Move to 9am on the same day
+      const adjustedTime = new Date(baseTime);
+      adjustedTime.setHours(9, 0, 0, 0);
+      return adjustedTime;
+    }
+    
+    return baseTime;
   };
 
   const handleProfileToggle = (profileId: string) => {
