@@ -91,7 +91,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onCutLengthChange,
 }) => {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
-  const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'date' | 'size' | 'order'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [editingImage, setEditingImage] = useState<UploadedImage | null>(null);
   const [showHidden, setShowHidden] = useState(false);
@@ -111,6 +111,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [showTemplateSelectionDialog, setShowTemplateSelectionDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileTileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [displayedImages, setDisplayedImages] = useState<UploadedImage[]>([]); // Track actual displayed images
 
   // Use external currentFolderId
   const currentFolderId = externalCurrentFolderId;
@@ -122,7 +123,22 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       foldersCount: folders.length,
       currentFolderId,
     });
+    
+    // Update displayed images when props change (only for root level)
+    if (currentFolderId === null) {
+      setDisplayedImages(images);
+    }
   }, [images, folders, currentFolderId]);
+
+  // Update displayed images when folder changes
+  useEffect(() => {
+    if (currentFolderId !== null) {
+      const folder = folders.find(f => f.id === currentFolderId);
+      if (folder) {
+        setDisplayedImages(folder.images);
+      }
+    }
+  }, [currentFolderId, folders]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -241,10 +257,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }
   };
 
-  const currentFolder = folders.find(f => f.id === currentFolderId);
-  const currentImages = currentFolder ? currentFolder.images : images.filter(img =>
-    !folders.some(f => f.images.some(fImg => fImg.id === img.id))
-  );
+  // Use displayedImages for the actual order shown in the UI
+  const currentImages = displayedImages;
 
 
   const fileItems: FileItem[] = [
@@ -288,6 +302,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           break;
         case 'size':
           comparison = (a.size || 0) - (b.size || 0);
+          break;
+        case 'order':
+          // For order sorting, maintain the current displayed order
+          // This is a no-op since we're already using displayedImages which has the remixed order
+          comparison = 0;
           break;
       }
       return sortOrder === 'asc' ? comparison : -comparison;
@@ -396,84 +415,83 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           : [...selectedSlideshows, id];
         onSlideshowSelectionChange(newSelection);
         
+        // Clear image selection when slideshow is selected
+        if (!wasSelected && onSelectionChange) {
+          onSelectionChange([]);
+        }
+        
         // If we're deselecting a slideshow, unload it from TikTok preview
         if (wasSelected && onSlideshowUnload) {
           onSlideshowUnload();
         }
-      } else {
-        // Fallback to original behavior for images
-        const wasSelected = selectedImages.includes(id);
-        const isDeselecting = wasSelected && item.type === 'slideshow';
-        
-        const newSelection = selectedImages.includes(id)
-          ? selectedImages.filter(sid => sid !== id)
-          : [...selectedImages, id];
-        onSelectionChange(newSelection);
-        
-        // If we're deselecting a slideshow, unload it from TikTok preview
-        if (isDeselecting && onSlideshowUnload) {
-          onSlideshowUnload();
-        }
       }
     } else {
-      // Handle image selection
+      // Handle image selection (always use selectedImages for images)
       if (shiftPressed) {
         // Shift+click: select range
-        const allSelectableIds = filteredAndSortedItems
-          .filter(item => item.type === 'file' || item.type === 'slideshow')
+        const allImageIds = filteredAndSortedItems
+          .filter(item => item.type === 'file')
           .map(item => item.id);
 
-        const currentIndex = allSelectableIds.indexOf(id);
+        const currentIndex = allImageIds.indexOf(id);
         const lastSelectedIndex = selectedImages.length > 0 ?
-          Math.max(...selectedImages.map(sid => allSelectableIds.indexOf(sid))) : currentIndex;
+          Math.max(...selectedImages.map(sid => allImageIds.indexOf(sid))) : currentIndex;
 
         const startIndex = Math.min(currentIndex, lastSelectedIndex);
         const endIndex = Math.max(currentIndex, lastSelectedIndex);
 
-        const rangeIds = allSelectableIds.slice(startIndex, endIndex + 1);
+        const rangeIds = allImageIds.slice(startIndex, endIndex + 1);
         const newSelection = Array.from(new Set([...selectedImages, ...rangeIds]));
         onSelectionChange(newSelection);
+        
+        // Clear slideshow selection when images are selected
+        if (onSlideshowSelectionChange) {
+          onSlideshowSelectionChange([]);
+        }
       } else if (ctrlPressed) {
         // Ctrl/Cmd+click: toggle individual selection
-        const newSelection = selectedImages.includes(id)
+        const wasSelected = selectedImages.includes(id);
+        const newSelection = wasSelected
           ? selectedImages.filter(sid => sid !== id)
           : [...selectedImages, id];
         onSelectionChange(newSelection);
+        
+        // Clear slideshow selection when images are selected
+        if (!wasSelected && onSlideshowSelectionChange) {
+          onSlideshowSelectionChange([]);
+        }
       } else {
         // Regular click: toggle selection (select if not selected, deselect if selected)
-        const newSelection = selectedImages.includes(id)
+        const wasSelected = selectedImages.includes(id);
+        const newSelection = wasSelected
           ? selectedImages.filter(sid => sid !== id)
           : [...selectedImages, id];
         onSelectionChange(newSelection);
+        
+        // Clear slideshow selection when images are selected
+        if (!wasSelected && onSlideshowSelectionChange) {
+          onSlideshowSelectionChange([]);
+        }
       }
     }
   };
 
   const selectAll = () => {
-    // Handle images and slideshows separately
+    // Get all image items only (not slideshows)
     const imageIds = filteredAndSortedItems.filter(item => item.type === 'file').map(item => item.id);
-    const slideshowIds = filteredAndSortedItems.filter(item => item.type === 'slideshow').map(item => item.id);
     
-    // Check if we have any images or slideshows
-    if (imageIds.length === 0 && slideshowIds.length === 0) return;
+    if (imageIds.length === 0) return;
     
-    // Toggle selection for images
-    if (imageIds.length > 0) {
-      const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
-      if (allImagesSelected) {
-        onSelectionChange(selectedImages.filter(id => !imageIds.includes(id)));
-      } else {
-        onSelectionChange([...new Set([...selectedImages, ...imageIds])]);
-      }
-    }
-    
-    // Toggle selection for slideshows  
-    if (slideshowIds.length > 0 && onSlideshowSelectionChange) {
-      const allSlideshowsSelected = slideshowIds.every(id => selectedSlideshows.includes(id));
-      if (allSlideshowsSelected) {
-        onSlideshowSelectionChange(selectedSlideshows.filter(id => !slideshowIds.includes(id)));
-      } else {
-        onSlideshowSelectionChange([...new Set([...selectedSlideshows, ...slideshowIds])]);
+    // Toggle selection for images only
+    const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
+    if (allImagesSelected) {
+      // Deselect all images
+      onSelectionChange([]);
+    } else {
+      // Select all images and clear slideshow selection
+      onSelectionChange(imageIds);
+      if (onSlideshowSelectionChange) {
+        onSlideshowSelectionChange([]);
       }
     }
   };
@@ -806,44 +824,50 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       return;
     }
 
-    // Get positions of selected images in the current array
-    const selectedPositions = selectedImages
-      .map(id => currentImages.findIndex(img => img.id === id))
-      .filter(pos => pos !== -1)
-      .sort((a, b) => a - b);
+    console.log('🎲 Starting remix with selected images:', selectedImages);
+    console.log('🖼️ Current images array:', currentImages.map(img => ({ id: img.id, name: img.file.name })));
 
-    if (selectedPositions.length < 2) {
+    // Get selected images data
+    const selectedImageObjects = selectedImages
+      .map(id => currentImages.find(img => img.id === id))
+      .filter(img => img !== undefined) as UploadedImage[];
+
+    if (selectedImageObjects.length < 2) {
       toast.error('Need at least 2 valid selected images to remix');
       return;
     }
 
-    // Extract selected images from their current positions
-    const selectedImagesAtPositions = selectedPositions.map(pos => currentImages[pos]);
-
-    // Shuffle the selected images
-    const shuffledSelected = [...selectedImagesAtPositions];
-    for (let i = shuffledSelected.length - 1; i > 0; i--) {
+    // Simple shuffle: Just shuffle the selected images
+    const shuffledImages = [...selectedImageObjects];
+    for (let i = shuffledImages.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [shuffledSelected[i], shuffledSelected[j]] = [shuffledSelected[j], shuffledSelected[i]];
+      [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
     }
 
-    // Create new array with selected images moved to different positions
+    console.log('🔀 Shuffled selected images:', shuffledImages.map(img => img.id));
+
+    // Replace the selected images in their original positions with shuffled versions
     const newImages = [...currentImages];
-    
-    // Randomly reassign shuffled selected images to different positions
-    const availablePositions = [...selectedPositions];
-    shuffledSelected.forEach((image, index) => {
-      if (availablePositions.length > 0) {
-        const randomIndex = Math.floor(Math.random() * availablePositions.length);
-        const newPosition = availablePositions.splice(randomIndex, 1)[0];
-        newImages[newPosition] = image;
+
+    // Find the original positions of selected images and replace them in order
+    selectedImages.forEach((originalId, index) => {
+      const originalPosition = currentImages.findIndex(img => img.id === originalId);
+      if (originalPosition !== -1 && index < shuffledImages.length) {
+        newImages[originalPosition] = shuffledImages[index];
+        console.log(`📍 Moved ${shuffledImages[index].file.name} to position ${originalPosition}`);
       }
     });
 
-    // Update the images to show remixed order visually
+    console.log('📋 New images array after remix:', newImages.map(img => img ? img.file.name : 'null'));
+
+    // Update displayed images to show remixed order visually
+    setDisplayedImages(newImages);
+
+    // Update the underlying data as well
     if (externalCurrentFolderId === null) {
       // Update root images
       onImagesUploaded(newImages);
+      console.log('✅ Updated root images with remixed order');
     } else {
       // Update folder images
       const updatedFolders = folders.map(f =>
@@ -852,14 +876,24 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
           : f
       );
       onFoldersChange?.(updatedFolders);
+      console.log('✅ Updated folder images with remixed order');
     }
 
-    // Update selection to match the new visual order
-    const newSelection = selectedPositions
-      .map(pos => newImages[pos]?.id)
-      .filter(id => id !== undefined);
-    onSelectionChange(newSelection);
+    // Update selection to maintain current selection (same images, different order)
+    onSelectionChange(selectedImages);
 
+    // Update ordered selection to reflect new shuffle order
+    const newOrderedSelection = shuffledImages.map(img => img.id);
+
+    // Dispatch custom event to notify parent (Dashboard) of selection order change
+    window.dispatchEvent(new CustomEvent('selectionOrderChange', {
+      detail: { newOrderedSelection }
+    }));
+
+    // Set sort to 'order' to maintain the remixed order visually
+    setSortBy('order');
+
+    console.log('🎉 Remix completed! New order:', newOrderedSelection);
     toast.success('Selected images remixed! See the new order in the file browser');
   };
 
@@ -1367,11 +1401,10 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
               >
                 {(() => {
                   const imageIds = filteredAndSortedItems.filter(item => item.type === 'file').map(item => item.id);
-                  const slideshowIds = filteredAndSortedItems.filter(item => item.type === 'slideshow').map(item => item.id);
                   const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
-                  const allSlideshowsSelected = slideshowIds.every(id => selectedSlideshows.includes(id));
-                  const hasItems = imageIds.length > 0 || slideshowIds.length > 0;
-                  const allSelected = (imageIds.length === 0 || allImagesSelected) && (slideshowIds.length === 0 || allSlideshowsSelected);
+                  const hasItems = imageIds.length > 0;
+                  const allSelected = hasItems && allImagesSelected;
+                  
                   return hasItems && allSelected ? (
                     <CheckSquare className="w-4 h-4 text-green-400" />
                   ) : (
@@ -1380,12 +1413,15 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                 })()}
                 <span>{(() => {
                   const imageIds = filteredAndSortedItems.filter(item => item.type === 'file').map(item => item.id);
-                  const slideshowIds = filteredAndSortedItems.filter(item => item.type === 'slideshow').map(item => item.id);
                   const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
-                  const allSlideshowsSelected = slideshowIds.every(id => selectedSlideshows.includes(id));
-                  const hasItems = imageIds.length > 0 || slideshowIds.length > 0;
-                  const allSelected = (imageIds.length === 0 || allImagesSelected) && (slideshowIds.length === 0 || allSlideshowsSelected);
-                  return hasItems && allSelected ? 'Deselect All' : 'Select All';
+                  const hasItems = imageIds.length > 0;
+                  const allSelected = hasItems && allImagesSelected;
+                  
+                  if (allSelected) {
+                    return selectedImages.length > 0 ? `Deselect All (${selectedImages.length})` : 'Deselect All';
+                  } else {
+                    return hasItems ? `Select All (${imageIds.length})` : 'Select All';
+                  }
                 })()}</span>
               </Button>
 
@@ -1519,12 +1555,13 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
               <div className="flex items-center space-x-2">
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'size')}
+                  onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'size' | 'order')}
                   className="text-sm bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-8 text-white"
                 >
                   <option value="name">Name</option>
                   <option value="date">Date</option>
                   <option value="size">Size</option>
+                  <option value="order">Order</option>
                 </select>
 
                 <Button
