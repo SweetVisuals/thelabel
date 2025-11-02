@@ -45,6 +45,7 @@ interface TikTokPreviewProps {
    transitionEffect?: 'fade' | 'slide' | 'zoom';
    musicEnabled?: boolean;
    aspectRatio?: string;
+   cutLength?: number;
    previewMode?: boolean; // When true, only show loaded slideshows, don't auto-create from selected images
    onTextOverlaysChange?: (overlays: TextOverlay[]) => void;
    onTitleChange?: (title: string) => void;
@@ -71,6 +72,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
    transitionEffect = 'fade',
    musicEnabled = false,
    aspectRatio = '9:16',
+   cutLength = 5,
    previewMode = false,
    onTextOverlaysChange,
    onTitleChange,
@@ -84,19 +86,19 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
    onCurrentSlideChange, // Destructure new prop
    currentSlideshow, // Destructure new prop
  }) => {
-  
+   
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [showControls, setShowControls] = useState(true);
-  const [selectedSlideForEdit, setSelectedSlideForEdit] = useState<number | null>(null);
-  const [draggedText, setDraggedText] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const dragContainerRef = React.useRef<HTMLElement | null>(null); // Ref to store the drag container
+   const [showControls, setShowControls] = useState(true);
+   const [selectedSlideForEdit, setSelectedSlideForEdit] = useState<number | null>(null);
+   const [draggedText, setDraggedText] = useState<string | null>(null);
+   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+   const dragContainerRef = React.useRef<HTMLElement | null>(null); // Ref to store the drag container
 
-  // Local state for text overlays to handle internal updates
-  const [localTextOverlays, setLocalTextOverlays] = useState<TextOverlay[]>(textOverlays);
-  const [currentAspectRatio, setCurrentAspectRatio] = useState(aspectRatio);
+   // Local state for text overlays to handle internal updates
+   const [localTextOverlays, setLocalTextOverlays] = useState<TextOverlay[]>(textOverlays);
+   const [currentAspectRatio, setCurrentAspectRatio] = useState(aspectRatio);
 
   // Sync local state with props
   useEffect(() => {
@@ -108,32 +110,39 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
     setCurrentAspectRatio(aspectRatio);
   }, [aspectRatio]);
 
-  // Create a single slideshow with all selected images or use loaded slideshow
-  const slideshowImages = useMemo(() => {
+  // Create a single slideshow with all selected images or use loaded slideshow (with cut length limit)
+  const { slideshowImages, originalSlidesCount } = useMemo(() => {
     
-
     // If we have a properly loaded slideshow with condensed slides, use it (preview mode)
     if (currentSlideshow && currentSlideshow.condensedSlides && currentSlideshow.condensedSlides.length > 0) {
       
-      return currentSlideshow.condensedSlides?.map((slide: any) => ({
-        id: slide.id,
+      const originalCount = currentSlideshow.condensedSlides.length;
+      const limitedSlides = currentSlideshow.condensedSlides.slice(0, cutLength).map((slide: any) => ({
+        id: slide.originalImageId || slide.id, // Use original image ID for database queries, fallback to condensed ID
+        condensedSlideId: slide.id, // Keep condensed slide ID for reference
         url: slide.condensedImageUrl,
+        originalImageUrl: slide.originalImageUrl, // Store original URL for fallback
         width: slide.width,
         height: slide.height,
         aspectRatio: slide.aspectRatio,
         file: new File([], `slide-${slide.id}.jpg`), // Dummy file for compatibility
-      })) || [];
+      }));
+      
+      return { slideshowImages: limitedSlides, originalSlidesCount: originalCount };
     }
 
     // If we have selected images, create slideshow from them (regardless of previewMode when no slideshow loaded)
+    // Apply cut length limit here as well
     if (selectedImages.length > 0) {
-      const slideshow = images.filter(img => selectedImages.includes(img.id));
-      return slideshow;
+      const filteredImages = images.filter(img => selectedImages.includes(img.id));
+      const originalCount = filteredImages.length;
+      const slideshow = filteredImages.slice(0, cutLength);
+      return { slideshowImages: slideshow, originalSlidesCount: originalCount };
     }
 
     // No slideshow or selected images, return empty
-    return [];
-  }, [images, selectedImages, currentSlideshow, previewMode]);
+    return { slideshowImages: [], originalSlidesCount: 0 };
+  }, [images, selectedImages, currentSlideshow, previewMode, cutLength]);
 
   // Auto-detect aspect ratio from loaded images (when they're all the same)
   useEffect(() => {
@@ -469,12 +478,20 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                     </h2>
                   </motion.div>
                   <motion.span
-                    className="text-sm text-gray-400 bg-black/30 px-3 py-1 rounded-full"
+                    className={cn(
+                      "text-sm bg-black/30 px-3 py-1 rounded-full",
+                      originalSlidesCount > cutLength ? "text-yellow-400" : "text-gray-400"
+                    )}
                     initial={{ scale: 0.9 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.2 }}
+                    title={originalSlidesCount > cutLength ? `Showing first ${cutLength} of ${originalSlidesCount} slides` : undefined}
                   >
-                    {slideshowImages.length} slides • Slide {currentSlide + 1} of {totalSlides}
+                    {originalSlidesCount > cutLength ? (
+                      <>Showing {slideshowImages.length} of {originalSlidesCount} slides • Slide {currentSlide + 1} of {slideshowImages.length}</>
+                    ) : (
+                      <>{slideshowImages.length} slides • Slide {currentSlide + 1} of {totalSlides}</>
+                    )}
                   </motion.span>
                 </div>
 
@@ -823,9 +840,16 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                 {/* Footer with slideshow info and controls */}
                 <div className="p-4 bg-gray-900 text-white">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-400">
-                        {slideshowImages.length} slide{slideshowImages.length !== 1 ? 's' : ''} ready for TikTok
-                      </div>
+                    <div className={cn(
+                      "text-sm",
+                      originalSlidesCount > cutLength ? "text-yellow-400" : "text-gray-400"
+                    )}>
+                      {originalSlidesCount > cutLength ? (
+                        <>Showing {slideshowImages.length} of {originalSlidesCount} slides for TikTok</>
+                      ) : (
+                        <>{slideshowImages.length} slide{slideshowImages.length !== 1 ? 's' : ''} ready for TikTok</>
+                      )}
+                    </div>
 
                     <div className="flex items-center space-x-2">
                       <button

@@ -106,6 +106,7 @@ export const Dashboard: React.FC = () => {
   // Slideshow state
   const [transitionEffect, setTransitionEffect] = useState<'fade' | 'slide' | 'zoom'>('fade');
   const [musicEnabled, setMusicEnabled] = useState(false);
+  const [cutLength, setCutLength] = useState<number>(5); // Store slideshow limit
   const [currentSlideshow, setCurrentSlideshow] = useState<SlideshowMetadata | null>(null);
 
   // Template functionality
@@ -647,6 +648,8 @@ export const Dashboard: React.FC = () => {
                   onSlideshowUnload={handleSlideshowUnload}
                   selectedSlideshows={selectedSlideshows}
                   onSlideshowSelectionChange={handleSlideshowSelectionChange}
+                  cutLength={cutLength}
+                  onCutLengthChange={setCutLength}
                 />
               </div>
             </div>
@@ -664,6 +667,7 @@ export const Dashboard: React.FC = () => {
                 transitionEffect={transitionEffect}
                 musicEnabled={musicEnabled}
                 aspectRatio="9:16"
+                cutLength={cutLength}
                 previewMode={!!currentSlideshow} // Enable preview mode when slideshow is loaded
                 onTextOverlaysChange={setTextOverlays}
                 onTitleChange={setTitle}

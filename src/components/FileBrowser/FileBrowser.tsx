@@ -42,6 +42,7 @@ import { imageService } from '@/lib/imageService';
 import { slideshowService } from '@/lib/slideshowService';
 import { toast } from 'sonner';
 import { PostizPoster } from '../Postiz/PostizPoster';
+import { TemplateSelectionDialog } from './TemplateSelectionDialog';
 
 interface FileBrowserProps {
   images: UploadedImage[];
@@ -57,6 +58,8 @@ interface FileBrowserProps {
   onNavigateUp?: () => void;
   onSlideshowLoad?: (slideshow: SlideshowMetadata) => void;
   onSlideshowUnload?: () => void;
+  cutLength?: number;
+  onCutLengthChange?: (cutLength: number) => void;
 }
 
 interface FileItem {
@@ -83,6 +86,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onNavigateUp,
   onSlideshowLoad,
   onSlideshowUnload,
+  cutLength = 5,
+  onCutLengthChange,
 }) => {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size'>('name');
@@ -100,6 +105,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [renameSlideshowInputValue, setRenameSlideshowInputValue] = useState('');
   const [showPostizPoster, setShowPostizPoster] = useState(false);
   const [slideshowToPost, setSlideshowToPost] = useState<SlideshowMetadata | null>(null);
+  const [isCreatingFromTemplate, setIsCreatingFromTemplate] = useState(false);
+  const [showTemplateSelectionDialog, setShowTemplateSelectionDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileTileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
@@ -336,11 +343,26 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
 
-  // Track modifier key state
+  // Track modifier key state and handle keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey) setCtrlPressed(true);
       if (e.shiftKey) setShiftPressed(true);
+      
+      // Handle Delete key for bulk operations
+      if (e.key === 'Delete') {
+        const hasSelectedItems = selectedImages.length > 0 || selectedSlideshows.length > 0;
+        if (hasSelectedItems) {
+          e.preventDefault();
+          removeSelected();
+        }
+      }
+      
+      // Handle Ctrl+A for select all
+      if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
+        e.preventDefault();
+        selectAll();
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
@@ -355,7 +377,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [selectedImages, selectedSlideshows]);
 
   const toggleSelection = (id: string) => {
     const item = filteredAndSortedItems.find(item => item.id === id);
@@ -527,22 +549,107 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
 
   const removeSelected = async () => {
-    if (selectedImages.length === 0) return;
-    const deletePromise = new Promise<void>(async (resolve, reject) => {
-      try {
-        await Promise.all(selectedImages.map(id => imageService.deleteImage(id)));
-        const updatedImages = images.filter(img => !selectedImages.includes(img.id));
-        onImagesUploaded(updatedImages);
-        onSelectionChange([]);
-        resolve();
-      } catch (error) {
-        reject(error);
-      }
-    });
+    if (selectedImages.length === 0 && selectedSlideshows.length === 0) return;
+    
+    const imageCount = selectedImages.length;
+    const slideshowCount = selectedSlideshows.length;
+    const totalCount = imageCount + slideshowCount;
+    
+    // Create confirmation message
+    let confirmMessage = '';
+    if (imageCount > 0 && slideshowCount > 0) {
+      confirmMessage = `Are you sure you want to delete ${imageCount} image${imageCount !== 1 ? 's' : ''} and ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}? This action cannot be undone.`;
+    } else if (imageCount > 0) {
+      confirmMessage = `Are you sure you want to delete ${imageCount} image${imageCount !== 1 ? 's' : ''}? This action cannot be undone.`;
+    } else {
+      confirmMessage = `Are you sure you want to delete ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}? This action cannot be undone.`;
+    }
+    
+    // Show confirmation dialog
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+    
+const deletePromise = new Promise<void>(async (resolve, reject) => {
+  try {
+    const deletePromises = [];
+    const errors: string[] = [];
+    
+    // Delete images
+    if (imageCount > 0) {
+      const imageDeletePromises = selectedImages.map(async (id) => {
+        try {
+          await imageService.deleteImage(id);
+        } catch (error) {
+          errors.push(`Failed to delete image: ${error}`);
+          console.error('Failed to delete image:', id, error);
+        }
+      });
+      deletePromises.push(...imageDeletePromises);
+    }
+    
+    // Delete slideshows
+    if (slideshowCount > 0) {
+      const slideshowDeletePromises = selectedSlideshows.map(async (id) => {
+        try {
+          await slideshowService.deleteSlideshow(id);
+        } catch (error) {
+          errors.push(`Failed to delete slideshow: ${error}`);
+          console.error('Failed to delete slideshow:', id, error);
+        }
+      });
+      deletePromises.push(...slideshowDeletePromises);
+    }
+    
+    // Wait for all deletions to complete
+    await Promise.allSettled(deletePromises);
+    
+    // Update local state regardless of individual errors
+    if (imageCount > 0) {
+      const updatedImages = images.filter(img => !selectedImages.includes(img.id));
+      onImagesUploaded(updatedImages);
+      onSelectionChange([]);
+    }
+    
+    if (slideshowCount > 0 && onSlideshowSelectionChange) {
+      onSlideshowSelectionChange([]);
+    }
+    
+    // If there were errors, show them but still resolve
+    if (errors.length > 0) {
+      console.warn('Some deletions failed:', errors);
+      toast.error(`${errors.length} item${errors.length !== 1 ? 's' : ''} failed to delete`);
+    }
+    
+    resolve();
+  } catch (error) {
+    reject(error);
+  }
+});
+
+    // Create dynamic success message based on what's being deleted
+    let successMessage = '';
+    if (imageCount > 0 && slideshowCount > 0) {
+      successMessage = `Successfully deleted ${imageCount} image${imageCount !== 1 ? 's' : ''} and ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}!`;
+    } else if (imageCount > 0) {
+      successMessage = `Successfully deleted ${imageCount} image${imageCount !== 1 ? 's' : ''}!`;
+    } else {
+      successMessage = `Successfully deleted ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}!`;
+    }
+    
+    // Create dynamic loading message
+    let loadingMessage = 'Deleting items...';
+    if (imageCount > 0 && slideshowCount > 0) {
+      loadingMessage = `Deleting ${imageCount} image${imageCount !== 1 ? 's' : ''} and ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}...`;
+    } else if (imageCount > 0) {
+      loadingMessage = `Deleting ${imageCount} image${imageCount !== 1 ? 's' : ''}...`;
+    } else {
+      loadingMessage = `Deleting ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}...`;
+    }
 
     toast.promise(deletePromise, {
-      loading: `Deleting ${selectedImages.length} images...`,
-      success: `Successfully deleted ${selectedImages.length} images!`,
+      loading: loadingMessage,
+      success: successMessage,
       error: 'Delete failed. Please try again.',
     });
   };
@@ -651,22 +758,162 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }
   };
 
+  const handleCreateFromTemplate = () => {
+    if (selectedImages.length === 0) {
+      toast.error('Please select some images first');
+      return;
+    }
+
+    // Show template selection dialog
+    setShowTemplateSelectionDialog(true);
+  };
+
+  const handleTemplateSelectionConfirm = async (templateId: string, aspectRatio: string) => {
+    if (selectedImages.length === 0) {
+      toast.error('Please select some images first');
+      return;
+    }
+
+    setIsCreatingFromTemplate(true);
+
+    try {
+      // Get the current user
+      const { supabase } = await import('@/lib/supabase');
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.user) {
+        toast.error('Please log in to create slideshows');
+        return;
+      }
+
+      const userId = session.user.id;
+
+      // Load the selected template
+      const template = await slideshowService.loadTemplate(templateId);
+      
+      if (!template) {
+        toast.error('Template not found. Please try again.');
+        return;
+      }
+
+      // Split selected images into chunks based on cut length
+      const imageChunks: UploadedImage[][] = [];
+      for (let i = 0; i < selectedImages.length; i += cutLength) {
+        const chunk = selectedImages
+          .slice(i, i + cutLength)
+          .map(id => images.find(img => img.id === id))
+          .filter(img => img !== undefined) as UploadedImage[];
+        
+        if (chunk.length > 0) {
+          imageChunks.push(chunk);
+        }
+      }
+
+      console.log(`📸 Creating ${imageChunks.length} slideshow(s) from ${selectedImages.length} images with cut length ${cutLength}`);
+
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Create slideshows for each chunk
+      for (let i = 0; i < imageChunks.length; i++) {
+        const chunk = imageChunks[i];
+        const chunkNumber = i + 1;
+        const slideshowTitle = `Post ${chunkNumber}`;
+        
+        try {
+          console.log(`🎬 Creating slideshow ${chunkNumber}/${imageChunks.length}: ${slideshowTitle}`);
+
+          // Apply template to create the slideshow with selected aspect ratio
+          const result = await slideshowService.applyTemplateToImages(
+            template,
+            chunk,
+            userId,
+            {
+              title: slideshowTitle,
+              caption: `${template.caption} (Part ${chunkNumber} of ${imageChunks.length})`,
+              hashtags: template.hashtags
+            }
+          );
+
+          if (result.success && result.slideshow) {
+            // If aspect ratio is different, create a new slideshow with the correct aspect ratio
+            if (aspectRatio && aspectRatio !== template.aspectRatio) {
+              const updatedResult = await slideshowService.saveSlideshow(
+                slideshowTitle,
+                template.postTitle || slideshowTitle,
+                `${template.caption} (Part ${chunkNumber} of ${imageChunks.length})`,
+                template.hashtags,
+                chunk,
+                result.slideshow.textOverlays,
+                aspectRatio,
+                template.transitionEffect,
+                template.musicEnabled,
+                userId
+              );
+              
+              if (updatedResult) {
+                successCount++;
+                console.log(`✅ Successfully created slideshow with custom aspect ratio: ${slideshowTitle}`);
+              } else {
+                errorCount++;
+                console.error(`❌ Failed to create slideshow with custom aspect ratio: ${slideshowTitle}`);
+              }
+            } else {
+              successCount++;
+              console.log(`✅ Successfully created slideshow: ${slideshowTitle}`);
+            }
+          } else {
+            errorCount++;
+            console.error(`❌ Failed to create slideshow ${slideshowTitle}:`, result.error);
+          }
+        } catch (error) {
+          errorCount++;
+          console.error(`❌ Error creating slideshow ${slideshowTitle}:`, error);
+        }
+      }
+
+      // Show results to user
+      if (successCount > 0) {
+        toast.success(`Successfully created ${successCount} slideshow(s)${errorCount > 0 ? ` (${errorCount} failed)` : ''}!`);
+        
+        // Clear selection after successful creation
+        onSelectionChange([]);
+        
+        // Trigger re-render to show new slideshows
+        triggerReRender();
+      } else {
+        toast.error(`Failed to create any slideshows. Please try again.`);
+      }
+
+    } catch (error) {
+      console.error('Failed to create slideshows from template:', error);
+      toast.error('Failed to create slideshows. Please try again.');
+    } finally {
+      setIsCreatingFromTemplate(false);
+    }
+  };
+
   // Enhanced drag and drop state management
   const [draggedItem, setDraggedItem] = useState<{ type: string; id: string; name: string } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [currentDragOverFolder, setCurrentDragOverFolder] = useState<string | null>(null);
+  const [isDragOverMainArea, setIsDragOverMainArea] = useState(false);
 
   // Global drop event handler to ensure drops are caught
   useEffect(() => {
     const handleGlobalDrop = (e: DragEvent) => {
-      console.log('🌍 Global drop event detected');
+      console.log('🌍 Global drop event detected:', {
+        hasFiles: e.dataTransfer?.files?.length ? e.dataTransfer.files.length > 0 : false,
+        hasDragData: e.dataTransfer?.types?.includes('application/json') || false,
+        types: Array.from(e.dataTransfer?.types || [])
+      });
       
-      // Only handle if we have valid drag data
+      // Handle internal drag and drop (between folders)
       if (draggedItem && currentDragOverFolder) {
         e.preventDefault();
         e.stopPropagation();
         
-        console.log('🌍 Processing global drop:', { draggedItem, targetFolder: currentDragOverFolder });
+        console.log('🌍 Processing internal global drop:', { draggedItem, targetFolder: currentDragOverFolder });
         
         // Handle the drop
         if (draggedItem.type === 'file') {
@@ -681,10 +928,87 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         setCurrentDragOverFolder(null);
         setDraggedItem(null);
         setIsDragging(false);
+        return;
+      }
+      
+      // Handle external file drops (from OS file browser) that land outside specific drop zones
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        console.log('🌍 Processing external file drop globally');
+        
+        // Reset drag over states
+        setIsDragOverMainArea(false);
+        setCurrentDragOverFolder(null);
+        
+        // Handle the file upload similar to main area drop
+        const files = Array.from(e.dataTransfer.files);
+        const slideshowFiles = files.filter(file => file.name.endsWith('.slideshow'));
+        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+        (async () => {
+          try {
+            // Handle slideshow files
+            if (slideshowFiles.length > 0) {
+              for (const file of slideshowFiles) {
+                try {
+                  const slideshow = await slideshowService.loadSlideshowFromFile(file);
+                  if (onSlideshowLoad) {
+                    onSlideshowLoad(slideshow);
+                    toast.success(`Loaded slideshow: ${slideshow.title}`);
+                  }
+                } catch (error) {
+                  console.error('Failed to load slideshow:', error);
+                  toast.error(`Failed to load slideshow: ${file.name}`);
+                }
+              }
+            }
+
+            // Handle image files
+            if (imageFiles.length > 0) {
+              const uploadPromise = new Promise<UploadedImage[]>(async (resolve, reject) => {
+                try {
+                  const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, currentFolderId || undefined));
+                  const newImages = await Promise.all(uploadPromises);
+                  onImagesUploaded([...images, ...newImages]);
+                  resolve(newImages);
+                } catch (error) {
+                  reject(error);
+                }
+              });
+
+              toast.promise(uploadPromise, {
+                loading: `Uploading ${imageFiles.length} images...`,
+                success: (newImages) => `Successfully uploaded ${newImages.length} images!`,
+                error: 'Upload failed. Please try again.',
+              });
+            }
+
+            // Show a summary message
+            const totalFiles = imageFiles.length + slideshowFiles.length;
+            if (totalFiles > 0) {
+              toast.success(`Successfully processed ${totalFiles} file(s)!`);
+            }
+          } catch (error) {
+            console.error('Failed to handle global file drop:', error);
+            toast.error('Failed to process dropped files. Please try again.');
+          }
+        })();
       }
     };
 
     const handleGlobalDragOver = (e: DragEvent) => {
+      // Allow external file drops
+      if (e.dataTransfer?.types?.includes('Files')) {
+        e.preventDefault();
+        if (e.dataTransfer) {
+          e.dataTransfer.dropEffect = 'copy';
+        }
+        return;
+      }
+      
+      // Allow internal drag and drop
       if (currentDragOverFolder) {
         e.preventDefault();
         if (e.dataTransfer) {
@@ -701,7 +1025,94 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       document.removeEventListener('drop', handleGlobalDrop);
       document.removeEventListener('dragover', handleGlobalDragOver);
     };
-  }, [draggedItem, currentDragOverFolder, selectedImages]);
+  }, [draggedItem, currentDragOverFolder, selectedImages, selectedSlideshows, currentFolderId, images, onImagesUploaded, onSlideshowLoad]);
+
+  // Handle drag over for the main file browser area (for file uploads)
+  const handleMainAreaDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only show drag over for actual file drops
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragOverMainArea(true);
+      e.dataTransfer.dropEffect = 'copy';
+      console.log('🗂️ Main area drag over - files detected');
+    }
+  };
+
+  // Handle drag leave for the main file browser area
+  const handleMainAreaDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Only clear drag over if we're actually leaving the main area
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setIsDragOverMainArea(false);
+    }
+  };
+
+  // Handle drop on the main file browser area (for file uploads)
+  const handleMainAreaDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverMainArea(false);
+
+    if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
+
+    const files = Array.from(e.dataTransfer.files);
+    console.log('📁 Files dropped on main area:', files.length, 'files');
+
+    // Separate slideshow files from image files
+    const slideshowFiles = files.filter(file => file.name.endsWith('.slideshow'));
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+    try {
+      // Handle slideshow files
+      if (slideshowFiles.length > 0) {
+        for (const file of slideshowFiles) {
+          try {
+            const slideshow = await slideshowService.loadSlideshowFromFile(file);
+            if (onSlideshowLoad) {
+              onSlideshowLoad(slideshow);
+              toast.success(`Loaded slideshow: ${slideshow.title}`);
+            }
+          } catch (error) {
+            console.error('Failed to load slideshow:', error);
+            toast.error(`Failed to load slideshow: ${file.name}`);
+          }
+        }
+      }
+
+      // Handle image files
+      if (imageFiles.length > 0) {
+        const uploadPromise = new Promise<UploadedImage[]>(async (resolve, reject) => {
+          try {
+            const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, currentFolderId || undefined));
+            const newImages = await Promise.all(uploadPromises);
+            onImagesUploaded([...images, ...newImages]);
+            resolve(newImages);
+          } catch (error) {
+            reject(error);
+          }
+        });
+
+        toast.promise(uploadPromise, {
+          loading: `Uploading ${imageFiles.length} images...`,
+          success: (newImages) => `Successfully uploaded ${newImages.length} images!`,
+          error: 'Upload failed. Please try again.',
+        });
+      }
+
+      // Show a summary message
+      const totalFiles = imageFiles.length + slideshowFiles.length;
+      if (totalFiles > 0) {
+        toast.success(`Successfully processed ${totalFiles} file(s)!`);
+      }
+    } catch (error) {
+      console.error('Failed to handle dropped files:', error);
+      toast.error('Failed to process dropped files. Please try again.');
+    }
+  };
 
   // Handle drag start from file and slideshow tiles
   const handleDragStart = (e: React.DragEvent, item: FileItem) => {
@@ -869,50 +1280,56 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                 })()}</span>
               </Button>
 
-              {/* Bulk Actions */}
+              {/* Unified Bulk Actions */}
               <AnimatePresence>
-                {selectedImages.length > 0 && (
+                {(selectedImages.length > 0 || selectedSlideshows.length > 0) && (
                   <motion.div
                     className="flex items-center space-x-2"
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.8, opacity: 0 }}
                   >
+                    {/* Delete Button - shows when any items are selected */}
                     <Button
                       variant="secondary"
                       size="sm"
                       onClick={removeSelected}
-                      className="flex items-center space-x-2 bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2 h-8 text-sm transition-colors"
+                      className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white px-3 py-2 h-8 text-sm transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
-                      <span>Delete ({selectedImages.length})</span>
+                      <span>
+                        {(() => {
+                          const imageCount = selectedImages.length;
+                          const slideshowCount = selectedSlideshows.length;
+                          const totalCount = imageCount + slideshowCount;
+                          
+                          if (imageCount > 0 && slideshowCount > 0) {
+                            return `Delete All (${totalCount})`;
+                          } else if (imageCount > 0) {
+                            return `Delete (${imageCount})`;
+                          } else {
+                            return `Delete (${slideshowCount})`;
+                          }
+                        })()}
+                      </span>
                     </Button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              {/* Slideshow Bulk Actions */}
-              <AnimatePresence>
-                {selectedSlideshows.length > 0 && (
-                  <motion.div
-                    className="flex items-center space-x-2"
-                    initial={{ scale: 0.8, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.8, opacity: 0 }}
-                  >
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        // Post the first selected slideshow to TikTok
-                        const firstSlideshowId = selectedSlideshows[0];
-                        handlePostSlideshowToTikTok(firstSlideshowId);
-                      }}
-                      className="flex items-center space-x-2 bg-pink-600 hover:bg-pink-700 text-white px-3 py-2 h-8 text-sm transition-colors"
-                    >
-                      <Share className="w-4 h-4" />
-                      <span>Post to TikTok ({selectedSlideshows.length})</span>
-                    </Button>
+                    
+                    {/* Post to TikTok Button - shows only when slideshows are selected */}
+                    {selectedSlideshows.length > 0 && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          // Post the first selected slideshow to TikTok
+                          const firstSlideshowId = selectedSlideshows[0];
+                          handlePostSlideshowToTikTok(firstSlideshowId);
+                        }}
+                        className="flex items-center space-x-2 bg-pink-600 hover:bg-pink-700 text-white px-3 py-2 h-8 text-sm transition-colors"
+                      >
+                        <Share className="w-4 h-4" />
+                        <span>Post to TikTok ({selectedSlideshows.length})</span>
+                      </Button>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -922,7 +1339,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
           {/* Bottom Row - Search, Sort, View */}
           <div className="flex items-center justify-between">
-            {/* Search */}
+            {/* Left side - Search */}
             <div className="relative flex-1 max-w-xs">
               <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-neutral-400" />
               <input
@@ -935,6 +1352,47 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             </div>
 
             <div className="flex items-center space-x-3">
+              {/* Slideshow Controls */}
+              <div className="flex items-center space-x-2 border-r border-neutral-700 pr-3">
+                {/* Slideshow Limit Dropdown */}
+                <div className="flex items-center space-x-2">
+                  <label className="text-xs text-neutral-400 whitespace-nowrap">Cut Length:</label>
+                  <select
+                    value={cutLength}
+                    onChange={(e) => {
+                      const newCutLength = Number(e.target.value);
+                      // Update external state if callback provided
+                      if (onCutLengthChange) {
+                        onCutLengthChange(newCutLength);
+                      }
+                    }}
+                    className="text-sm bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-8 text-white"
+                  >
+                    <option value={1}>1 slide</option>
+                    <option value={2}>2 slides</option>
+                    <option value={3}>3 slides</option>
+                    <option value={4}>4 slides</option>
+                    <option value={5}>5 slides</option>
+                  </select>
+                </div>
+
+                {/* Create from Template Button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleCreateFromTemplate}
+                  disabled={isCreatingFromTemplate || selectedImages.length === 0}
+                  className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isCreatingFromTemplate ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <FilePlus className="w-4 h-4" />
+                  )}
+                  <span>Create from template</span>
+                </Button>
+              </div>
+
               {/* Sort Controls */}
               <div className="flex items-center space-x-2">
                 <select
@@ -981,7 +1439,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         </div>
 
         <div
-          className="flex-1 relative overflow-auto bg-background"
+          className={cn(
+            "flex-1 relative overflow-auto bg-background transition-all duration-200",
+            isDragOverMainArea ? "bg-blue-900/10 ring-2 ring-blue-400/30" : ""
+          )}
+          onDragOver={handleMainAreaDragOver}
+          onDragLeave={handleMainAreaDragLeave}
+          onDrop={handleMainAreaDrop}
           onContextMenu={(e) => {
             e.preventDefault();
             setContextMenu({
@@ -995,6 +1459,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             if (contextMenu) setContextMenu(null);
           }}
         >
+          {/* Enhanced drop zone overlay for main area */}
+          {isDragOverMainArea && (
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-blue-400/10 border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center z-50 backdrop-blur-sm animate-pulse">
+              <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-4 rounded-full text-lg font-bold shadow-2xl border-2 border-blue-300 flex items-center space-x-3">
+                <Upload className="w-6 h-6" />
+                <span>Drop files to upload</span>
+              </div>
+            </div>
+          )}
           {isLoading ? (
             <div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>
           ) : fileItems.length === 0 ? (
@@ -1032,6 +1505,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                      handleMoveImagesToFolder={handleMoveImagesToFolder}
                      handleMoveSlideshowToFolder={handleMoveSlideshowToFolder}
                      selectedSlideshows={selectedSlideshows}
+                     setCurrentDragOverFolder={setCurrentDragOverFolder}
                    />
                  ) : item.type === 'slideshow' ? (
                    <SlideshowTile
@@ -1310,6 +1784,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             </div>
           </div>
         )}
+
+        {/* Template Selection Dialog */}
+        <TemplateSelectionDialog
+          isOpen={showTemplateSelectionDialog}
+          onClose={() => setShowTemplateSelectionDialog(false)}
+          onConfirm={handleTemplateSelectionConfirm}
+        />
       </div>
     </div>
   );
@@ -1386,6 +1867,7 @@ const FolderTile: React.FC<{
   selectedSlideshows?: string[];
   handleMoveImagesToFolder?: (folderId: string, imageIds: string[]) => void;
   handleMoveSlideshowToFolder?: (slideshowIds: string[], folderId: string | null) => void;
+  setCurrentDragOverFolder?: (folderId: string | null) => void;
 }> = ({
   item,
   onFolderClick,
@@ -1400,7 +1882,8 @@ const FolderTile: React.FC<{
   selectedImages = [],
   selectedSlideshows = [],
   handleMoveImagesToFolder,
-  handleMoveSlideshowToFolder
+  handleMoveSlideshowToFolder,
+  setCurrentDragOverFolder
 }) => {
   const isRenaming = renamingFolderId === item.id;
   const [isDragOver, setIsDragOver] = useState(false);
@@ -1437,7 +1920,7 @@ const FolderTile: React.FC<{
       console.log('📁 Folder drag over:', item.name, item.id, 'types:', Array.from(e.dataTransfer.types));
       
       // Set this as the current drag target for global drop handling
-      // setCurrentDragOverFolder(item.id); // Commented out as it's not defined in this scope
+      setCurrentDragOverFolder && setCurrentDragOverFolder(item.id);
     }
   };
 
@@ -1448,6 +1931,9 @@ const FolderTile: React.FC<{
     // Only clear drag over if we're actually leaving the folder area
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
       setIsDragOver(false);
+      if (setCurrentDragOverFolder) {
+        setCurrentDragOverFolder(null);
+      }
     }
   };
 
@@ -1574,16 +2060,24 @@ const FolderTile: React.FC<{
         e.preventDefault();
         console.log('🎯 Folder drag enter:', item.name);
         setIsDragOver(true);
+        if (setCurrentDragOverFolder) {
+          setCurrentDragOverFolder(item.id);
+        }
       }}
       onDropCapture={async (e) => {
         e.preventDefault();
         e.stopPropagation();
         console.log('🎯 Folder drop capture:', item.name, item.id);
         
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
           await handleExternalDrop(e);
         } else {
           await handleDrop(e);
+        }
+        
+        // Clear the current drag over folder after handling
+        if (setCurrentDragOverFolder) {
+          setCurrentDragOverFolder(null);
         }
       }}
       className={cn(
