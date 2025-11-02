@@ -31,7 +31,8 @@ import {
   FolderIcon,
   Pencil,
   Play,
-  Send
+  Send,
+  Shuffle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -800,6 +801,23 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
     setShowTemplateSelectionDialog(true);
   };
 
+  const handleRemixImages = () => {
+    if (selectedImages.length < 2) {
+      toast.error('Need at least 2 selected images to remix');
+      return;
+    }
+
+    // Shuffle the selected images order
+    const shuffledImages = [...selectedImages];
+    for (let i = shuffledImages.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
+    }
+
+    onSelectionChange(shuffledImages);
+    toast.success('Images remixed! Create new template variations');
+  };
+
   const handleTemplateSelectionConfirm = async (templateId: string, aspectRatio: string) => {
     if (selectedImages.length === 0) {
       toast.error('Please select some images first');
@@ -1405,6 +1423,19 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
             <div className="flex items-center space-x-3">
               {/* Slideshow Controls */}
               <div className="flex items-center space-x-2 border-r border-neutral-700 pr-3">
+                {/* Remix Button */}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleRemixImages}
+                  disabled={selectedImages.length < 2}
+                  className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Shuffle selected images for different template variations"
+                >
+                  <Shuffle className="w-4 h-4" />
+                  <span>Remix</span>
+                </Button>
+
                 {/* Slideshow Limit Dropdown */}
                 <div className="flex items-center space-x-2">
                   <label className="text-xs text-neutral-400 whitespace-nowrap">Cut Length:</label>
