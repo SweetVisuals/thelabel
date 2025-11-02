@@ -155,6 +155,20 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         scheduledTime = new Date(startDate.getTime() + (i * intervalHours * 60 * 60 * 1000));
       }
       
+      // Check if scheduled time falls in the forbidden window (12am-9am)
+      // If so, skip to 9am and continue from there
+      const hour = scheduledTime.getHours();
+      if (hour >= 0 && hour < 9) {
+        // Set to 9am on the same day
+        scheduledTime.setHours(9, 0, 0, 0);
+      }
+      
+      // Check if the scheduled time would be after 10pm
+      // If so, don't schedule this post (skip beyond 10pm)
+      if (scheduledTime.getHours() > 22) {
+        continue; // Skip this slideshow - would schedule after 10pm
+      }
+      
       schedule.push({
         slideshowId: slideshow.id,
         slideshowTitle: slideshow.title,
@@ -644,37 +658,77 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           <Eye className="w-4 h-4 mr-2" />
           Posting Schedule Preview
         </h4>
-        <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-          {getSchedulePreview().map((item, index) => (
-            <div key={item.slideshowId} className="flex items-center justify-between p-2 bg-background rounded">
-              <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium">
-                  {index + 1}
-                </div>
-                <div>
-                  <div className="font-medium text-foreground text-sm">{item.slideshowTitle}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {item.isImmediate ? 'Will post immediately' : `Scheduled for ${item.displayTime}`}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2">
-                {item.status === 'pending' && (
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                )}
-                {item.status === 'posting' && (
-                  <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                )}
-                {item.status === 'success' && (
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                )}
-                {item.status === 'error' && (
-                  <AlertCircle className="w-4 h-4 text-red-500" />
-                )}
+        
+        {/* Schedule Constraints Notice */}
+        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+          <div className="flex items-start space-x-2">
+            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+            <div className="text-sm">
+              <div className="font-medium text-amber-800 dark:text-amber-200 mb-1">Schedule Constraints Applied</div>
+              <div className="text-amber-700 dark:text-amber-300">
+                • Posts scheduled every {intervalHours} hours between 9am-10pm only<br/>
+                • No posts between 12am-9am (moved to 9am if scheduled)<br/>
+                • Posts after 10pm are automatically skipped
               </div>
             </div>
-          ))}
+          </div>
         </div>
+        
+        <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+          {getSchedulePreview().length === 0 ? (
+            <div className="text-center py-4 text-muted-foreground">
+              <AlertCircle className="w-6 h-6 mx-auto mb-2" />
+              <p className="text-sm">No posts can be scheduled within the 9am-10pm window with the current settings</p>
+            </div>
+          ) : (
+            getSchedulePreview().map((item, index) => (
+              <div key={item.slideshowId} className="flex items-center justify-between p-2 bg-background rounded">
+                <div className="flex items-center space-x-3">
+                  <div className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <div className="font-medium text-foreground text-sm">{item.slideshowTitle}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {item.isImmediate ? 'Will post immediately' : `Scheduled for ${item.displayTime}`}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {item.status === 'pending' && (
+                    <Clock className="w-4 h-4 text-muted-foreground" />
+                  )}
+                  {item.status === 'posting' && (
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                  )}
+                  {item.status === 'success' && (
+                    <CheckCircle className="w-4 h-4 text-green-500" />
+                  )}
+                  {item.status === 'error' && (
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        
+        {/* Show count of skipped posts if any */}
+        {slideshows.length > postingSchedule.length && (
+          <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
+            <div className="flex items-center space-x-2">
+              <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+              <div className="text-sm">
+                <span className="font-medium text-orange-800 dark:text-orange-200">
+                  {slideshows.length - postingSchedule.length} slideshow(s) skipped
+                </span>
+                <span className="text-orange-700 dark:text-orange-300 ml-2">
+                  (would be scheduled after 10pm)
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Post Result */}
