@@ -427,102 +427,128 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       </div>
 
       {/* Slideshows Overview */}
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 rounded-xl border border-blue-200 dark:border-blue-800 p-5 shadow-sm">
-        <div className="flex items-center space-x-3 mb-4">
-          <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full">
-            <Image className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1">
-            <h4 className="font-semibold text-foreground text-lg">Selected Slideshows</h4>
-            <p className="text-sm text-muted-foreground">{slideshows.length} slideshow{slideshows.length !== 1 ? 's' : ''} ready for posting</p>
-          </div>
-          <div className="text-xs text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30 px-3 py-1 rounded-full border border-blue-200 dark:border-blue-700">
-            <span className="inline-flex items-center">
-              <CheckCircle className="w-3 h-3 mr-1" />
-              Original captions preserved
-            </span>
+      <div className="bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-100 to-blue-100 dark:from-slate-800 dark:to-slate-700 px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+                <Image className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h4 className="text-xl font-bold text-slate-900 dark:text-slate-100">Bulk TikTok Posts</h4>
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                  {slideshows.length} slideshow{slideshows.length !== 1 ? 's' : ''} ready for posting
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="inline-flex items-center px-4 py-2 bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 rounded-full border border-emerald-200 dark:border-emerald-800">
+                <CheckCircle className="w-4 h-4 mr-2" />
+                <span className="text-sm font-medium">Captions Preserved</span>
+              </div>
+            </div>
           </div>
         </div>
-        
+
         {/* Caption preservation notice */}
-        <div className="mb-4 p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
-          <div className="flex items-center text-green-700 dark:text-green-300">
-            <CheckCircle className="w-4 h-4 mr-2" />
-            <span className="text-sm font-medium">
-              Each slideshow will use its own original caption without any modifications
-            </span>
+        <div className="p-6 pb-4">
+          <div className="p-4 bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+            <div className="flex items-center text-emerald-800 dark:text-emerald-300">
+              <CheckCircle className="w-5 h-5 mr-3" />
+              <div>
+                <div className="font-semibold text-sm">Original Content Preservation</div>
+                <div className="text-sm text-emerald-700 dark:text-emerald-400 mt-1">
+                  Each slideshow will maintain its original caption and hashtag formatting exactly as designed
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         
-        <div className="max-h-64 overflow-y-auto custom-scrollbar">
-          <style>{`
-            .custom-scrollbar {
-              scrollbar-width: thin;
-              scrollbar-color: rgb(147 197 253) transparent;
-            }
-            .custom-scrollbar::-webkit-scrollbar {
-              width: 6px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-track {
-              background: transparent;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb {
-              background: linear-gradient(180deg, rgb(147 197 253), rgb(99 102 241));
-              border-radius: 3px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-              background: linear-gradient(180deg, rgb(96 165 250), rgb(79 70 229));
-            }
-          `}</style>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        {/* Slideshows Grid */}
+        <div className="px-6 pb-6">
+          <div className="space-y-4">
             {slideshows.map((slideshow, index) => (
-              <div key={slideshow.id} className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm rounded-xl border-2 border-blue-200 dark:border-blue-700 p-4 text-center hover:border-blue-400 dark:hover:border-blue-500 hover:shadow-lg hover:scale-105 transition-all duration-300 cursor-pointer group relative overflow-hidden">
-                {/* Gradient overlay on hover */}
-                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                
-                <div className="relative z-10">
-                  <div className="flex items-center justify-center w-12 h-12 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full mx-auto mb-3 group-hover:from-purple-600 group-hover:to-pink-600 transition-all duration-300 shadow-md group-hover:shadow-lg">
-                    <Play className="w-5 h-5 text-white ml-0.5" />
+              <div key={slideshow.id} className="group bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all duration-300 overflow-hidden">
+                <div className="flex items-center p-4 space-x-4">
+                  {/* Image Preview */}
+                  <div className="flex-shrink-0">
+                    <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-purple-100 to-pink-100 dark:from-purple-900/30 dark:to-pink-900/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden">
+                      {slideshow.condensedSlides && slideshow.condensedSlides[0] ? (
+                        <img
+                          src={slideshow.condensedSlides[0].condensedImageUrl || slideshow.condensedSlides[0].originalImageUrl}
+                          alt="Slide preview"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Play className="w-6 h-6 text-slate-400" />
+                      )}
+                    </div>
                   </div>
-                  <div className="text-xs font-semibold text-foreground truncate mb-2 leading-tight min-h-[2.5rem] flex items-center justify-center" title={slideshow.title}>
-                    {slideshow.title}
-                  </div>
-                  <div className="space-y-2">
-                    <div className="inline-flex items-center px-2 py-1 bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40 rounded-full border border-blue-200 dark:border-blue-700">
-                      <span className="text-xs font-bold text-blue-700 dark:text-blue-300">
-                        {slideshow.condensedSlides?.length || 0} slides
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground font-medium bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded-md">
-                      {slideshow.aspectRatio}
-                    </div>
-                    <div className="inline-flex items-center justify-center px-3 py-1.5 bg-gradient-to-r from-green-400 to-emerald-500 rounded-full shadow-sm mt-2">
-                      <span className="text-xs font-bold text-white">
-                        Post #{index + 1}
-                      </span>
-                    </div>
-                    {/* Show caption preview */}
-                    {slideshow.caption && (
-                      <div className="text-xs text-muted-foreground mt-2 p-2 bg-gray-100 dark:bg-gray-800 rounded border-l-2 border-blue-400">
-                        <div className="truncate" title={slideshow.caption}>
-                          "{slideshow.caption}"
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h5 className="font-semibold text-slate-900 dark:text-slate-100 truncate" title={slideshow.title}>
+                          {slideshow.title}
+                        </h5>
+                        <div className="flex items-center space-x-3 mt-2">
+                          <span className="inline-flex items-center px-3 py-1 bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 rounded-full text-xs font-medium">
+                            {slideshow.condensedSlides?.length || 0} slides
+                          </span>
+                          <span className="text-xs text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md">
+                            {slideshow.aspectRatio}
+                          </span>
+                          <span className="inline-flex items-center justify-center w-8 h-8 bg-gradient-to-r from-emerald-400 to-emerald-500 text-white rounded-full text-xs font-bold">
+                            {index + 1}
+                          </span>
                         </div>
+                        
+                        {/* Caption preview */}
+                        {slideshow.caption && (
+                          <div className="mt-3 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border-l-4 border-blue-400 dark:border-blue-500">
+                            <div className="text-xs text-slate-700 dark:text-slate-300 line-clamp-2" title={slideshow.caption}>
+                              "{slideshow.caption}"
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    </div>
+                  </div>
+
+                  {/* Status Indicator */}
+                  <div className="flex-shrink-0">
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse"></div>
+                      <span className="text-xs font-medium text-slate-600 dark:text-slate-400">Ready</span>
+                    </div>
                   </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
-        {slideshows.length > 12 && (
-          <div className="text-center mt-4 text-sm text-muted-foreground bg-blue-50 dark:bg-blue-950/30 py-2 px-4 rounded-lg border border-blue-200 dark:border-blue-800">
-            <span className="inline-flex items-center">
-              <span className="w-2 h-2 bg-blue-400 rounded-full mr-2 animate-pulse" />
-              Scroll to see more slideshows...
-            </span>
+
+        {/* Summary Footer */}
+        <div className="bg-slate-100/80 dark:bg-slate-800/80 px-6 py-4 border-t border-slate-200 dark:border-slate-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-slate-600 dark:text-slate-400">
+                <Hash className="w-4 h-4" />
+                <span>Total Slides: {slideshows.reduce((sum, s) => sum + (s.condensedSlides?.length || 0), 0)}</span>
+              </div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">•</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">
+                Aspect Ratios: {Array.from(new Set(slideshows.map(s => s.aspectRatio))).join(', ')}
+              </div>
+            </div>
+            <div className="text-xs text-slate-500 dark:text-slate-500">
+              {slideshows.length > 0 && 'Ready to schedule'}
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* TikTok Profiles Selection */}
@@ -602,161 +628,255 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       </div>
 
       {/* Posting Strategy */}
-      <div className="space-y-4">
-        <h4 className="font-medium text-foreground flex items-center">
-          <CalendarDays className="w-4 h-4 mr-2" />
-          Posting Strategy
-        </h4>
+      <div className="space-y-6">
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl">
+            <Settings className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h4 className="text-lg font-bold text-foreground">Posting Strategy</h4>
+            <p className="text-sm text-muted-foreground">Choose how you want to schedule your bulk posts</p>
+          </div>
+        </div>
         
         {/* Strategy Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <button
             onClick={() => setPostingStrategy('interval')}
             className={cn(
-              "p-4 rounded-lg border-2 text-left transition-all",
+              "group relative p-6 rounded-2xl border-2 text-left transition-all duration-300 hover:shadow-lg",
               postingStrategy === 'interval'
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50"
+                ? "border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 shadow-lg scale-[1.02]"
+                : "border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-slate-50 dark:hover:bg-slate-800/50"
             )}
           >
-            <div className="flex items-center space-x-2 mb-2">
-              <Calendar className="w-5 h-5" />
-              <span className="font-medium">Schedule All</span>
+            <div className="flex items-center space-x-3 mb-3">
+              <div className={cn(
+                "flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-300",
+                postingStrategy === 'interval'
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-lg"
+                  : "bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30"
+              )}>
+                <Calendar className={cn(
+                  "w-6 h-6 transition-colors duration-300",
+                  postingStrategy === 'interval' ? "text-white" : "text-slate-600 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                )} />
+              </div>
+              <div>
+                <h5 className="font-bold text-foreground">Schedule All</h5>
+                <p className="text-sm text-muted-foreground">Post all slideshows with time intervals</p>
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Post all slideshows with a time interval between each post
-            </p>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                <CheckCircle className="w-3 h-3 text-emerald-500" />
+                <span>Automated scheduling</span>
+              </div>
+              <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                <CheckCircle className="w-3 h-3 text-emerald-500" />
+                <span>Perfect for bulk posting</span>
+              </div>
+            </div>
           </button>
           
           <button
             onClick={() => setPostingStrategy('first-now')}
             className={cn(
-              "p-4 rounded-lg border-2 text-left transition-all",
+              "group relative p-6 rounded-2xl border-2 text-left transition-all duration-300 hover:shadow-lg",
               postingStrategy === 'first-now'
-                ? "border-primary bg-primary/5"
-                : "border-border hover:border-primary/50"
+                ? "border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 shadow-lg scale-[1.02]"
+                : "border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-600 hover:bg-slate-50 dark:hover:bg-slate-800/50"
             )}
           >
-            <div className="flex items-center space-x-2 mb-2">
-              <Play className="w-5 h-5" />
-              <span className="font-medium">Post 1 Now</span>
+            <div className="flex items-center space-x-3 mb-3">
+              <div className={cn(
+                "flex items-center justify-center w-12 h-12 rounded-xl transition-all duration-300",
+                postingStrategy === 'first-now'
+                  ? "bg-gradient-to-r from-blue-500 to-indigo-600 shadow-lg"
+                  : "bg-slate-100 dark:bg-slate-800 group-hover:bg-blue-100 dark:group-hover:bg-blue-900/30"
+              )}>
+                <Play className={cn(
+                  "w-6 h-6 transition-colors duration-300",
+                  postingStrategy === 'first-now' ? "text-white" : "text-slate-600 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400"
+                )} />
+              </div>
+              <div>
+                <h5 className="font-bold text-foreground">Post 1 Now</h5>
+                <p className="text-sm text-muted-foreground">Immediate posting + schedule rest</p>
+              </div>
             </div>
-            <p className="text-sm text-muted-foreground">
-              Post the first slideshow immediately, then schedule the rest
-            </p>
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                <CheckCircle className="w-3 h-3 text-emerald-500" />
+                <span>Instant engagement</span>
+              </div>
+              <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                <CheckCircle className="w-3 h-3 text-emerald-500" />
+                <span>Followed by scheduled posts</span>
+              </div>
+            </div>
           </button>
         </div>
 
         {/* Interval Settings */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg">
-          <div>
-            <label className="text-sm text-muted-foreground block mb-2">Interval between posts</label>
-            <select
-              value={intervalHours}
-              onChange={(e) => setIntervalHours(Number(e.target.value))}
-              className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-            >
-              <option value={0.5}>30 minutes</option>
-              <option value={1}>1 hour</option>
-              <option value={1.5}>1.5 hours</option>
-              <option value={2}>2 hours</option>
-              <option value={2.5}>2.5 hours</option>
-              <option value={3}>3 hours</option>
-              <option value={4}>4 hours</option>
-              <option value={6}>6 hours</option>
-              <option value={12}>12 hours</option>
-              <option value={24}>24 hours</option>
-            </select>
-          </div>
-          
-          {postingStrategy === 'interval' && (
-            <div>
-              <label className="text-sm text-muted-foreground block mb-2">Start time</label>
-              <input
-                type="datetime-local"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
-                className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-              />
+        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-3">
+              <label className="block text-sm font-semibold text-foreground">Interval Between Posts</label>
+              <select
+                value={intervalHours}
+                onChange={(e) => setIntervalHours(Number(e.target.value))}
+                className="w-full px-4 py-3 bg-white dark:bg-slate-900 text-foreground rounded-xl border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+              >
+                <option value={0.5}>30 minutes</option>
+                <option value={1}>1 hour</option>
+                <option value={1.5}>1.5 hours</option>
+                <option value={2}>2 hours</option>
+                <option value={2.5}>2.5 hours</option>
+                <option value={3}>3 hours</option>
+                <option value={4}>4 hours</option>
+                <option value={6}>6 hours</option>
+                <option value={12}>12 hours</option>
+                <option value={24}>24 hours</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Optimal TikTok posting: 3-6 hours recommended
+              </p>
             </div>
-          )}
+            
+            {postingStrategy === 'interval' && (
+              <div className="space-y-3">
+                <label className="block text-sm font-semibold text-foreground">Start Time</label>
+                <input
+                  type="datetime-local"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  min={new Date().toISOString().slice(0, 16)}
+                  className="w-full px-4 py-3 bg-white dark:bg-slate-900 text-foreground rounded-xl border border-slate-200 dark:border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 focus:outline-none transition-all"
+                />
+                <p className="text-xs text-muted-foreground">
+                  All posts will be scheduled from this time
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* Schedule Preview */}
-      <div className="space-y-3">
-        <h4 className="font-medium text-foreground flex items-center">
-          <Eye className="w-4 h-4 mr-2" />
-          Posting Schedule Preview
-        </h4>
+      <div className="space-y-6">
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-emerald-500 to-teal-600 rounded-xl">
+            <Eye className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h4 className="text-lg font-bold text-foreground">Schedule Preview</h4>
+            <p className="text-sm text-muted-foreground">Review your posting timeline before confirmation</p>
+          </div>
+        </div>
         
         {/* Schedule Constraints Notice */}
-        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
-          <div className="flex items-start space-x-2">
-            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-            <div className="text-sm">
-              <div className="font-medium text-amber-800 dark:text-amber-200 mb-1">Schedule Constraints Applied</div>
-              <div className="text-amber-700 dark:text-amber-300">
-                • Posts scheduled every {intervalHours} hours between 9am-10pm only<br/>
-                • No posts between 12am-9am (moved to 9am if scheduled)<br/>
-                • Posts after 10pm are automatically skipped
+        <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl p-4">
+          <div className="flex items-start space-x-3">
+            <div className="flex-shrink-0 w-10 h-10 bg-amber-100 dark:bg-amber-900/50 rounded-xl flex items-center justify-center">
+              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <div className="font-bold text-amber-800 dark:text-amber-200 mb-2">Schedule Constraints Applied</div>
+              <div className="space-y-1 text-sm text-amber-700 dark:text-amber-300">
+                <div className="flex items-center space-x-2">
+                  <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                  <span>Posts scheduled every {intervalHours} hours between 9am-10pm only</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                  <span>No posts between 12am-9am (automatically moved to 9am)</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                  <span>Posts after 10pm are automatically skipped</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
         
-        <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+        {/* Schedule Timeline */}
+        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-200 dark:border-slate-700 p-6">
           {getSchedulePreview().length === 0 ? (
-            <div className="text-center py-4 text-muted-foreground">
-              <AlertCircle className="w-6 h-6 mx-auto mb-2" />
-              <p className="text-sm">No posts can be scheduled within the 9am-10pm window with the current settings</p>
+            <div className="text-center py-8">
+              <div className="w-16 h-16 bg-slate-200 dark:bg-slate-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-slate-400" />
+              </div>
+              <h5 className="font-semibold text-slate-700 dark:text-slate-300 mb-2">No Posts Scheduled</h5>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                No posts can be scheduled within the 9am-10pm window with the current settings
+              </p>
             </div>
           ) : (
-            getSchedulePreview().map((item, index) => (
-              <div key={item.slideshowId} className="flex items-center justify-between p-2 bg-background rounded">
-                <div className="flex items-center space-x-3">
-                  <div className="w-6 h-6 bg-primary/20 rounded-full flex items-center justify-center text-xs font-medium">
-                    {index + 1}
-                  </div>
-                  <div>
-                    <div className="font-medium text-foreground text-sm">{item.slideshowTitle}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {item.isImmediate ? 'Will post immediately' : `Scheduled for ${item.displayTime}`}
+            <div className="space-y-3">
+              {getSchedulePreview().map((item, index) => (
+                <div key={item.slideshowId} className="group bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-md transition-all duration-200">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center justify-center w-10 h-10 bg-gradient-to-r from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl border border-blue-200 dark:border-blue-700">
+                        <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{index + 1}</span>
+                      </div>
+                      <div>
+                        <h6 className="font-semibold text-slate-900 dark:text-slate-100">{item.slideshowTitle}</h6>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <Clock className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                          <span className="text-xs text-slate-600 dark:text-slate-400">
+                            {item.isImmediate ? 'Will post immediately' : `Scheduled for ${item.displayTime}`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      {item.status === 'pending' && (
+                        <div className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400">
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                          <span className="text-xs font-medium">Pending</span>
+                        </div>
+                      )}
+                      {item.status === 'posting' && (
+                        <div className="flex items-center space-x-2 text-blue-600 dark:text-blue-400">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span className="text-xs font-medium">Posting</span>
+                        </div>
+                      )}
+                      {item.status === 'success' && (
+                        <div className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle className="w-4 h-4" />
+                          <span className="text-xs font-medium">Success</span>
+                        </div>
+                      )}
+                      {item.status === 'error' && (
+                        <div className="flex items-center space-x-2 text-red-600 dark:text-red-400">
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-xs font-medium">Error</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  {item.status === 'pending' && (
-                    <Clock className="w-4 h-4 text-muted-foreground" />
-                  )}
-                  {item.status === 'posting' && (
-                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                  )}
-                  {item.status === 'success' && (
-                    <CheckCircle className="w-4 h-4 text-green-500" />
-                  )}
-                  {item.status === 'error' && (
-                    <AlertCircle className="w-4 h-4 text-red-500" />
-                  )}
-                </div>
-              </div>
-            ))
+              ))}
+            </div>
           )}
         </div>
         
-        {/* Show count of skipped posts if any */}
+        {/* Skipped Posts Notice */}
         {slideshows.length > postingSchedule.length && (
-          <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-lg p-3">
-            <div className="flex items-center space-x-2">
-              <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400" />
-              <div className="text-sm">
-                <span className="font-medium text-orange-800 dark:text-orange-200">
-                  {slideshows.length - postingSchedule.length} slideshow(s) skipped
-                </span>
-                <span className="text-orange-700 dark:text-orange-300 ml-2">
-                  (would be scheduled after 10pm)
-                </span>
+          <div className="bg-gradient-to-r from-orange-50 to-red-50 dark:from-orange-950/30 dark:to-red-950/30 border border-orange-200 dark:border-orange-800 rounded-2xl p-4">
+            <div className="flex items-center space-x-3">
+              <div className="flex-shrink-0 w-10 h-10 bg-orange-100 dark:bg-orange-900/50 rounded-xl flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+              </div>
+              <div>
+                <div className="font-bold text-orange-800 dark:text-orange-200">Posts Skipped</div>
+                <div className="text-sm text-orange-700 dark:text-orange-300">
+                  {slideshows.length - postingSchedule.length} slideshow(s) would be scheduled after 10pm and have been automatically skipped
+                </div>
               </div>
             </div>
           </div>
