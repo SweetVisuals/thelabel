@@ -852,7 +852,7 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         const chunkNumber = i + 1;
         const slideshowTitle = `Post ${chunkNumber}`;
         const postTitle = template.postTitle || slideshowTitle;
-        const caption = `${template.caption} (Part ${chunkNumber} of ${imageChunks.length})`;
+        const caption = template.caption; // Use original caption without numbering
         
         try {
           console.log(`🎬 Creating slideshow ${chunkNumber}/${imageChunks.length}: ${slideshowTitle}`);
