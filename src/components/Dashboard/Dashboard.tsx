@@ -76,10 +76,12 @@ interface TextOverlay {
 
 export const Dashboard: React.FC = () => {
     const { user } = useAuth();
-    const [images, setImages] = useState<UploadedImage[]>([]);
-    const [folders, setFolders] = useState<Folder[]>([]);
-    const [selectedImages, setSelectedImages] = useState<string[]>([]);
-    const [selectedSlideshows, setSelectedSlideshows] = useState<string[]>([]);
+      const [images, setImages] = useState<UploadedImage[]>([]);
+      const [folders, setFolders] = useState<Folder[]>([]);
+      const [selectedImages, setSelectedImages] = useState<string[]>([]);
+      // Track images in selection order
+      const [selectedImagesOrdered, setSelectedImagesOrdered] = useState<string[]>([]);
+      const [selectedSlideshows, setSelectedSlideshows] = useState<string[]>([]);
     const [editingImage, setEditingImage] = useState<UploadedImage | null>(null);
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
     const [currentSlide, setCurrentSlide] = useState(0); // Added currentSlide state
@@ -161,7 +163,11 @@ export const Dashboard: React.FC = () => {
   }, [notification]);
 
   const handleImagesUploaded = (newImages: UploadedImage[]) => {
-    setImages(newImages);
+    // Only update images if we're in root folder (currentFolderId === null)
+    // This prevents images from being duplicated when uploading to folders
+    if (currentFolderId === null) {
+      setImages(newImages);
+    }
   };
 
   const loadSavedHashtags = async () => {
@@ -605,11 +611,37 @@ export const Dashboard: React.FC = () => {
   const handleImageSelectionChange = (selectedIds: string[]) => {
     setSelectedImages(selectedIds);
     
+    // Maintain selection order by tracking when images are selected
+    if (selectedIds.length > selectedImagesOrdered.length) {
+      // New image was added
+      const newImageId = selectedIds.find(id => !selectedImagesOrdered.includes(id));
+      if (newImageId) {
+        setSelectedImagesOrdered([...selectedImagesOrdered, newImageId]);
+      }
+    } else {
+      // Image was removed or selection changed
+      setSelectedImagesOrdered(selectedIds);
+    }
+    
     // Clear slideshow selection when images are selected (mutually exclusive)
     if (selectedIds.length > 0) {
       setSelectedSlideshows([]);
     }
   };
+
+  // Handle selection order changes from remix operations
+  useEffect(() => {
+    const handleSelectionOrderChange = (event: CustomEvent) => {
+      const { newOrderedSelection } = event.detail;
+      setSelectedImagesOrdered(newOrderedSelection);
+    };
+
+    window.addEventListener('selectionOrderChange', handleSelectionOrderChange as EventListener);
+    
+    return () => {
+      window.removeEventListener('selectionOrderChange', handleSelectionOrderChange as EventListener);
+    };
+  }, []);
 
   return (
     <SidebarProvider>
@@ -658,7 +690,7 @@ export const Dashboard: React.FC = () => {
             <div className="w-[30%] min-w-0">
               <TikTokPreview
                 images={images}
-                selectedImages={selectedImages}
+                selectedImages={selectedImagesOrdered} // Use ordered selection for proper image order
                 textOverlays={textOverlays}
                 title={title}
                 postTitle={postTitle}
@@ -687,6 +719,7 @@ export const Dashboard: React.FC = () => {
 
                   setImages(finalImages);
                 }}
+                onSelectionOrderChange={setSelectedImagesOrdered} // Callback to update selection order
                 currentSlideshow={currentSlideshow}
               />
             </div>
