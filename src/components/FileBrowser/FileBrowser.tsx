@@ -61,6 +61,8 @@ interface FileBrowserProps {
   onSlideshowUnload?: () => void;
   cutLength?: number;
   onCutLengthChange?: (cutLength: number) => void;
+  onSelectionOrderChange?: (orderedIds: string[]) => void; // Add callback for selection order changes
+  onCurrentImagesChange?: (images: UploadedImage[]) => void; // Add callback for current images context changes
 }
 
 interface FileItem {
@@ -89,6 +91,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onSlideshowUnload,
   cutLength = 5,
   onCutLengthChange,
+  onSelectionOrderChange,
+  onCurrentImagesChange,
 }) => {
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
   const [sortBy, setSortBy] = useState<'name' | 'date' | 'size' | 'order'>('name');
@@ -135,10 +139,20 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     if (currentFolderId !== null) {
       const folder = folders.find(f => f.id === currentFolderId);
       if (folder) {
+        console.log('📁 Loading folder images:', {
+          folderId: currentFolderId,
+          folderName: folder.name,
+          imageCount: folder.images.length
+        });
         setDisplayedImages(folder.images);
+        onCurrentImagesChange?.(folder.images);
       }
+    } else {
+      // Root folder - use the root images
+      setDisplayedImages(images);
+      onCurrentImagesChange?.(images);
     }
-  }, [currentFolderId, folders]);
+  }, [currentFolderId, folders, images, onCurrentImagesChange]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -148,9 +162,34 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           imageService.loadImages(),
           imageService.loadFolders(),
         ]);
-        onImagesUploaded(loadedImages);
+        
+        // Comprehensive deduplication - ensure no image appears in both root and folders
+        console.log('🔍 Deduplication check:', {
+          rootImages: loadedImages.length,
+          totalFolderImages: loadedFolders.reduce((sum, folder) => sum + folder.images.length, 0)
+        });
+        
+        // Remove any images from root that might also be in folders
+        const rootImageIds = new Set(loadedImages.map(img => img.id));
+        const folderImageIds = new Set();
+        loadedFolders.forEach(folder => {
+          folder.images.forEach(img => folderImageIds.add(img.id));
+        });
+        
+        const duplicateIds = [...rootImageIds].filter(id => folderImageIds.has(id));
+        if (duplicateIds.length > 0) {
+          console.warn('⚠️ Found duplicate images in root and folders, removing from root:', duplicateIds);
+        }
+        
+        const dedupedImages = loadedImages.filter(img => !folderImageIds.has(img.id));
+        
+        onImagesUploaded(dedupedImages);
         onFoldersChange?.(loadedFolders);
-        console.log('✅ Initial data loaded:', { loadedImagesCount: loadedImages.length, loadedFoldersCount: loadedFolders.length });
+        console.log('✅ Initial data loaded:', {
+          loadedImagesCount: loadedImages.length,
+          dedupedImagesCount: dedupedImages.length,
+          loadedFoldersCount: loadedFolders.length
+        });
       } catch (error) {
         console.error('❌ Failed to load data:', error);
         onImagesUploaded([]);
@@ -210,6 +249,53 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     loadSlideshows();
   }, [triggerReRender]);
 
+  // Listen for folder data refresh events (triggered by folder uploads)
+  useEffect(() => {
+    const handleFolderDataRefresh = async (e: CustomEvent) => {
+      console.log('🔄 Folder data refresh triggered for:', e.detail.folderId);
+      
+      try {
+        // Reload folder data from the service
+        const [loadedImages, loadedFolders] = await Promise.all([
+          imageService.loadImages(),
+          imageService.loadFolders(),
+        ]);
+        
+        // Apply deduplication to prevent any remaining duplicates
+        const rootImageIds = new Set(loadedImages.map(img => img.id));
+        const folderImageIds = new Set();
+        loadedFolders.forEach(folder => {
+          folder.images.forEach(img => folderImageIds.add(img.id));
+        });
+        
+        const duplicateIds = [...rootImageIds].filter(id => folderImageIds.has(id));
+        if (duplicateIds.length > 0) {
+          console.warn('⚠️ Folder refresh: Found duplicate images, removing from root:', duplicateIds);
+        }
+        
+        const dedupedImages = loadedImages.filter(img => !folderImageIds.has(img.id));
+        
+        // Update the state
+        onImagesUploaded(dedupedImages);
+        onFoldersChange?.(loadedFolders);
+        
+        console.log('✅ Folder data refreshed successfully:', {
+          rootImages: dedupedImages.length,
+          totalFolderImages: loadedFolders.reduce((sum, folder) => sum + folder.images.length, 0)
+        });
+      } catch (error) {
+        console.error('❌ Failed to refresh folder data:', error);
+      }
+    };
+
+    // Add listener for folder data refresh
+    window.addEventListener('folderDataRefresh', handleFolderDataRefresh as unknown as EventListener);
+
+    return () => {
+      window.removeEventListener('folderDataRefresh', handleFolderDataRefresh as unknown as EventListener);
+    };
+  }, [onImagesUploaded, onFoldersChange]);
+
   // Get slideshows from service instead of directly from localStorage
   const getSlideshowsFromService = () => {
     try {
@@ -252,6 +338,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   };
 
   const handleFolderClick = (folderId: string) => {
+    // Don't clear selection when entering a folder - let Dashboard handle filtering
+    // This preserves user selections across folder navigation
+    
     if (onCurrentFolderIdChange) {
       onCurrentFolderIdChange(folderId);
     }
@@ -344,7 +433,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         try {
           const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, currentFolderId || undefined));
           const newImages = await Promise.all(uploadPromises);
-          onImagesUploaded([...images, ...newImages]);
+          // Only update root images if we're in root folder, otherwise folder images are handled separately
+          if (currentFolderId === null) {
+            onImagesUploaded([...images, ...newImages]);
+          }
           resolve(newImages);
         } catch (error) {
           reject(error);
@@ -753,6 +845,10 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         
         console.log('📊 Updated folders structure:', updatedFolders.map(f => ({ id: f.id, name: f.name, imageCount: f.images.length })));
         
+        // Critical fix: Remove moved images from root images array
+        const updatedImages = images.filter(img => !imageIds.includes(img.id));
+        console.log('🔄 Removing moved images from root:', { originalCount: images.length, newCount: updatedImages.length });
+        onImagesUploaded(updatedImages);
         onFoldersChange?.(updatedFolders);
         onSelectionChange([]);
         return `Successfully moved ${imageIds.length} image(s)!`;
@@ -1114,7 +1210,10 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                 try {
                   const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, currentFolderId || undefined));
                   const newImages = await Promise.all(uploadPromises);
-                  onImagesUploaded([...images, ...newImages]);
+                  // Only update root images if we're in root folder, otherwise folder images are handled separately
+                  if (currentFolderId === null) {
+                    onImagesUploaded([...images, ...newImages]);
+                  }
                   resolve(newImages);
                 } catch (error) {
                   reject(error);
@@ -1232,7 +1331,10 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
           try {
             const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, currentFolderId || undefined));
             const newImages = await Promise.all(uploadPromises);
-            onImagesUploaded([...images, ...newImages]);
+            // Only update root images if we're in root folder, otherwise folder images are handled separately
+            if (currentFolderId === null) {
+              onImagesUploaded([...images, ...newImages]);
+            }
             resolve(newImages);
           } catch (error) {
             reject(error);
@@ -2207,6 +2309,8 @@ const FolderTile: React.FC<{
     });
 
     try {
+      let uploadSuccess = false;
+
       // Handle image files
       if (imageFiles.length > 0) {
         toast.loading(`Uploading ${imageFiles.length} images to ${item.name}...`);
@@ -2214,9 +2318,13 @@ const FolderTile: React.FC<{
         const uploadPromises = imageFiles.map(file => imageService.uploadImage(file, item.id));
         const newImages = await Promise.all(uploadPromises);
 
-        if (onImagesUploaded) {
-          onImagesUploaded([...currentImages, ...newImages]);
-        }
+        uploadSuccess = true;
+
+        // Notify parent component to refresh folder data
+        const refreshEvent = new CustomEvent('folderDataRefresh', {
+          detail: { folderId: item.id }
+        });
+        window.dispatchEvent(refreshEvent);
 
         toast.success(`Successfully uploaded ${newImages.length} images to ${item.name}!`);
       }
@@ -2229,6 +2337,7 @@ const FolderTile: React.FC<{
             if (slideshow) {
               // Move the loaded slideshow to this folder
               await slideshowService.moveSlideshowToFolder(slideshow.id, item.id);
+              uploadSuccess = true;
               toast.success(`Loaded slideshow: ${slideshow.title} in ${item.name}`);
             }
           } catch (error) {
@@ -2236,6 +2345,14 @@ const FolderTile: React.FC<{
             toast.error(`Failed to load slideshow: ${file.name}`);
           }
         }
+      }
+
+      // Trigger general refresh if any uploads were successful
+      if (uploadSuccess) {
+        const refreshEvent = new CustomEvent('folderDataRefresh', {
+          detail: { folderId: item.id }
+        });
+        window.dispatchEvent(refreshEvent);
       }
     } catch (error) {
       console.error('Failed to upload dropped files:', error);

@@ -82,7 +82,7 @@ export const imageService = {
     }
   },
 
-  // Load all images for current user
+  // Load root-level images (not in any folder) for current user
   async loadImages(): Promise<UploadedImage[]> {
     try {
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
@@ -92,11 +92,17 @@ export const imageService = {
 
       const user = session.user;
 
-      // Try to load from images table, but handle if table doesn't exist
+      // Load images that are NOT in any folder (root-level images only)
       const { data: images, error } = await supabase
         .from('images')
-        .select('*')
+        .select(`
+          *,
+          folder_images!left (
+            id
+          )
+        `)
         .eq('user_id', user.id)
+        .is('folder_images.id', null) // Only images with no folder association
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -109,7 +115,7 @@ export const imageService = {
         return [];
       }
 
-      
+      console.log('🖼️ Loaded root images (not in folders):', images?.length || 0);
 
       // Convert to UploadedImage format
       const uploadedImages = images.map(img => ({

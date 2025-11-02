@@ -110,6 +110,7 @@ export const Dashboard: React.FC = () => {
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [cutLength, setCutLength] = useState<number>(5); // Store slideshow limit
   const [currentSlideshow, setCurrentSlideshow] = useState<SlideshowMetadata | null>(null);
+  const [currentImages, setCurrentImages] = useState<UploadedImage[]>([]); // Track current folder images
 
   // Template functionality
   const [textTemplates, setTextTemplates] = useState<any[]>([]);
@@ -610,23 +611,39 @@ export const Dashboard: React.FC = () => {
   // Handle image selection changes
   const handleImageSelectionChange = (selectedIds: string[]) => {
     setSelectedImages(selectedIds);
-    
-    // Maintain selection order by tracking when images are selected
-    if (selectedIds.length > selectedImagesOrdered.length) {
-      // New image was added
-      const newImageId = selectedIds.find(id => !selectedImagesOrdered.includes(id));
-      if (newImageId) {
-        setSelectedImagesOrdered([...selectedImagesOrdered, newImageId]);
-      }
-    } else {
-      // Image was removed or selection changed
-      setSelectedImagesOrdered(selectedIds);
-    }
+    setSelectedImagesOrdered(selectedIds); // Always sync ordered selection with current selection
     
     // Clear slideshow selection when images are selected (mutually exclusive)
     if (selectedIds.length > 0) {
       setSelectedSlideshows([]);
     }
+  };
+  
+  // Handle folder navigation while preserving selections
+  const handleCurrentFolderIdChangeWithPreservation = (folderId: string | null) => {
+    console.log('🗂️ Navigating to folder:', folderId);
+    
+    // Get the target folder images if navigating to a folder
+    if (folderId !== null) {
+      const targetFolder = folders.find(f => f.id === folderId);
+      const targetFolderImageIds = targetFolder ? targetFolder.images.map(img => img.id) : [];
+      
+      // Update selection to only include images from the target folder
+      const validSelectionIds = selectedImagesOrdered.filter(id => targetFolderImageIds.includes(id));
+      
+      console.log('📁 Updating selection for folder navigation:', {
+        folderId,
+        targetFolderImageCount: targetFolderImageIds.length,
+        currentSelectionCount: selectedImagesOrdered.length,
+        validSelectionCount: validSelectionIds.length
+      });
+      
+      // Update both the main selection and ordered selection
+      setSelectedImages(validSelectionIds);
+      setSelectedImagesOrdered(validSelectionIds);
+    }
+    
+    setCurrentFolderId(folderId);
   };
 
   // Handle selection order changes from remix operations
@@ -642,6 +659,75 @@ export const Dashboard: React.FC = () => {
       window.removeEventListener('selectionOrderChange', handleSelectionOrderChange as EventListener);
     };
   }, []);
+
+  // Get current images based on folder context for TikTokPreview
+  const getCurrentImages = () => {
+    if (currentFolderId === null) {
+      return images; // Root level images
+    } else {
+      const currentFolder = folders.find(f => f.id === currentFolderId);
+      return currentFolder ? currentFolder.images : [];
+    }
+  };
+
+  const derivedCurrentImages = getCurrentImages();
+
+  // Filter selected images to only include those from current folder
+  const getCurrentSelectedImages = () => {
+    const currentImageIds = derivedCurrentImages.map(img => img.id);
+    const filtered = selectedImages.filter(id => currentImageIds.includes(id));
+    
+    console.log('🎯 Current selected images for folder:', {
+      currentFolderId,
+      totalSelected: selectedImages.length,
+      currentFolderImages: derivedCurrentImages.length,
+      filteredSelected: filtered.length,
+      selectedImageIds: selectedImages,
+      currentImageIds: currentImageIds
+    });
+    
+    return filtered;
+  };
+
+  const currentSelectedImages = getCurrentSelectedImages();
+  // Update TikTokPreview props logging
+  // Ensure selected images are properly synced when folder changes
+  useEffect(() => {
+    console.log('🔄 Folder change detected, updating selection...', {
+      currentFolderId,
+      totalSelected: selectedImagesOrdered.length,
+      availableImages: derivedCurrentImages.length
+    });
+
+    // Get current folder image IDs
+    const currentImageIds = new Set(derivedCurrentImages.map(img => img.id));
+    const oldSelectedImageIds = new Set(selectedImagesOrdered);
+    
+    // Find intersection (images that are both selected AND exist in current folder)
+    const validSelectionIds = selectedImagesOrdered.filter(id => currentImageIds.has(id));
+    
+    console.log('🎯 Selection sync results:', {
+      oldSelectedCount: oldSelectedImageIds.size,
+      currentFolderImageCount: currentImageIds.size,
+      validSelectionCount: validSelectionIds.length,
+      invalidIds: [...oldSelectedImageIds].filter(id => !currentImageIds.has(id))
+    });
+    
+    // Update main selection state to only include valid IDs
+    // This ensures the FileBrowser selection reflects the current folder context
+    if (validSelectionIds.length !== selectedImagesOrdered.length) {
+      setSelectedImages(validSelectionIds);
+    }
+  }, [currentFolderId, derivedCurrentImages]);
+  useEffect(() => {
+    console.log('📺 TikTokPreview props update:', {
+      currentFolderId,
+      imagesCount: derivedCurrentImages.length,
+      selectedImagesCount: currentSelectedImages.length,
+      selectedImageIds: currentSelectedImages,
+      hasCurrentSlideshow: !!currentSlideshow
+    });
+  }, [currentFolderId, derivedCurrentImages, currentSelectedImages, currentSlideshow]);
 
   return (
     <SidebarProvider>
@@ -674,7 +760,7 @@ export const Dashboard: React.FC = () => {
                   folders={folders}
                   onFoldersChange={setFolders}
                   currentFolderId={currentFolderId}
-                  onCurrentFolderIdChange={handleCurrentFolderIdChange}
+                  onCurrentFolderIdChange={handleCurrentFolderIdChangeWithPreservation}
                   onNavigateUp={handleNavigateUpFromHeader}
                   onSlideshowLoad={handleSlideshowLoad}
                   onSlideshowUnload={handleSlideshowUnload}
@@ -682,6 +768,7 @@ export const Dashboard: React.FC = () => {
                   onSlideshowSelectionChange={handleSlideshowSelectionChange}
                   cutLength={cutLength}
                   onCutLengthChange={setCutLength}
+                  onCurrentImagesChange={setCurrentImages}
                 />
               </div>
             </div>
@@ -689,8 +776,8 @@ export const Dashboard: React.FC = () => {
             {/* Middle Panel - TikTok Preview */}
             <div className="w-[30%] min-w-0">
               <TikTokPreview
-                images={images}
-                selectedImages={selectedImagesOrdered} // Use ordered selection for proper image order
+                images={derivedCurrentImages}
+                selectedImages={currentSelectedImages}
                 textOverlays={textOverlays}
                 title={title}
                 postTitle={postTitle}
@@ -710,14 +797,28 @@ export const Dashboard: React.FC = () => {
                 onMusicEnabledChange={setMusicEnabled}
                 onCurrentSlideChange={setCurrentSlide}
                 onImagesUpdate={(updatedImages) => {
-                  // Force React to detect the change by creating new array reference
-                  const newImagesArray = [...updatedImages];
-
-                  // Also update other images that weren't cropped
-                  const otherImages = images.filter(img => !updatedImages.some(updated => updated.id === img.id));
-                  const finalImages = [...otherImages, ...newImagesArray];
-
-                  setImages(finalImages);
+                  // Handle image updates for both root and folder images
+                  if (currentFolderId === null) {
+                    // Root level images update
+                    const newImagesArray = [...updatedImages];
+                    const otherImages = images.filter(img => !updatedImages.some(updated => updated.id === img.id));
+                    const finalImages = [...otherImages, ...newImagesArray];
+                    setImages(finalImages);
+                  } else {
+                    // Folder images update
+                    const updatedFolders = folders.map(f => {
+                      if (f.id === currentFolderId) {
+                        const folderImageIds = new Set(updatedImages.map(img => img.id));
+                        const otherFolderImages = f.images.filter(img => !folderImageIds.has(img.id));
+                        return {
+                          ...f,
+                          images: [...otherFolderImages, ...updatedImages]
+                        };
+                      }
+                      return f;
+                    });
+                    setFolders(updatedFolders);
+                  }
                 }}
                 onSelectionOrderChange={setSelectedImagesOrdered} // Callback to update selection order
                 currentSlideshow={currentSlideshow}

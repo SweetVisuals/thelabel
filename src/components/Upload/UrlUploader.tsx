@@ -112,10 +112,16 @@ export const UrlUploader: React.FC<UrlUploaderProps> = ({
         });
 
         if (response.ok) {
-          const blob = await response.blob();
-          const mimeType = blob.type || 'image/jpeg';
-          console.log(`✅ Server proxy download successful for ${filename}`);
-          return new File([blob], filename, { type: mimeType });
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.startsWith('image/')) {
+            const blob = await response.blob();
+            console.log(`✅ Server proxy download successful for ${filename}`);
+            return new File([blob], filename, { type: blob.type });
+          } else {
+            // Handle JSON error responses from the proxy
+            const errorData = await response.json();
+            throw new Error(`Proxy error: ${errorData.error}`);
+          }
         } else {
           const errorData = await response.json();
           console.warn(`Server proxy failed: ${errorData.error}`);

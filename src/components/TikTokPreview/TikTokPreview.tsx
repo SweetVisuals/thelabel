@@ -57,6 +57,7 @@ interface TikTokPreviewProps {
    onAspectRatioChange?: (aspectRatio: string) => void;
    onImagesUpdate?: (images: UploadedImage[]) => void;
    onCurrentSlideChange?: (slideIndex: number) => void; // Added onCurrentSlideChange
+   onSelectionOrderChange?: (orderedIds: string[]) => void; // New callback for selection order changes
    currentSlideshow?: any; // Add currentSlideshow prop for loaded slideshows
  }
 
@@ -84,6 +85,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
    onAspectRatioChange,
    onImagesUpdate,
    onCurrentSlideChange, // Destructure new prop
+   onSelectionOrderChange, // Destructure new prop
    currentSlideshow, // Destructure new prop
  }) => {
    
@@ -110,12 +112,34 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
     setCurrentAspectRatio(aspectRatio);
   }, [aspectRatio]);
 
+  // Debug logging for props and slideshow creation
+  useEffect(() => {
+    console.log('📱 TikTokPreview Props Debug:', {
+      currentFolderContext: 'TikTokPreview',
+      imagesCount: images.length,
+      selectedImagesCount: selectedImages.length,
+      selectedImageIds: selectedImages,
+      currentSlideshow: !!currentSlideshow,
+      previewMode,
+      cutLength,
+      firstFewImages: images.slice(0, 3).map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' }))
+    });
+  }, [images, selectedImages, currentSlideshow, previewMode, cutLength]);
   // Create a single slideshow with all selected images or use loaded slideshow (with cut length limit)
   const { slideshowImages, originalSlidesCount } = useMemo(() => {
+    console.log('🔄 TikTokPreview useMemo recalculating...', {
+      imagesCount: images.length,
+      selectedImagesCount: selectedImages.length,
+      selectedImageIds: selectedImages,
+      currentSlideshow: !!currentSlideshow,
+      previewMode,
+      cutLength
+    });
     
     // If we have a properly loaded slideshow with condensed slides, use it (preview mode)
     if (currentSlideshow && currentSlideshow.condensedSlides && currentSlideshow.condensedSlides.length > 0) {
       
+      console.log('📱 Using loaded slideshow (preview mode)');
       const originalCount = currentSlideshow.condensedSlides.length;
       const limitedSlides = currentSlideshow.condensedSlides.slice(0, cutLength).map((slide: any) => ({
         id: slide.originalImageId || slide.id, // Use original image ID for database queries, fallback to condensed ID
@@ -131,16 +155,50 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       return { slideshowImages: limitedSlides, originalSlidesCount: originalCount };
     }
 
-    // If we have selected images, create slideshow from them (regardless of previewMode when no slideshow loaded)
-    // Apply cut length limit here as well
+    // If we have selected images, create slideshow from them respecting selection order
     if (selectedImages.length > 0) {
-      const filteredImages = images.filter(img => selectedImages.includes(img.id));
-      const originalCount = filteredImages.length;
-      const slideshow = filteredImages.slice(0, cutLength);
+      console.log('🖼️ Creating slideshow from selected images');
+      
+      // Create a map for faster lookups from the available images
+      const imagesMap = new Map(images.map(img => [img.id, img]));
+      
+      console.log('🔍 Images map debug:', {
+        totalImagesInMap: imagesMap.size,
+        sampleImageIds: Array.from(imagesMap.keys()).slice(0, 5),
+        selectedIds: selectedImages,
+        mapHasSelectedIds: selectedImages.map(id => imagesMap.has(id))
+      });
+      
+      // Get images in the order they were selected
+      const orderedImages = selectedImages
+        .map(id => imagesMap.get(id))
+        .filter(img => img !== undefined) as UploadedImage[];
+      
+      console.log('🎬 TikTokPreview: Creating slideshow from selected images:', {
+        selectedImageIds: selectedImages,
+        availableImagesCount: images.length,
+        foundImagesCount: orderedImages.length,
+        missingImageIds: selectedImages.filter(id => !imagesMap.has(id)),
+        foundImageDetails: orderedImages.map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' }))
+      });
+      
+      if (orderedImages.length === 0) {
+        console.warn('⚠️ TikTokPreview: No matching images found for selected IDs in current folder');
+        console.log('🔍 Debug - Available images:', images.map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' })));
+        console.log('🔍 Debug - Selected IDs:', selectedImages);
+      }
+      
+      const originalCount = orderedImages.length;
+      const slideshow = orderedImages.slice(0, cutLength);
+      console.log('✅ Final slideshow result:', {
+        slideshowCount: slideshow.length,
+        originalCount
+      });
       return { slideshowImages: slideshow, originalSlidesCount: originalCount };
     }
 
     // No slideshow or selected images, return empty
+    console.log('❌ No slideshow or selected images, returning empty');
     return { slideshowImages: [], originalSlidesCount: 0 };
   }, [images, selectedImages, currentSlideshow, previewMode, cutLength]);
 
