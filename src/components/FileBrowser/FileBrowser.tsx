@@ -42,6 +42,7 @@ import { imageService } from '@/lib/imageService';
 import { slideshowService } from '@/lib/slideshowService';
 import { toast } from 'sonner';
 import { PostizPoster } from '../Postiz/PostizPoster';
+import { BulkPostizPoster } from '../Postiz/BulkPostizPoster';
 import { TemplateSelectionDialog } from './TemplateSelectionDialog';
 
 interface FileBrowserProps {
@@ -105,6 +106,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [renameSlideshowInputValue, setRenameSlideshowInputValue] = useState('');
   const [showPostizPoster, setShowPostizPoster] = useState(false);
   const [slideshowToPost, setSlideshowToPost] = useState<SlideshowMetadata | null>(null);
+  const [showBulkPostizPoster, setShowBulkPostizPoster] = useState(false);
+  const [bulkSlideshowsToPost, setBulkSlideshowsToPost] = useState<SlideshowMetadata[]>([]);
   const [isCreatingFromTemplate, setIsCreatingFromTemplate] = useState(false);
   const [showTemplateSelectionDialog, setShowTemplateSelectionDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -520,7 +523,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   };
 
   const handleSlideshowContextMenu = (slideshowId: string, x: number, y: number) => {
-    const items = ['Load', 'Open', 'Unload', 'Post to TikTok', 'Rename', 'Delete'];
+    const items = selectedSlideshows.length > 1
+      ? ['Load', 'Open', 'Unload', 'Post Multiple to TikTok', 'Rename', 'Delete']
+      : ['Load', 'Open', 'Unload', 'Post to TikTok', 'Rename', 'Delete'];
     setContextMenu({
       x,
       y,
@@ -547,7 +552,34 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     }
   };
 
-
+  const handleBulkPostSlideshowsToTikTok = async () => {
+    if (selectedSlideshows.length === 0) return;
+    
+    try {
+      // Load all selected slideshows
+      const slideshowPromises = selectedSlideshows.map(id => slideshowService.loadSlideshow(id));
+      const slideshows = await Promise.all(slideshowPromises);
+      
+      // Filter out any that failed to load
+      const validSlideshows = slideshows.filter(slideshow => slideshow !== null) as SlideshowMetadata[];
+      
+      if (validSlideshows.length === 0) {
+        toast.error('Failed to load any slideshows for posting');
+        return;
+      }
+      
+      if (validSlideshows.length < selectedSlideshows.length) {
+        toast.warning(`Loaded ${validSlideshows.length}/${selectedSlideshows.length} slideshows`);
+      }
+      
+      setBulkSlideshowsToPost(validSlideshows);
+      setShowBulkPostizPoster(true);
+      toast.success(`Ready to post ${validSlideshows.length} slideshow(s)`);
+    } catch (error) {
+      console.error('Error loading slideshows for bulk posting:', error);
+      toast.error('Failed to load slideshows for posting');
+    }
+  };
   const removeSelected = async () => {
     if (selectedImages.length === 0 && selectedSlideshows.length === 0) return;
     
@@ -814,57 +846,67 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       let successCount = 0;
       let errorCount = 0;
 
-      // Create slideshows for each chunk
+      // Create slideshows for each chunk with unique naming
       for (let i = 0; i < imageChunks.length; i++) {
         const chunk = imageChunks[i];
         const chunkNumber = i + 1;
         const slideshowTitle = `Post ${chunkNumber}`;
+        const postTitle = template.postTitle || slideshowTitle;
+        const caption = `${template.caption} (Part ${chunkNumber} of ${imageChunks.length})`;
         
         try {
           console.log(`🎬 Creating slideshow ${chunkNumber}/${imageChunks.length}: ${slideshowTitle}`);
 
-          // Apply template to create the slideshow with selected aspect ratio
-          const result = await slideshowService.applyTemplateToImages(
-            template,
-            chunk,
-            userId,
-            {
-              title: slideshowTitle,
-              caption: `${template.caption} (Part ${chunkNumber} of ${imageChunks.length})`,
-              hashtags: template.hashtags
-            }
-          );
-
-          if (result.success && result.slideshow) {
-            // If aspect ratio is different, create a new slideshow with the correct aspect ratio
-            if (aspectRatio && aspectRatio !== template.aspectRatio) {
-              const updatedResult = await slideshowService.saveSlideshow(
-                slideshowTitle,
-                template.postTitle || slideshowTitle,
-                `${template.caption} (Part ${chunkNumber} of ${imageChunks.length})`,
-                template.hashtags,
-                chunk,
-                result.slideshow.textOverlays,
-                aspectRatio,
-                template.transitionEffect,
-                template.musicEnabled,
-                userId
-              );
-              
-              if (updatedResult) {
-                successCount++;
-                console.log(`✅ Successfully created slideshow with custom aspect ratio: ${slideshowTitle}`);
-              } else {
-                errorCount++;
-                console.error(`❌ Failed to create slideshow with custom aspect ratio: ${slideshowTitle}`);
+          let slideshow: SlideshowMetadata;
+          
+          // Check if we need to create with custom aspect ratio
+          if (aspectRatio && aspectRatio !== template.aspectRatio) {
+            // Create slideshow with custom aspect ratio - avoid duplicates by using createOptimizedSlideshow
+            const textOverlays = template.textOverlays.map(overlay => ({
+              ...overlay,
+              id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+            }));
+            
+            slideshow = await slideshowService.createOptimizedSlideshow(
+              slideshowTitle,
+              postTitle,
+              caption,
+              template.hashtags,
+              chunk,
+              textOverlays,
+              aspectRatio,
+              template.transitionEffect,
+              template.musicEnabled,
+              userId
+            );
+          } else {
+            // Use the template application method for standard aspect ratio
+            const result = await slideshowService.applyTemplateToImages(
+              template,
+              chunk,
+              userId,
+              {
+                title: slideshowTitle,
+                caption: caption,
+                hashtags: template.hashtags
               }
-            } else {
-              successCount++;
-              console.log(`✅ Successfully created slideshow: ${slideshowTitle}`);
+            );
+
+            if (!result.success || !result.slideshow) {
+              errorCount++;
+              console.error(`❌ Failed to create slideshow ${slideshowTitle}:`, result.error);
+              continue;
             }
+            
+            slideshow = result.slideshow;
+          }
+
+          if (slideshow) {
+            successCount++;
+            console.log(`✅ Successfully created slideshow: ${slideshowTitle}`);
           } else {
             errorCount++;
-            console.error(`❌ Failed to create slideshow ${slideshowTitle}:`, result.error);
+            console.error(`❌ Failed to create slideshow ${slideshowTitle}`);
           }
         } catch (error) {
           errorCount++;
@@ -1320,14 +1362,23 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                         variant="secondary"
                         size="sm"
                         onClick={() => {
-                          // Post the first selected slideshow to TikTok
-                          const firstSlideshowId = selectedSlideshows[0];
-                          handlePostSlideshowToTikTok(firstSlideshowId);
+                          if (selectedSlideshows.length === 1) {
+                            // Single slideshow - post immediately
+                            handlePostSlideshowToTikTok(selectedSlideshows[0]);
+                          } else {
+                            // Multiple slideshows - show bulk posting dialog
+                            handleBulkPostSlideshowsToTikTok();
+                          }
                         }}
                         className="flex items-center space-x-2 bg-pink-600 hover:bg-pink-700 text-white px-3 py-2 h-8 text-sm transition-colors"
                       >
                         <Share className="w-4 h-4" />
-                        <span>Post to TikTok ({selectedSlideshows.length})</span>
+                        <span>
+                          {selectedSlideshows.length === 1
+                            ? 'Post to TikTok'
+                            : `Post ${selectedSlideshows.length} to TikTok`
+                          }
+                        </span>
                       </Button>
                     )}
                   </motion.div>
@@ -1593,11 +1644,23 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                     } else if (item === 'Post to TikTok' && contextMenu.type === 'slideshow' && contextMenu.targetId) {
                       (async () => {
                         try {
-                          
                           await handlePostSlideshowToTikTok(contextMenu.targetId!);
                         } catch (error) {
-                          
                           toast.error('Failed to post slideshow to TikTok.');
+                        }
+                      })();
+                    } else if (item === 'Post Multiple to TikTok' && contextMenu.type === 'slideshow' && contextMenu.targetId) {
+                      (async () => {
+                        try {
+                          // If multiple slideshows are selected, use bulk posting
+                          if (selectedSlideshows.length > 1) {
+                            await handleBulkPostSlideshowsToTikTok();
+                          } else {
+                            // If only one slideshow is selected, use single posting
+                            await handlePostSlideshowToTikTok(contextMenu.targetId!);
+                          }
+                        } catch (error) {
+                          toast.error('Failed to post slideshow(s) to TikTok.');
                         }
                       })();
                     } else if (item === 'Open' && contextMenu.type === 'slideshow' && contextMenu.targetId) {
@@ -1778,6 +1841,32 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                   onClose={() => {
                     setShowPostizPoster(false);
                     setSlideshowToPost(null);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Postiz Poster Modal */}
+        {showBulkPostizPoster && bulkSlideshowsToPost.length > 0 && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-background rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden">
+              <div className="p-6">
+                <BulkPostizPoster
+                  slideshows={bulkSlideshowsToPost}
+                  onPostSuccess={(postIds) => {
+                    toast.success(`Successfully posted ${postIds.length} slideshow(s) to TikTok!`);
+                    setShowBulkPostizPoster(false);
+                    setBulkSlideshowsToPost([]);
+                    // Clear selection after successful posting
+                    if (onSlideshowSelectionChange) {
+                      onSlideshowSelectionChange([]);
+                    }
+                  }}
+                  onClose={() => {
+                    setShowBulkPostizPoster(false);
+                    setBulkSlideshowsToPost([]);
                   }}
                 />
               </div>

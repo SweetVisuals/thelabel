@@ -196,6 +196,7 @@ export class PostizUploadService {
    * Format caption with hashtags for Postiz
    */
   private formatCaptionForBuffer(caption: string, hashtags: string[]): string {
+    // Use the caption exactly as provided - preserve original text without modifications
     const hashtagText = hashtags.map(tag => `#${tag}`).join(' ');
     return `${caption}\n\n${hashtagText}`;
   }

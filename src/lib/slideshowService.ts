@@ -452,6 +452,7 @@ async saveSlideshow(
    * Format caption with hashtags for Buffer
    */
   formatCaptionForBuffer(caption: string, hashtags: string[]): string {
+    // Use the caption exactly as provided - no automatic modifications
     const hashtagText = hashtags.map(tag => `#${tag}`).join(' ');
     // Ensure proper line breaks for TikTok display
     return `${caption}\n\n${hashtagText}`;
