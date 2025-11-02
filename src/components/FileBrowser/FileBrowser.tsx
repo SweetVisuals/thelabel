@@ -801,33 +801,66 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
   };
 
   const handleRemixImages = () => {
-    if (currentImages.length < 2) {
-      toast.error('Need at least 2 images to remix');
+    if (selectedImages.length < 2) {
+      toast.error('Please select at least 2 images to remix');
       return;
     }
 
-    // Shuffle all current images to create a new visual order
-    const shuffledImages = [...currentImages];
-    for (let i = shuffledImages.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
+    // Get positions of selected images in the current array
+    const selectedPositions = selectedImages
+      .map(id => currentImages.findIndex(img => img.id === id))
+      .filter(pos => pos !== -1)
+      .sort((a, b) => a - b);
+
+    if (selectedPositions.length < 2) {
+      toast.error('Need at least 2 valid selected images to remix');
+      return;
     }
 
+    // Extract selected images from their current positions
+    const selectedImagesAtPositions = selectedPositions.map(pos => currentImages[pos]);
+
+    // Shuffle the selected images
+    const shuffledSelected = [...selectedImagesAtPositions];
+    for (let i = shuffledSelected.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledSelected[i], shuffledSelected[j]] = [shuffledSelected[j], shuffledSelected[i]];
+    }
+
+    // Create new array with selected images moved to different positions
+    const newImages = [...currentImages];
+    
+    // Randomly reassign shuffled selected images to different positions
+    const availablePositions = [...selectedPositions];
+    shuffledSelected.forEach((image, index) => {
+      if (availablePositions.length > 0) {
+        const randomIndex = Math.floor(Math.random() * availablePositions.length);
+        const newPosition = availablePositions.splice(randomIndex, 1)[0];
+        newImages[newPosition] = image;
+      }
+    });
+
     // Update the images to show remixed order visually
-    if (currentFolderId === null) {
+    if (externalCurrentFolderId === null) {
       // Update root images
-      onImagesUploaded(shuffledImages);
+      onImagesUploaded(newImages);
     } else {
       // Update folder images
       const updatedFolders = folders.map(f =>
-        f.id === currentFolderId
-          ? { ...f, images: shuffledImages }
+        f.id === externalCurrentFolderId
+          ? { ...f, images: newImages }
           : f
       );
       onFoldersChange?.(updatedFolders);
     }
 
-    toast.success('Images remixed! Click again for another shuffle');
+    // Update selection to match the new visual order
+    const newSelection = selectedPositions
+      .map(pos => newImages[pos]?.id)
+      .filter(id => id !== undefined);
+    onSelectionChange(newSelection);
+
+    toast.success('Selected images remixed! See the new order in the file browser');
   };
 
   
@@ -860,13 +893,15 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         return;
       }
 
+      // Get images in their current visual order from the currentImages array
+      const orderedImages = selectedImages
+        .map(id => currentImages.find(img => img.id === id))
+        .filter(img => img !== undefined) as UploadedImage[];
+
       // Split selected images into chunks based on cut length
       const imageChunks: UploadedImage[][] = [];
-      for (let i = 0; i < selectedImages.length; i += cutLength) {
-        const chunk = selectedImages
-          .slice(i, i + cutLength)
-          .map(id => images.find(img => img.id === id))
-          .filter(img => img !== undefined) as UploadedImage[];
+      for (let i = 0; i < orderedImages.length; i += cutLength) {
+        const chunk = orderedImages.slice(i, i + cutLength);
         
         if (chunk.length > 0) {
           imageChunks.push(chunk);
@@ -1429,9 +1464,9 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                 variant="secondary"
                 size="sm"
                 onClick={handleRemixImages}
-                disabled={currentImages.length < 2}
+                disabled={selectedImages.length < 2}
                 className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Shuffle all images for different template variations (click multiple times)"
+                title="Shuffle selected images order for template variations"
               >
                 <Shuffle className="w-4 h-4" />
                 <span>Remix Images</span>
