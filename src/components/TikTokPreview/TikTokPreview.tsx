@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX, Download, Edit3, Filter, Type, Crop, Music, Sparkles, Settings, Share2, Heart, MessageCircle, Repeat2, X, ChevronLeft, ChevronRight, Shuffle, Layers, Zap, Palette, Wand2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -260,6 +259,16 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   }, [slideshowImages.length]);
 
   // Debug logging for data flow
+  useEffect(() => {
+    console.log('📱 TikTokPreview Data Debug:', {
+      slideshowImagesCount: slideshowImages.length,
+      originalSlidesCount,
+      selectedImagesCount: selectedImages.length,
+      hasCurrentSlideshow: !!currentSlideshow,
+      previewMode,
+      currentSlide,
+      firstImageUrl: slideshowImages[0]?.url?.substring(0, 50) + '...'
+    });
   }, [slideshowImages, selectedImages, currentSlideshow, previewMode, currentSlide, originalSlidesCount]);
 
   // Render the TikTok preview interface
