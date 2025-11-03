@@ -75,6 +75,38 @@ interface FileItem {
   slideshow?: SlideshowMetadata;
 }
 
+// Helper function to generate unique hashtag combinations
+const generateUniqueHashtagCombinations = (
+  hashtagPool: string[],
+  numCombinations: number,
+  hashtagsPerCombination: number
+): string[][] => {
+  const combinations: string[][] = [];
+  const usedCombinations = new Set<string>();
+  
+  // Generate unique combinations
+  while (combinations.length < numCombinations) {
+    // Shuffle the hashtag pool
+    const shuffled = [...hashtagPool].sort(() => 0.5 - Math.random());
+    // Take the first hashtagsPerCombination hashtags
+    const combination = shuffled.slice(0, hashtagsPerCombination);
+    const combinationKey = combination.sort().join(',');
+    
+    // Only add if this combination hasn't been used
+    if (!usedCombinations.has(combinationKey)) {
+      usedCombinations.add(combinationKey);
+      combinations.push(combination);
+    }
+    
+    // Safety check to avoid infinite loop
+    if (combinations.length >= Math.min(numCombinations, 100)) {
+      break;
+    }
+  }
+  
+  return combinations;
+};
+
 export const FileBrowser: React.FC<FileBrowserProps> = ({
   images,
   onImagesUploaded,
@@ -998,10 +1030,11 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
   
 
   const handleTemplateSelectionConfirm = async (
-    templateId: string, 
+    templateId: string,
     aspectRatio: string,
     randomizeHashtags: boolean,
-    randomizePictures: boolean
+    randomizePictures: boolean,
+    selectedHashtags: string[] = []
   ) => {
     if (selectedImages.length === 0) {
       toast.error('Please select some images first');
@@ -1059,6 +1092,21 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       let successCount = 0;
       let errorCount = 0;
 
+      // Generate unique hashtag combinations for each slide if randomization is enabled
+      let hashtagCombinations: string[][] = [];
+      if (randomizeHashtags) {
+        const hashtagPool = selectedHashtags.length > 0 ? selectedHashtags : template.hashtags;
+        
+        if (hashtagPool.length >= 4) {
+          // Generate unique combinations for each slide
+          hashtagCombinations = generateUniqueHashtagCombinations(hashtagPool, imageChunks.length, 4);
+          console.log(`🎯 Generated ${hashtagCombinations.length} unique hashtag combinations`);
+        } else if (hashtagPool.length > 0) {
+          // If less than 4 hashtags available, use all for each slide
+          hashtagCombinations = imageChunks.map(() => hashtagPool);
+        }
+      }
+
       // Create slideshows for each chunk with unique naming
       for (let i = 0; i < imageChunks.length; i++) {
         const chunk = imageChunks[i];
@@ -1067,14 +1115,10 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         const postTitle = template.postTitle || slideshowTitle;
         const caption = template.caption; // Use original caption without numbering
         
-        // Randomize hashtags if enabled
+        // Use unique hashtag combination for this slide
         let finalHashtags = template.hashtags;
-        if (randomizeHashtags && template.hashtags.length > 0) {
-          const shuffled = [...template.hashtags].sort(() => 0.5 - Math.random());
-          const maxTags = Math.min(shuffled.length, 5);
-          const minTags = Math.min(shuffled.length, 3);
-          const count = Math.floor(Math.random() * (maxTags - minTags + 1)) + minTags;
-          finalHashtags = shuffled.slice(0, count);
+        if (randomizeHashtags && hashtagCombinations.length > 0) {
+          finalHashtags = hashtagCombinations[i] || hashtagCombinations[hashtagCombinations.length - 1];
         }
         
         try {

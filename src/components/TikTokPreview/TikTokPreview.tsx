@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Download, Edit3, Filter, Type, Crop, Music, Sparkles, Settings, Share2, Heart, MessageCircle, Repeat2, X, ChevronLeft, ChevronRight, Shuffle, Layers, Zap, Palette, Wand2 } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Download, Edit3, Filter, Type, Crop, Music, Sparkles, Settings, Share2, Heart, MessageCircle, Repeat2, X, ChevronLeft, ChevronRight, Shuffle, Layers, Zap, Palette, Wand2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AspectRatioSelector } from '@/components/ui/aspectRatioSelector';
 import { cn } from '@/lib/utils';
@@ -224,6 +224,264 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
     return { slideshowImages: [], originalSlidesCount: 0 };
   }, [images, selectedImages, currentSlideshow, isRemixed, remixedSlideshowImages, cutLength]);
 
-  // TODO: Add the rest of the component implementation
-  return null;
+  // Auto-play functionality
+  useEffect(() => {
+    if (isPlaying && slideshowImages.length > 1) {
+      const interval = setInterval(() => {
+        setCurrentSlide(prev =>
+          prev >= slideshowImages.length - 1 ? 0 : prev + 1
+        );
+      }, 3000); // 3 seconds per slide
+
+      return () => clearInterval(interval);
+    }
+  }, [isPlaying, slideshowImages.length]);
+
+  // Auto-advance when slideshow data changes
+  useEffect(() => {
+    if (slideshowImages.length > 0) {
+      setCurrentSlide(0);
+    }
+  }, [slideshowImages.length]);
+
+  // Debug logging for data flow
+  useEffect(() => {
+    console.log('📱 TikTokPreview Data Debug:', {
+      slideshowImagesCount: slideshowImages.length,
+      originalSlidesCount,
+      selectedImagesCount: selectedImages.length,
+      hasCurrentSlideshow: !!currentSlideshow,
+      previewMode,
+      currentSlide,
+      firstImageUrl: slideshowImages[0]?.url?.substring(0, 50) + '...'
+    });
+  }, [slideshowImages, selectedImages, currentSlideshow, previewMode, currentSlide, originalSlidesCount]);
+
+  // Render the TikTok preview interface
+  const renderTikTokPreview = () => {
+    const hasContent = slideshowImages.length > 0;
+    
+    if (!hasContent) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500/20 via-pink-500/10 to-purple-500/5 border border-purple-500/20 rounded-2xl">
+          <div className="text-center p-8">
+            <div className="w-24 h-24 bg-gradient-to-br from-purple-500/30 to-pink-500/20 rounded-2xl flex items-center justify-center mb-4 mx-auto">
+              <Play className="w-12 h-12 text-purple-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground mb-2">TikTok Preview</h3>
+            <p className="text-muted-foreground text-sm mb-4">
+              {currentSlideshow ? 'Loading slideshow...' : 'Select images to create a slideshow'}
+            </p>
+            {selectedImages.length > 0 && !currentSlideshow && (
+              <p className="text-primary text-xs">
+                {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} selected
+              </p>
+            )}
+            {currentSlideshow && (
+              <p className="text-primary text-xs">
+                {currentSlideshow.condensedSlides?.length || 0} slides in slideshow
+              </p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="aspect-[9/16] w-full max-w-md mx-auto bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-purple-500/10 border border-purple-500/20 rounded-2xl overflow-hidden relative">
+        {/* TikTok-style header */}
+        <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-3 bg-gradient-to-b from-black/60 via-black/30 to-transparent">
+          <div className="flex items-center space-x-2">
+            <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+              <span className="text-white text-xs font-bold">T</span>
+            </div>
+            <div>
+              <p className="text-white text-xs font-medium">@{title.toLowerCase().replace(/\s+/g, '_').substring(0, 12)}</p>
+              <p className="text-gray-300 text-xs">Following</p>
+            </div>
+          </div>
+          <Button size="sm" variant="ghost" className="text-white hover:bg-white/10 h-6 px-2">
+            <Plus className="w-3 h-3" />
+          </Button>
+        </div>
+
+        {/* Main video/slideshow area */}
+        <div className="relative w-full h-full bg-black overflow-hidden">
+          {slideshowImages.length > 0 ? (
+            <div className="relative w-full h-full">
+              {/* Current slide display */}
+              <motion.img
+                key={`${currentSlide}-${slideshowImages[currentSlide]?.id || 'empty'}`}
+                src={slideshowImages[currentSlide]?.url}
+                alt={`Slide ${currentSlide + 1}`}
+                className="w-full h-full object-cover"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+              />
+              
+              {/* Text overlays on current slide */}
+              {textOverlays
+                .filter(overlay => overlay.slideIndex === currentSlide)
+                .map((overlay) => (
+                  <motion.div
+                    key={overlay.id}
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: `${overlay.x}%`,
+                      top: `${overlay.y}%`,
+                      width: `${overlay.width}%`,
+                      height: `${overlay.height}%`,
+                      transform: 'translate(-50%, -50%)',
+                    }}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <div
+                      className={cn(
+                        "w-full h-full flex items-center justify-center text-center p-2",
+                        overlay.bold && "font-bold",
+                        overlay.italic && "italic",
+                      )}
+                      style={{
+                        color: overlay.color,
+                        fontSize: `${overlay.fontSize * 3}px`, // Scale for TikTok preview
+                        fontFamily: overlay.fontFamily,
+                        textAlign: overlay.alignment,
+                        textShadow: overlay.outline
+                          ? `${overlay.outlineWidth * 5}px ${overlay.outlineWidth * 5}px 0 ${overlay.outlineColor}`
+                          : overlay.glow
+                          ? `0 0 ${overlay.glowIntensity * 3}px ${overlay.glowColor}`
+                          : 'none',
+                      }}
+                    >
+                      {overlay.text}
+                    </div>
+                  </motion.div>
+                ))
+              }
+
+              {/* TikTok-style side panel - positioned within video container */}
+              <div className="absolute right-6 bottom-24 flex flex-col space-y-5 z-10">
+                {/* Profile picture */}
+                <div className="relative">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-base font-bold">T</span>
+                  </div>
+                  <button className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-black">
+                    <Plus className="w-3.5 h-3.5 text-white" />
+                  </button>
+                </div>
+
+                {/* Action buttons */}
+                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
+                  <Heart className="w-7 h-7" />
+                  <span className="text-sm">24.5K</span>
+                </button>
+                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
+                  <MessageCircle className="w-7 h-7" />
+                  <span className="text-sm">203</span>
+                </button>
+                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
+                  <Repeat2 className="w-7 h-7" />
+                  <span className="text-sm">89</span>
+                </button>
+                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
+                  <Share2 className="w-7 h-7" />
+                  <span className="text-sm">Share</span>
+                </button>
+              </div>
+
+              {/* Slide indicators */}
+              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-1 z-20">
+                {slideshowImages.map((_: any, index: number) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentSlide(index)}
+                    className={cn(
+                      "w-2 h-2 rounded-full transition-all duration-200",
+                      index === currentSlide
+                        ? "bg-white scale-125"
+                        : "bg-white/50 hover:bg-white/75"
+                    )}
+                  />
+                ))}
+              </div>
+
+              {/* Navigation arrows */}
+              {slideshowImages.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setCurrentSlide(Math.max(0, currentSlide - 1))}
+                    disabled={currentSlide === 0}
+                    className="absolute left-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentSlide(Math.min(slideshowImages.length - 1, currentSlide + 1))}
+                    disabled={currentSlide === slideshowImages.length - 1}
+                    className="absolute right-16 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-white text-center">
+              <p>No content to display</p>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom content area - fixed positioning */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 p-3 pb-12 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+          <div className="text-white">
+            <p className="font-medium mb-1 text-sm truncate">{title}</p>
+            <p className="text-xs text-gray-200 mb-2 line-clamp-2">{caption}</p>
+            {hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {hashtags.map((tag, index) => (
+                  <span key={index} className="text-xs text-blue-400">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Playback controls - positioned above bottom content */}
+        <div className="absolute bottom-4 left-4 flex items-center space-x-2 z-20">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setIsPlaying(!isPlaying)}
+            className="text-white hover:bg-white/10 h-8 w-8 p-0"
+          >
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setIsMuted(!isMuted)}
+            className="text-white hover:bg-white/10 h-8 w-8 p-0"
+          >
+            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </Button>
+          <span className="text-white text-xs bg-black/50 px-2 py-1 rounded">
+            {currentSlide + 1}/{slideshowImages.length}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="h-full w-full flex items-center justify-center bg-black/20 rounded-2xl">
+      {renderTikTokPreview()}
+    </div>
+  );
 };

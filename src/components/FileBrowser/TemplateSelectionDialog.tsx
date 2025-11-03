@@ -21,14 +21,23 @@ import { slideshowService } from '@/lib/slideshowService';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 
+interface HashtagSelectionDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  availableHashtags: string[];
+  selectedHashtags: string[];
+  onConfirm: (selectedHashtags: string[]) => void;
+}
+
 interface TemplateSelectionDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm?: (
-    templateId: string, 
+    templateId: string,
     aspectRatio: string,
     randomizeHashtags: boolean,
-    randomizePictures: boolean
+    randomizePictures: boolean,
+    selectedHashtags?: string[]
   ) => void; // For creating slideshows
   onApplyToSettings?: (template: SlideshowTemplate, aspectRatio: string) => void; // For applying to edit settings
   applyToSettingsMode?: boolean; // If true, shows "Apply to Settings" instead of "Create Slideshows"
@@ -41,13 +50,133 @@ interface AspectRatioOption {
 }
 
 const aspectRatioOptions: AspectRatioOption[] = [
-  { value: '9:16', label: '9:16', description: 'Portrait (TikTok standard)' },
-  { value: '16:9', label: '16:9', description: 'Landscape (YouTube/TikTok)' },
-  { value: '1:1', label: '1:1', description: 'Square (Instagram/Posts)' },
-  { value: '4:5', label: '4:5', description: 'Portrait (Instagram)' },
-  { value: '3:4', label: '3:4', description: 'Portrait (Alternative)' },
-  { value: 'free', label: 'Free', description: 'Use image aspect ratio' }
+{ value: '9:16', label: '9:16', description: 'Portrait (TikTok standard)' },
+{ value: '16:9', label: '16:9', description: 'Landscape (YouTube/TikTok)' },
+{ value: '1:1', label: '1:1', description: 'Square (Instagram/Posts)' },
+{ value: '4:5', label: '4:5', description: 'Portrait (Instagram)' },
+{ value: '3:4', label: '3:4', description: 'Portrait (Alternative)' },
+{ value: 'free', label: 'Free', description: 'Use image aspect ratio' }
 ];
+
+const HashtagSelectionDialog: React.FC<HashtagSelectionDialogProps> = ({
+isOpen,
+onClose,
+availableHashtags,
+selectedHashtags: initialSelectedHashtags,
+onConfirm
+}) => {
+const [selectedHashtags, setSelectedHashtags] = useState<string[]>(initialSelectedHashtags);
+const [searchTerm, setSearchTerm] = useState('');
+
+useEffect(() => {
+  setSelectedHashtags(initialSelectedHashtags);
+}, [initialSelectedHashtags]);
+
+const filteredHashtags = availableHashtags.filter(tag =>
+  tag.toLowerCase().includes(searchTerm.toLowerCase())
+);
+
+const toggleHashtag = (hashtag: string) => {
+  setSelectedHashtags(prev => {
+    if (prev.includes(hashtag)) {
+      return prev.filter(h => h !== hashtag);
+    } else if (prev.length < 20) {
+      return [...prev, hashtag];
+    }
+    return prev;
+  });
+};
+
+const handleConfirm = () => {
+  onConfirm(selectedHashtags);
+  onClose();
+};
+
+if (!isOpen) return null;
+
+return (
+  <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+    <motion.div
+      className="bg-background rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden border border-border"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.95 }}
+      transition={{ duration: 0.2 }}
+    >
+      <div className="p-4 border-b border-border">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Select Hashtags (Max 20)</h3>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <XCircle className="w-4 h-4" />
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground mt-2">
+          Selected: {selectedHashtags.length}/20 hashtags
+        </p>
+      </div>
+
+      <div className="p-4 max-h-[calc(80vh-140px)] overflow-y-auto">
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Search hashtags..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-3 py-2 bg-background/80 backdrop-blur-sm border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent placeholder-muted-foreground transition-all duration-200"
+          />
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {filteredHashtags.map(hashtag => (
+            <motion.button
+              key={hashtag}
+              onClick={() => toggleHashtag(hashtag)}
+              className={cn(
+                "px-3 py-1 rounded-full text-sm font-medium transition-all",
+                selectedHashtags.includes(hashtag)
+                  ? "bg-primary text-primary-foreground shadow-lg"
+                  : "bg-muted/50 text-muted-foreground hover:bg-muted",
+                selectedHashtags.includes(hashtag) ? "ring-2 ring-primary/30" : ""
+              )}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              disabled={!selectedHashtags.includes(hashtag) && selectedHashtags.length >= 20}
+            >
+              #{hashtag}
+            </motion.button>
+          ))}
+        </div>
+
+        {filteredHashtags.length === 0 && (
+          <div className="text-center py-6 text-muted-foreground">
+            No hashtags found matching "{searchTerm}"
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 border-t border-border">
+        <div className="flex justify-end gap-2">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            size="sm"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirm}
+            disabled={selectedHashtags.length === 0}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground"
+            size="sm"
+          >
+            Select {selectedHashtags.length} Hashtags
+          </Button>
+        </div>
+      </div>
+    </motion.div>
+  </div>
+);
+};
 
 export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = ({
   isOpen,
@@ -62,6 +191,8 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
   const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('9:16');
   const [randomizeHashtags, setRandomizeHashtags] = useState(false);
   const [randomizePictures, setRandomizePictures] = useState(false);
+  const [selectedHashtags, setSelectedHashtags] = useState<string[]>([]);
+  const [showHashtagSelection, setShowHashtagSelection] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isConfirming, setIsConfirming] = useState(false);
   const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
@@ -112,7 +243,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
           await onApplyToSettings(template, selectedAspectRatio);
         }
       } else if (onConfirm) {
-        await onConfirm(selectedTemplate, selectedAspectRatio, randomizeHashtags, randomizePictures);
+        await onConfirm(selectedTemplate, selectedAspectRatio, randomizeHashtags, randomizePictures, selectedHashtags);
       }
       onClose();
     } catch (error) {
@@ -120,6 +251,14 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
     } finally {
       setIsConfirming(false);
     }
+  };
+
+  const handleHashtagSelection = (hashtags: string[]) => {
+    setSelectedHashtags(hashtags);
+  };
+
+  const openHashtagSelection = () => {
+    setShowHashtagSelection(true);
   };
 
   const toggleTemplateExpansion = (templateId: string) => {
@@ -356,15 +495,31 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                           <div className="p-2 bg-muted/50 rounded-lg">
                             <h6 className="font-medium text-sm mb-2 flex items-center">
                               <Tags className="w-4 h-4 mr-2" />
-                              Available Hashtags
+                              Hashtag Selection
                             </h6>
-                            <div className="flex flex-wrap gap-1 text-xs">
-                              {selectedTemplateData.hashtags.map(tag => (
-                                <span key={tag} className="bg-primary/10 text-primary px-2 py-1 rounded-full">
+                            <div className="flex flex-wrap gap-2 mb-3">
+                              {selectedTemplateData.hashtags.slice(0, 6).map(tag => (
+                                <span key={tag} className="bg-primary/10 text-primary px-2 py-1 rounded-full text-xs">
                                   #{tag}
                                 </span>
                               ))}
+                              {selectedTemplateData.hashtags.length > 6 && (
+                                <span className="text-xs text-muted-foreground px-2 py-1">
+                                  +{selectedTemplateData.hashtags.length - 6} more
+                                </span>
+                              )}
                             </div>
+                            <Button
+                              onClick={openHashtagSelection}
+                              variant="outline"
+                              size="sm"
+                              className="w-full"
+                            >
+                              {selectedHashtags.length > 0
+                                ? `Selected ${selectedHashtags.length} hashtags`
+                                : 'Select Hashtags to Randomize'
+                              }
+                            </Button>
                           </div>
                         )}
                       </div>
@@ -444,6 +599,17 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
           </div>
         )}
       </motion.div>
+
+      {/* Hashtag Selection Dialog */}
+      {selectedTemplateData && (
+        <HashtagSelectionDialog
+          isOpen={showHashtagSelection}
+          onClose={() => setShowHashtagSelection(false)}
+          availableHashtags={selectedTemplateData.hashtags}
+          selectedHashtags={selectedHashtags}
+          onConfirm={handleHashtagSelection}
+        />
+      )}
     </div>
   );
 };
