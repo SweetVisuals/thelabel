@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Header1 as Header } from './Header';
+import { ThemeProvider } from '../../contexts/ThemeContext';
 import { FileBrowser } from '../FileBrowser/FileBrowser';
 import { TikTokPreview } from '../TikTokPreview/TikTokPreview';
 import { ImageEditor } from '../ImageEditor/ImageEditor';
@@ -556,13 +557,22 @@ export const Dashboard: React.FC = () => {
   };
 
   const handleSlideshowLoad = (slideshow: SlideshowMetadata) => {
-    setCurrentSlideshow(slideshow);
+    // Only set as current slideshow if it has actual condensed slides (not a template-only slideshow)
+    if (slideshow.condensedSlides && slideshow.condensedSlides.length > 0) {
+      setCurrentSlideshow(slideshow);
+    } else {
+      // For template-only slideshows (empty condensedSlides), don't set as current slideshow
+      // This prevents "No Image to process" while still applying settings
+      console.log('Template loaded without images, applying settings only');
+      setCurrentSlideshow(null);
+    }
+    
     setSelectedImages([]);
     setTitle(slideshow.title);
     setPostTitle(slideshow.postTitle || '');
     setCaption(slideshow.caption);
     setHashtags(slideshow.hashtags);
-    setTextOverlays([]);
+    setTextOverlays(slideshow.textOverlays || []);
     setTransitionEffect(slideshow.transitionEffect || 'fade');
     setMusicEnabled(slideshow.musicEnabled || false);
   };
@@ -730,7 +740,8 @@ export const Dashboard: React.FC = () => {
   }, [currentFolderId, derivedCurrentImages, currentSelectedImages, currentSlideshow]);
 
   return (
-    <SidebarProvider>
+    <ThemeProvider>
+      <SidebarProvider>
       <div className="h-screen bg-background flex w-full overflow-hidden">
         {/* Sidebar */}
         <DetailSidebar
@@ -857,6 +868,36 @@ export const Dashboard: React.FC = () => {
                   onMusicEnabledChange={setMusicEnabled}
                   onImagesSelectForBulk={handleImagesSelectForBulk}
                   currentSlideshow={currentSlideshow}
+                  onTemplateApplied={(result) => {
+                    if (result.success && result.slideshow) {
+                      // Apply template settings to the editor without entering preview mode
+                      // This allows template settings to populate the form while keeping normal editor functionality
+                      setTitle(result.slideshow.title);
+                      setPostTitle(result.slideshow.postTitle || '');
+                      setCaption(result.slideshow.caption);
+                      setHashtags(result.slideshow.hashtags);
+                      setTextOverlays(result.slideshow.textOverlays || []);
+                      setTransitionEffect(result.slideshow.transitionEffect || 'fade');
+                      setMusicEnabled(result.slideshow.musicEnabled || false);
+
+                      // Clear any current slideshow to exit preview mode
+                      setCurrentSlideshow(null);
+
+                      // Automatically select appropriate images for the template
+                      // Use the first N images from the current folder where N = template slide count
+                      const currentImages = getCurrentImages();
+                      const imagesToSelect = currentImages.slice(0, result.slideshow.condensedSlides?.length || result.processedImages || 3);
+                      const imageIdsToSelect = imagesToSelect.map(img => img.id);
+
+                      if (imageIdsToSelect.length > 0) {
+                        setSelectedImages(imageIdsToSelect);
+                        setSelectedImagesOrdered(imageIdsToSelect);
+                        console.log('Template applied - auto-selected images:', imageIdsToSelect.length, 'images');
+                      }
+
+                      console.log('Template applied to editor settings:', result.slideshow.title);
+                    }
+                  }}
                 />
 
                 {/* Text Edit Controls - Only show when not in preview mode */}
@@ -1438,6 +1479,7 @@ export const Dashboard: React.FC = () => {
         }}
         currentFolderId={currentFolderId}
       />
-    </SidebarProvider>
+      </SidebarProvider>
+    </ThemeProvider>
   );
 };

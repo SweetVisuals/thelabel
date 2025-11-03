@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
-import { 
-  Save, 
-  Trash2, 
-  Play, 
-  Download, 
-  Upload, 
-  Copy, 
+import { Switch } from '@/components/ui/switch';
+import {
+  Save,
+  Trash2,
+  Play,
+  Download,
+  Upload,
+  Copy,
   Settings,
   Image as ImageIcon,
   FileText,
@@ -17,7 +18,9 @@ import {
   Zap,
   CheckCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  Shuffle,
+  Tags
 } from 'lucide-react';
 import { SlideshowMetadata, SlideshowTemplate, UploadedImage, TemplateApplicationResult } from '../../types';
 import { slideshowService } from '../../lib/slideshowService';
@@ -204,18 +207,19 @@ interface ApplyTemplateModalProps {
   onApply: (templateId: string, customizations?: any) => void;
 }
 
-const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({ 
-  isOpen, 
-  templates, 
-  uploadedImages, 
+const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
+  isOpen,
+  templates,
+  uploadedImages,
   selectedImages,
-  onClose, 
-  onApply 
+  onClose,
+  onApply
 }) => {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [customTitle, setCustomTitle] = useState('');
   const [customCaption, setCustomCaption] = useState('');
   const [customHashtags, setCustomHashtags] = useState('');
+  const [randomizeHashtags, setRandomizeHashtags] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
 
   useEffect(() => {
@@ -235,7 +239,8 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
       const customizations = {
         title: customTitle || undefined,
         caption: customCaption || undefined,
-        hashtags: customHashtags ? customHashtags.split(',').map(tag => tag.trim()).filter(Boolean) : undefined
+        hashtags: customHashtags ? customHashtags.split(',').map(tag => tag.trim()).filter(Boolean) : undefined,
+        randomizeHashtags
       };
 
       await onApply(selectedTemplate, customizations);
@@ -383,6 +388,34 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
                           className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none"
                         />
                       </div>
+
+                      <div className="flex items-center justify-between p-3 border rounded-lg">
+                        <div>
+                          <label htmlFor="randomize-hashtags" className="font-medium">Randomize Hashtags</label>
+                          <p className="text-xs text-muted-foreground">Use a different set of hashtags for each slide.</p>
+                        </div>
+                        <Switch
+                          id="randomize-hashtags"
+                          checked={randomizeHashtags}
+                          onCheckedChange={setRandomizeHashtags}
+                        />
+                      </div>
+
+                      {randomizeHashtags && selectedTemplateData && selectedTemplateData.hashtags.length > 0 && (
+                        <div className="p-3 bg-muted/50 rounded-lg">
+                          <h6 className="font-medium text-sm mb-2 flex items-center">
+                            <Tags className="w-4 h-4 mr-2" />
+                            Available Hashtags for Randomization
+                          </h6>
+                          <div className="flex flex-wrap gap-2 text-xs">
+                            {selectedTemplateData.hashtags.map(tag => (
+                              <span key={tag} className="bg-primary/10 text-primary px-2 py-1 rounded-full">
+                                #{tag}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </>

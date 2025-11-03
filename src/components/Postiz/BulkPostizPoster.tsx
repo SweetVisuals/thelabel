@@ -414,9 +414,9 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   }
 
   return (
-    <div className="max-h-[85vh] overflow-y-auto">
+    <div className="max-h-[80vh] overflow-y-auto">
       {/* Header */}
-      <div className="flex items-center justify-between sticky top-0 bg-slate-900 border-b border-slate-700 pb-3 -mx-6 px-6 py-3 backdrop-blur-sm z-10">
+      <div className="flex items-center justify-between sticky top-0 bg-slate-900 border-b border-slate-700 pb-2 -mx-4 px-4 py-2 backdrop-blur-sm z-10">
         <h3 className="text-lg font-semibold text-slate-100 flex items-center">
           <Send className="w-5 h-5 mr-2 text-slate-400" />
           Bulk Post to TikTok ({slideshows.length})
@@ -429,37 +429,37 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       </div>
 
       {/* Slideshows Overview */}
-      <div className="bg-slate-900 rounded-lg border border-slate-700 shadow-lg overflow-hidden mb-6">
+      <div className="bg-slate-900 rounded-lg border border-slate-700 shadow-lg overflow-hidden mb-4">
         {/* Header */}
-        <div className="bg-slate-800 px-5 py-4 border-b border-slate-700">
+        <div className="bg-slate-800 px-4 py-3 border-b border-slate-700">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center justify-center w-10 h-10 bg-slate-700 rounded-lg">
-                <Image className="w-5 h-5 text-slate-300" />
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center justify-center w-8 h-8 bg-slate-700 rounded-lg">
+                <Image className="w-4 h-4 text-slate-300" />
               </div>
               <div>
-                <h4 className="text-lg font-semibold text-slate-100">Bulk Posts ({slideshows.length})</h4>
-                <p className="text-sm text-slate-400">
+                <h4 className="text-base font-semibold text-slate-100">Bulk Posts ({slideshows.length})</h4>
+                <p className="text-xs text-slate-400">
                   Ready for scheduling
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-2">
               <CheckCircle className="w-4 h-4 text-emerald-400" />
-              <span className="text-sm text-emerald-400">Captions Preserved</span>
+              <span className="text-xs text-emerald-400">Captions Preserved</span>
             </div>
           </div>
         </div>
 
         {/* Slideshows Grid */}
-        <div className="p-5">
-          <div className="grid grid-cols-1 gap-3">
+        <div className="p-4">
+          <div className="grid grid-cols-1 gap-2">
             {slideshows.map((slideshow, index) => (
-              <div key={slideshow.id} className="bg-slate-800 rounded-lg border border-slate-600 p-4">
+              <div key={slideshow.id} className="bg-slate-800 rounded-lg border border-slate-600 p-3">
                 <div className="flex items-center space-x-3">
                   {/* Image Preview */}
                   <div className="flex-shrink-0">
-                    <div className="w-12 h-12 rounded-lg bg-slate-700 border border-slate-600 flex items-center justify-center overflow-hidden">
+                    <div className="w-10 h-10 rounded-lg bg-slate-700 border border-slate-600 flex items-center justify-center overflow-hidden">
                       {slideshow.condensedSlides && slideshow.condensedSlides[0] ? (
                         <img
                           src={slideshow.condensedSlides[0].condensedImageUrl || slideshow.condensedSlides[0].originalImageUrl}
@@ -467,7 +467,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <Play className="w-5 h-5 text-slate-500" />
+                        <Play className="w-4 h-4 text-slate-500" />
                       )}
                     </div>
                   </div>
@@ -501,9 +501,9 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
 
         {/* Summary Footer */}
-        <div className="bg-slate-800 px-5 py-4 border-t border-slate-700">
+        <div className="bg-slate-800 px-4 py-3 border-t border-slate-700">
           <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-4 text-slate-400">
+            <div className="flex items-center space-x-3 text-slate-400">
               <span>Total Slides: {slideshows.reduce((sum, s) => sum + (s.condensedSlides?.length || 0), 0)}</span>
               <span>•</span>
               <span>Aspect Ratios: {Array.from(new Set(slideshows.map(s => s.aspectRatio))).join(', ')}</span>
@@ -513,7 +513,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       </div>
 
       {/* TikTok Profiles Selection */}
-      <div className="space-y-4 mb-6">
+      <div className="space-y-3 mb-4">
         <div className="flex items-center justify-between">
           <h4 className="font-medium text-slate-200 flex items-center">
             <User className="w-4 h-4 mr-2" />
@@ -532,12 +532,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
 
         {isLoadingProfiles ? (
-          <div className="flex items-center justify-center py-6">
+          <div className="flex items-center justify-center py-4">
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
             <span className="text-sm text-slate-400">Loading accounts...</span>
           </div>
         ) : profiles.length === 0 ? (
-          <div className="text-center py-6">
+          <div className="text-center py-4">
             <AlertCircle className="w-6 h-6 mx-auto text-slate-500 mb-2" />
             <p className="text-sm text-slate-400 mb-2">
               No accounts found
@@ -547,12 +547,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
             </p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-48 overflow-y-auto">
+          <div className="space-y-2 max-h-40 overflow-y-auto">
             {profiles.map((profile) => (
               <label
                 key={profile.id}
                 className={cn(
-                  "flex items-center space-x-3 p-4 rounded-lg border cursor-pointer transition-colors",
+                  "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors",
                   selectedProfiles.includes(profile.id)
                     ? "border-blue-500 bg-slate-800"
                     : "border-slate-600 hover:border-blue-400 hover:bg-slate-800/50"
@@ -569,12 +569,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                     <img
                       src={profile.avatar}
                       alt={profile.displayName}
-                      className="w-8 h-8 rounded-full"
+                      className="w-6 h-6 rounded-full"
                     />
                   )}
                   <div className="flex-1">
-                    <div className="font-medium text-slate-200">{profile.displayName}</div>
-                    <div className="text-sm text-slate-400">
+                    <div className="font-medium text-slate-200 text-sm">{profile.displayName}</div>
+                    <div className="text-xs text-slate-400">
                       @{profile.username}
                     </div>
                   </div>
@@ -586,97 +586,93 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       </div>
 
       {/* Posting Strategy */}
-      <div className="space-y-4 mb-6">
+      <div className="space-y-3 mb-4">
         <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-10 h-10 bg-slate-700 rounded-lg">
-            <Settings className="w-5 h-5 text-slate-300" />
+          <div className="flex items-center justify-center w-8 h-8 bg-slate-700 rounded-lg">
+            <Settings className="w-4 h-4 text-slate-300" />
           </div>
           <div>
-            <h4 className="text-lg font-semibold text-slate-200">Posting Strategy</h4>
-            <p className="text-sm text-slate-400">Choose how to schedule posts</p>
+            <h4 className="text-base font-semibold text-slate-200">Posting Strategy</h4>
+            <p className="text-xs text-slate-400">Choose how to schedule posts</p>
           </div>
         </div>
         
         {/* Strategy Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <button
             onClick={() => setPostingStrategy('interval')}
             className={cn(
-              "p-5 rounded-lg border-2 text-left transition-all duration-200",
+              "p-4 rounded-lg border-2 text-left transition-all duration-200",
               postingStrategy === 'interval'
                 ? "border-blue-600 bg-slate-800 shadow-lg"
                 : "border-slate-600 hover:border-blue-500 hover:bg-slate-800/50"
             )}
           >
-            <div className="flex items-center space-x-3 mb-3">
+            <div className="flex items-center space-x-2 mb-2">
               <div className={cn(
-                "flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200",
+                "flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
                 postingStrategy === 'interval'
                   ? "bg-blue-700"
                   : "bg-slate-700 group-hover:bg-blue-700/50"
               )}>
                 <Calendar className={cn(
-                  "w-5 h-5 transition-colors duration-200",
+                  "w-4 h-4 transition-colors duration-200",
                   postingStrategy === 'interval' ? "text-white" : "text-slate-400 group-hover:text-blue-400"
                 )} />
               </div>
               <div>
-                <h5 className="font-medium text-slate-200">Schedule All</h5>
-                <p className="text-sm text-slate-400">Time intervals from start</p>
+                <h5 className="font-medium text-slate-200 text-sm">Schedule All</h5>
+                <p className="text-xs text-slate-400">Time intervals from start</p>
               </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center space-x-2 text-xs text-slate-400">
-                <CheckCircle className="w-3 h-3 text-emerald-400" />
-                <span>Automated scheduling</span>
-              </div>
+            <div className="flex items-center space-x-2 text-xs text-slate-400">
+              <CheckCircle className="w-3 h-3 text-emerald-400" />
+              <span>Automated scheduling</span>
             </div>
           </button>
 
           <button
             onClick={() => setPostingStrategy('first-now')}
             className={cn(
-              "p-5 rounded-lg border-2 text-left transition-all duration-200",
+              "p-4 rounded-lg border-2 text-left transition-all duration-200",
               postingStrategy === 'first-now'
                 ? "border-blue-600 bg-slate-800 shadow-lg"
                 : "border-slate-600 hover:border-blue-500 hover:bg-slate-800/50"
             )}
           >
-            <div className="flex items-center space-x-3 mb-3">
+            <div className="flex items-center space-x-2 mb-2">
               <div className={cn(
-                "flex items-center justify-center w-10 h-10 rounded-lg transition-all duration-200",
+                "flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
                 postingStrategy === 'first-now'
                   ? "bg-blue-700"
                   : "bg-slate-700 group-hover:bg-blue-700/50"
               )}>
                 <Play className={cn(
-                  "w-5 h-5 transition-colors duration-200",
+                  "w-4 h-4 transition-colors duration-200",
                   postingStrategy === 'first-now' ? "text-white" : "text-slate-400 group-hover:text-blue-400"
                 )} />
               </div>
               <div>
-                <h5 className="font-medium text-slate-200">Post 1 Now</h5>
-                <p className="text-sm text-slate-400">Immediate + schedule rest</p>
+                <h5 className="font-medium text-slate-200 text-sm">Post 1 Now</h5>
+                <p className="text-xs text-slate-400">Immediate + schedule rest</p>
               </div>
             </div>
-            <div className="space-y-1">
-              <div className="flex items-center space-x-2 text-xs text-slate-400">
-                <CheckCircle className="w-3 h-3 text-emerald-400" />
-                <span>Instant engagement</span>
-              </div>
+            <div className="flex items-center space-x-2 text-xs text-slate-400">
+              <CheckCircle className="w-3 h-3 text-emerald-400" />
+              <span>Instant engagement</span>
             </div>
           </button>
         </div>
 
         {/* Interval Settings */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-5 mb-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="space-y-3">
+        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-200">Interval Between Posts</label>
               <select
                 value={intervalHours}
                 onChange={(e) => setIntervalHours(Number(e.target.value))}
-                className="w-full px-4 py-3 bg-slate-900 text-slate-200 rounded-lg border border-slate-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 focus:outline-none transition-all"
+                className="w-full px-3 py-2 bg-slate-900 text-slate-200 rounded-lg border border-slate-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 focus:outline-none transition-all text-sm"
               >
                 <option value={0.5}>30 minutes</option>
                 <option value={1}>1 hour</option>
@@ -695,14 +691,14 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
             </div>
 
             {postingStrategy === 'interval' && (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 <label className="block text-sm font-medium text-slate-200">Start Time</label>
                 <input
                   type="datetime-local"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                   min={new Date().toISOString().slice(0, 16)}
-                  className="w-full px-4 py-3 bg-slate-900 text-slate-200 rounded-lg border border-slate-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 focus:outline-none transition-all"
+                  className="w-full px-3 py-2 bg-slate-900 text-slate-200 rounded-lg border border-slate-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 focus:outline-none transition-all text-sm"
                 />
                 <p className="text-xs text-slate-400">
                   Schedule start time
@@ -714,26 +710,26 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       </div>
 
       {/* Schedule Preview */}
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-10 h-10 bg-slate-700 rounded-lg">
-            <Eye className="w-5 h-5 text-slate-300" />
+          <div className="flex items-center justify-center w-8 h-8 bg-slate-700 rounded-lg">
+            <Eye className="w-4 h-4 text-slate-300" />
           </div>
           <div>
-            <h4 className="text-lg font-semibold text-slate-200">Schedule Preview</h4>
-            <p className="text-sm text-slate-400">Review timeline before posting</p>
+            <h4 className="text-base font-semibold text-slate-200">Schedule Preview</h4>
+            <p className="text-xs text-slate-400">Review timeline before posting</p>
           </div>
         </div>
         
         {/* Schedule Constraints Notice */}
-        <div className="bg-slate-800 border border-slate-600 rounded-lg p-4 mb-6">
+        <div className="bg-slate-800 border border-slate-600 rounded-lg p-3">
           <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center">
-              <Clock className="w-4 h-4 text-slate-400" />
+            <div className="flex-shrink-0 w-6 h-6 bg-slate-700 rounded-lg flex items-center justify-center">
+              <Clock className="w-3 h-3 text-slate-400" />
             </div>
             <div>
-              <div className="font-medium text-slate-200 mb-2">Schedule Rules</div>
-              <div className="space-y-1 text-sm text-slate-400">
+              <div className="font-medium text-slate-200 mb-2 text-sm">Schedule Rules</div>
+              <div className="space-y-1 text-xs text-slate-400">
                 <div>• Posts every {intervalHours} hours (9am-10pm)</div>
                 <div>• Posts after 10pm → next day at 9am</div>
                 <div>• No posts 12am-9am</div>
@@ -743,27 +739,27 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
         
         {/* Schedule Timeline */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-5 mb-6">
+        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
           {getSchedulePreview().length === 0 ? (
-            <div className="text-center py-8">
-              <AlertCircle className="w-8 h-8 text-slate-500 mx-auto mb-3" />
-              <h5 className="font-medium text-slate-300 mb-2">No Posts Scheduled</h5>
-              <p className="text-sm text-slate-500">
+            <div className="text-center py-6">
+              <AlertCircle className="w-6 h-6 text-slate-500 mx-auto mb-2" />
+              <h5 className="font-medium text-slate-300 mb-2 text-sm">No Posts Scheduled</h5>
+              <p className="text-xs text-slate-500">
                 Adjust settings to schedule posts
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-2">
               {getSchedulePreview().map((item, index) => (
-                <div key={item.slideshowId} className="bg-slate-900 rounded-lg border border-slate-600 p-4">
+                <div key={item.slideshowId} className="bg-slate-900 rounded-lg border border-slate-600 p-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="flex items-center justify-center w-8 h-8 bg-slate-700 rounded-lg">
-                        <span className="text-sm font-medium text-slate-300">{index + 1}</span>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex items-center justify-center w-6 h-6 bg-slate-700 rounded-lg">
+                        <span className="text-xs font-medium text-slate-300">{index + 1}</span>
                       </div>
                       <div>
-                        <h6 className="font-medium text-slate-200 text-sm">{item.slideshowTitle}</h6>
-                        <div className="flex items-center space-x-2 mt-1">
+                        <h6 className="font-medium text-slate-200 text-xs">{item.slideshowTitle}</h6>
+                        <div className="flex items-center space-x-1 mt-1">
                           <Clock className="w-3 h-3 text-slate-500" />
                           <span className="text-xs text-slate-400">
                             {item.isImmediate ? 'Post now' : item.displayTime}
@@ -806,12 +802,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         
         {/* Skipped Posts Notice */}
         {slideshows.length > postingSchedule.length && (
-          <div className="bg-slate-800 border border-slate-600 rounded-lg p-4 mb-6">
+          <div className="bg-slate-800 border border-slate-600 rounded-lg p-3">
             <div className="flex items-center space-x-3">
               <AlertCircle className="w-4 h-4 text-slate-400" />
               <div>
-                <div className="font-medium text-slate-200">Posts Adjusted</div>
-                <div className="text-sm text-slate-400">
+                <div className="font-medium text-slate-200 text-sm">Posts Adjusted</div>
+                <div className="text-xs text-slate-400">
                   {slideshows.length - postingSchedule.length} post(s) moved to next day 9am
                 </div>
               </div>
@@ -823,7 +819,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       {/* Post Result */}
       {postResult && (
         <div className={cn(
-          "p-5 rounded-lg border space-y-3 mb-6",
+          "p-3 rounded-lg border space-y-2",
           postResult.success
             ? "bg-green-900/20 border-green-700 text-green-200"
             : "bg-red-900/20 border-red-700 text-red-200"
@@ -854,12 +850,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       <Separator />
 
       {/* Action Buttons - Sticky at bottom */}
-      <div className="sticky bottom-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 pt-5 -mx-6 px-6">
-        <div className="flex gap-4">
+      <div className="sticky bottom-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 pt-4 -mx-4 px-4">
+        <div className="flex gap-3">
           <Button
             onClick={handleBulkPost}
             disabled={isPosting || selectedProfiles.length === 0 || slideshows.length === 0}
-            className="flex-1 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-medium py-3 shadow-lg"
+            className="flex-1 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-medium py-2 shadow-lg"
           >
             {isPosting ? (
               <>
@@ -875,7 +871,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           </Button>
 
           {onClose && (
-            <Button variant="outline" onClick={onClose} className="px-6 border-slate-600 text-slate-300 hover:bg-slate-800">
+            <Button variant="outline" onClick={onClose} className="px-4 border-slate-600 text-slate-300 hover:bg-slate-800">
               Cancel
             </Button>
           )}

@@ -113,6 +113,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [bulkSlideshowsToPost, setBulkSlideshowsToPost] = useState<SlideshowMetadata[]>([]);
   const [isCreatingFromTemplate, setIsCreatingFromTemplate] = useState(false);
   const [showTemplateSelectionDialog, setShowTemplateSelectionDialog] = useState(false);
+  const [randomizeHashtags, setRandomizeHashtags] = useState(false); // New state for randomize hashtags
+  const [randomizePictures, setRandomizePictures] = useState(false); // New state for randomize pictures
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileTileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [displayedImages, setDisplayedImages] = useState<UploadedImage[]>([]); // Track actual displayed images
@@ -995,7 +997,12 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
 
   
 
-  const handleTemplateSelectionConfirm = async (templateId: string, aspectRatio: string) => {
+  const handleTemplateSelectionConfirm = async (
+    templateId: string, 
+    aspectRatio: string,
+    randomizeHashtags: boolean,
+    randomizePictures: boolean
+  ) => {
     if (selectedImages.length === 0) {
       toast.error('Please select some images first');
       return;
@@ -1028,6 +1035,15 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         .map(id => currentImages.find(img => img.id === id))
         .filter(img => img !== undefined) as UploadedImage[];
 
+      // Randomize pictures if enabled
+      if (randomizePictures) {
+        for (let i = orderedImages.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [orderedImages[i], orderedImages[j]] = [orderedImages[j], orderedImages[i]];
+        }
+        toast.info('Shuffled image order for slideshow creation.');
+      }
+
       // Split selected images into chunks based on cut length
       const imageChunks: UploadedImage[][] = [];
       for (let i = 0; i < orderedImages.length; i += cutLength) {
@@ -1051,6 +1067,16 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         const postTitle = template.postTitle || slideshowTitle;
         const caption = template.caption; // Use original caption without numbering
         
+        // Randomize hashtags if enabled
+        let finalHashtags = template.hashtags;
+        if (randomizeHashtags && template.hashtags.length > 0) {
+          const shuffled = [...template.hashtags].sort(() => 0.5 - Math.random());
+          const maxTags = Math.min(shuffled.length, 5);
+          const minTags = Math.min(shuffled.length, 3);
+          const count = Math.floor(Math.random() * (maxTags - minTags + 1)) + minTags;
+          finalHashtags = shuffled.slice(0, count);
+        }
+        
         try {
           console.log(`🎬 Creating slideshow ${chunkNumber}/${imageChunks.length}: ${slideshowTitle}`);
 
@@ -1068,7 +1094,7 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
               slideshowTitle,
               postTitle,
               caption,
-              template.hashtags,
+              finalHashtags,
               chunk,
               textOverlays,
               aspectRatio,
@@ -1085,7 +1111,7 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
               {
                 title: slideshowTitle,
                 caption: caption,
-                hashtags: template.hashtags
+                hashtags: finalHashtags
               }
             );
 
@@ -1489,43 +1515,50 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
   return (
     <div className="h-full flex flex-col bg-background">
       <div className="h-full flex flex-col bg-background">
-        {/* Enhanced Toolbar */}
-        <div className="flex flex-col p-3 border-b border-neutral-800 bg-background">
+        {/* Modern Enhanced Toolbar */}
+        <motion.div
+          className="flex flex-col p-3 border-b border-border/50 bg-gradient-to-r from-background via-background/95 to-background backdrop-blur-xl"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
           {/* Top Row - Navigation and Selection */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-3">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center space-x-2">
               {/* Selection Controls */}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={selectAll}
-                className="flex items-center space-x-2 bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2 h-8 text-sm border-neutral-700"
-              >
-                {(() => {
-                  const imageIds = filteredAndSortedItems.filter(item => item.type === 'file').map(item => item.id);
-                  const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
-                  const hasItems = imageIds.length > 0;
-                  const allSelected = hasItems && allImagesSelected;
-                  
-                  return hasItems && allSelected ? (
-                    <CheckSquare className="w-4 h-4 text-green-400" />
-                  ) : (
-                    <Square className="w-4 h-4 text-neutral-300" />
-                  );
-                })()}
-                <span>{(() => {
-                  const imageIds = filteredAndSortedItems.filter(item => item.type === 'file').map(item => item.id);
-                  const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
-                  const hasItems = imageIds.length > 0;
-                  const allSelected = hasItems && allImagesSelected;
-                  
-                  if (allSelected) {
-                    return selectedImages.length > 0 ? `Deselect All (${selectedImages.length})` : 'Deselect All';
-                  } else {
-                    return hasItems ? `Select All (${imageIds.length})` : 'Select All';
-                  }
-                })()}</span>
-              </Button>
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={selectAll}
+                  className="flex items-center space-x-2 bg-gradient-to-r from-primary/20 to-primary/10 hover:from-primary/30 hover:to-primary/20 text-primary-foreground px-3 py-2 h-8 text-sm border border-primary/20 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                >
+                  {(() => {
+                    const imageIds = filteredAndSortedItems.filter(item => item.type === 'file').map(item => item.id);
+                    const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
+                    const hasItems = imageIds.length > 0;
+                    const allSelected = hasItems && allImagesSelected;
+                    
+                    return hasItems && allSelected ? (
+                      <CheckSquare className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Square className="w-4 h-4 text-primary/70" />
+                    );
+                  })()}
+                  <span>{(() => {
+                    const imageIds = filteredAndSortedItems.filter(item => item.type === 'file').map(item => item.id);
+                    const allImagesSelected = imageIds.every(id => selectedImages.includes(id));
+                    const hasItems = imageIds.length > 0;
+                    const allSelected = hasItems && allImagesSelected;
+                    
+                    if (allSelected) {
+                      return selectedImages.length > 0 ? `Deselect All (${selectedImages.length})` : 'Deselect All';
+                    } else {
+                      return hasItems ? `Select All (${imageIds.length})` : 'Select All';
+                    }
+                  })()}</span>
+                </Button>
+              </motion.div>
 
               {/* Unified Bulk Actions */}
               <AnimatePresence>
@@ -1535,56 +1568,61 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                     initial={{ scale: 0.8, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0.8, opacity: 0 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 20 }}
                   >
                     {/* Delete Button - shows when any items are selected */}
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={removeSelected}
-                      className="flex items-center space-x-2 bg-red-600 hover:bg-red-700 text-white px-3 py-2 h-8 text-sm transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>
-                        {(() => {
-                          const imageCount = selectedImages.length;
-                          const slideshowCount = selectedSlideshows.length;
-                          const totalCount = imageCount + slideshowCount;
-                          
-                          if (imageCount > 0 && slideshowCount > 0) {
-                            return `Delete All (${totalCount})`;
-                          } else if (imageCount > 0) {
-                            return `Delete (${imageCount})`;
-                          } else {
-                            return `Delete (${slideshowCount})`;
-                          }
-                        })()}
-                      </span>
-                    </Button>
-                    
-                    {/* Post to TikTok Button - shows only when slideshows are selected */}
-                    {selectedSlideshows.length > 0 && (
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => {
-                          if (selectedSlideshows.length === 1) {
-                            // Single slideshow - post immediately
-                            handlePostSlideshowToTikTok(selectedSlideshows[0]);
-                          } else {
-                            // Multiple slideshows - show bulk posting dialog
-                            handleBulkPostSlideshowsToTikTok();
-                          }
-                        }}
-                        className="flex items-center space-x-2 bg-pink-600 hover:bg-pink-700 text-white px-3 py-2 h-8 text-sm transition-colors"
+                        onClick={removeSelected}
+                        className="flex items-center space-x-2 bg-gradient-to-r from-destructive/20 to-destructive/10 hover:from-destructive/30 hover:to-destructive/20 text-destructive-foreground px-3 py-2 h-8 text-sm border border-destructive/20 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
                       >
-                        <Share className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" />
                         <span>
-                          {selectedSlideshows.length === 1
-                            ? 'Post to TikTok'
-                            : `Post ${selectedSlideshows.length} to TikTok`
-                          }
+                          {(() => {
+                            const imageCount = selectedImages.length;
+                            const slideshowCount = selectedSlideshows.length;
+                            const totalCount = imageCount + slideshowCount;
+                            
+                            if (imageCount > 0 && slideshowCount > 0) {
+                              return `Delete All (${totalCount})`;
+                            } else if (imageCount > 0) {
+                              return `Delete (${imageCount})`;
+                            } else {
+                              return `Delete (${slideshowCount})`;
+                            }
+                          })()}
                         </span>
                       </Button>
+                    </motion.div>
+                    
+                    {/* Post to TikTok Button - shows only when slideshows are selected */}
+                    {selectedSlideshows.length > 0 && (
+                      <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => {
+                            if (selectedSlideshows.length === 1) {
+                              // Single slideshow - post immediately
+                              handlePostSlideshowToTikTok(selectedSlideshows[0]);
+                            } else {
+                              // Multiple slideshows - show bulk posting dialog
+                              handleBulkPostSlideshowsToTikTok();
+                            }
+                          }}
+                          className="flex items-center space-x-2 bg-gradient-to-r from-pink-500/20 to-pink-600/10 hover:from-pink-500/30 hover:to-pink-600/20 text-pink-foreground px-3 py-2 h-8 text-sm border border-pink-500/20 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                        >
+                          <Share className="w-4 h-4" />
+                          <span>
+                            {selectedSlideshows.length === 1
+                              ? 'Post to TikTok'
+                              : `Post ${selectedSlideshows.length} to TikTok`
+                            }
+                          </span>
+                        </Button>
+                      </motion.div>
                     )}
                   </motion.div>
                 )}
@@ -1596,28 +1634,31 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
           {/* Bottom Row - Sort, View */}
           <div className="flex items-center justify-between">
             {/* Left side - Remix Button */}
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               {/* Remix Button */}
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={handleRemixImages}
-                disabled={selectedImages.length < 2}
-                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Shuffle selected images order for template variations"
-              >
-                <Shuffle className="w-4 h-4" />
-                <span>Remix Images</span>
-              </Button>
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleRemixImages}
+                  disabled={selectedImages.length < 2}
+                  className="flex items-center space-x-2 bg-gradient-to-r from-purple-500/20 to-purple-600/10 hover:from-purple-500/30 hover:to-purple-600/20 text-purple-foreground px-3 py-2 h-8 text-sm border border-purple-500/20 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Shuffle selected images order for template variations"
+                >
+                  <Shuffle className="w-4 h-4" />
+                  <span>Remix Images</span>
+                </Button>
+              </motion.div>
             </div>
 
             <div className="flex items-center space-x-3">
               {/* Slideshow Controls */}
-              <div className="flex items-center space-x-2 border-r border-neutral-700 pr-3">
+              <div className="flex items-center space-x-2 border-r border-border/50 pr-3">
                 {/* Slideshow Limit Dropdown */}
                 <div className="flex items-center space-x-2">
-                  <label className="text-xs text-neutral-400 whitespace-nowrap">Cut Length:</label>
-                  <select
+                  <label className="text-sm text-muted-foreground whitespace-nowrap">Cut Length:</label>
+                  <motion.select
+                    whileFocus={{ scale: 1.02 }}
                     value={cutLength}
                     onChange={(e) => {
                       const newCutLength = Number(e.target.value);
@@ -1626,83 +1667,101 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                         onCutLengthChange(newCutLength);
                       }
                     }}
-                    className="text-sm bg-neutral-800 border border-neutral-700 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-8 text-white"
+                    className="text-sm bg-background/80 backdrop-blur-sm border border-border rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent h-8 text-foreground transition-all duration-200"
                   >
                     <option value={1}>1 slide</option>
                     <option value={2}>2 slides</option>
                     <option value={3}>3 slides</option>
                     <option value={4}>4 slides</option>
                     <option value={5}>5 slides</option>
-                  </select>
+                  </motion.select>
                 </div>
 
                 {/* Create from Template Button */}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleCreateFromTemplate}
-                  disabled={isCreatingFromTemplate || selectedImages.length === 0}
-                  className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white px-3 py-2 h-8 text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isCreatingFromTemplate ? (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <FilePlus className="w-4 h-4" />
-                  )}
-                  <span>Create from template</span>
-                </Button>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleCreateFromTemplate}
+                    disabled={isCreatingFromTemplate || selectedImages.length === 0}
+                    className="flex items-center space-x-2 bg-gradient-to-r from-green-500/20 to-green-600/10 hover:from-green-500/30 hover:to-green-600/20 text-green-foreground px-3 py-2 h-8 text-sm border border-green-500/20 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isCreatingFromTemplate ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <FilePlus className="w-4 h-4" />
+                    )}
+                    <span>Create from template</span>
+                  </Button>
+                </motion.div>
               </div>
 
               {/* Sort Controls */}
               <div className="flex items-center space-x-2">
-                <select
+                <motion.select
+                  whileFocus={{ scale: 1.02 }}
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as 'name' | 'date' | 'size' | 'order')}
-                  className="text-sm bg-neutral-800 border border-neutral-700 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent h-8 text-white"
+                  className="text-sm bg-background/80 backdrop-blur-sm border border-border rounded-lg px-2 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent h-8 text-foreground transition-all duration-200"
                 >
                   <option value="name">Name</option>
                   <option value="date">Date</option>
                   <option value="size">Size</option>
                   <option value="order">Order</option>
-                </select>
+                </motion.select>
 
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                  className="px-3 py-2 h-8 bg-neutral-800 hover:bg-neutral-700 text-white transition-colors"
-                >
-                  {sortOrder === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
-                </Button>
+                <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                    className="px-2 py-2 h-8 bg-background/80 backdrop-blur-sm hover:bg-background/90 border border-border text-foreground rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+                  >
+                    {sortOrder === 'asc' ? <SortAsc className="w-4 h-4" /> : <SortDesc className="w-4 h-4" />}
+                  </Button>
+                </motion.div>
               </div>
 
               {/* View Mode Toggle */}
-              <div className="flex border border-neutral-700 rounded-lg overflow-hidden bg-neutral-800">
-                <Button
-                  variant={viewMode === 'grid' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('grid')}
-                  className="rounded-none border-r border-neutral-700 px-3 py-2 h-8 bg-neutral-900 hover:bg-neutral-800 text-white transition-colors"
+              <motion.div
+                className="flex bg-background/80 backdrop-blur-sm border border-border rounded-lg overflow-hidden shadow-md"
+                whileHover={{ scale: 1.02 }}
+              >
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
-                  <Grid3X3 className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant={viewMode === 'list' ? 'default' : 'ghost'}
-                  size="sm"
-                  onClick={() => setViewMode('list')}
-                  className="rounded-none px-3 py-2 h-8 bg-neutral-900 hover:bg-neutral-800 text-white transition-colors"
+                  <Button
+                    variant={viewMode === 'grid' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('grid')}
+                    className="rounded-none border-r border-border px-3 py-2 h-8 bg-background hover:bg-background/90 text-foreground transition-all duration-200"
+                  >
+                    <Grid3X3 className="w-4 h-4" />
+                  </Button>
+                </motion.div>
+                <motion.div
+                  whileTap={{ scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
-                  <List className="w-4 h-4" />
-                </Button>
-              </div>
+                  <Button
+                    variant={viewMode === 'list' ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setViewMode('list')}
+                    className="rounded-none px-3 py-2 h-8 bg-background hover:bg-background/90 text-foreground transition-all duration-200"
+                  >
+                    <List className="w-4 h-4" />
+                  </Button>
+                </motion.div>
+              </motion.div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        <div
+        <motion.div
           className={cn(
-            "flex-1 relative overflow-auto bg-background transition-all duration-200",
-            isDragOverMainArea ? "bg-blue-900/10 ring-2 ring-blue-400/30" : ""
+            "flex-1 relative overflow-auto bg-gradient-to-br from-background via-background/95 to-background/90 transition-all duration-300",
+            isDragOverMainArea ? "ring-4 ring-primary/20 bg-primary/5" : ""
           )}
           onDragOver={handleMainAreaDragOver}
           onDragLeave={handleMainAreaDragLeave}
@@ -1719,104 +1778,312 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
           onClick={() => {
             if (contextMenu) setContextMenu(null);
           }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
         >
           {/* Enhanced drop zone overlay for main area */}
-          {isDragOverMainArea && (
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-blue-400/10 border-2 border-dashed border-blue-400 rounded-lg flex items-center justify-center z-50 backdrop-blur-sm animate-pulse">
-              <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-6 py-4 rounded-full text-lg font-bold shadow-2xl border-2 border-blue-300 flex items-center space-x-3">
-                <Upload className="w-6 h-6" />
-                <span>Drop files to upload</span>
-              </div>
-            </div>
-          )}
-          {isLoading ? (
-            <div className="flex items-center justify-center h-full text-neutral-400">Loading...</div>
-          ) : fileItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full">
-              <Upload className="w-16 h-16 text-neutral-600" />
-              <p className="text-neutral-500 mt-4">Drop files here or click to upload</p>
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                className="mt-4 bg-blue-600 hover:bg-blue-700 text-white"
+          <AnimatePresence>
+            {isDragOverMainArea && (
+              <motion.div
+                className="absolute inset-0 bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 border-2 border-dashed border-primary/50 rounded-2xl flex items-center justify-center z-50 backdrop-blur-xl"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
               >
-                Select Files
-              </Button>
-            </div>
+                <motion.div
+                  className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-8 py-6 rounded-2xl text-xl font-bold shadow-2xl border-2 border-primary/30 flex items-center space-x-4"
+                  initial={{ y: 20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.1 }}
+                >
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  >
+                    <Upload className="w-8 h-8" />
+                  </motion.div>
+                  <span>Drop files to upload</span>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {isLoading ? (
+            <motion.div
+              className="flex items-center justify-center h-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+            >
+              <div className="text-center">
+                <motion.div
+                  className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                />
+                <p className="text-muted-foreground">Loading files...</p>
+              </div>
+            </motion.div>
+          ) : fileItems.length === 0 ? (
+            <motion.div
+              className="flex flex-col items-center justify-center h-full"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <motion.div
+                className="w-24 h-24 bg-gradient-to-br from-primary/20 to-primary/10 rounded-3xl flex items-center justify-center mb-6"
+                whileHover={{ scale: 1.05 }}
+              >
+                <Upload className="w-12 h-12 text-primary" />
+              </motion.div>
+              <p className="text-muted-foreground text-lg mb-2">No files yet</p>
+              <p className="text-muted-foreground/70 text-sm mb-6">Drop files here or click to upload</p>
+              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground px-6 py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-200"
+                >
+                  Select Files
+                </Button>
+              </motion.div>
+            </motion.div>
           ) : viewMode === 'grid' ? (
-           <div className="p-6">
+           <motion.div
+             className="p-6"
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             transition={{ duration: 0.3 }}
+           >
              {currentFolderId && <RootMoveZone selectedImages={selectedImages} selectedSlideshows={selectedSlideshows} handleMoveImagesToRoot={handleMoveImagesToRoot} handleMoveSlideshowToFolder={handleMoveSlideshowToFolder} />}
-             <div
+             <motion.div
                className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 relative"
+               initial={{ opacity: 0, y: 20 }}
+               animate={{ opacity: 1, y: 0 }}
+               transition={{ duration: 0.3, staggerChildren: 0.05 }}
              >
-               {filteredAndSortedItems.map((item) =>
+               {filteredAndSortedItems.map((item, index) =>
                  item.type === 'folder' ? (
-                   <FolderTile
+                   <motion.div
                      key={item.id}
-                     item={item}
-                     onFolderClick={handleFolderClick}
-                     onContextMenu={handleFolderContextMenu}
-                     renamingFolderId={renamingFolderId}
-                     renameInputValue={renameInputValue}
-                     setRenameInputValue={setRenameInputValue}
-                     setRenamingFolderId={setRenamingFolderId}
-                     handleRenameSubmit={handleRenameSubmit}
-                     onImagesUploaded={onImagesUploaded}
-                     currentImages={currentImages}
-                     selectedImages={selectedImages}
-                     handleMoveImagesToFolder={handleMoveImagesToFolder}
-                     handleMoveSlideshowToFolder={handleMoveSlideshowToFolder}
-                     selectedSlideshows={selectedSlideshows}
-                     setCurrentDragOverFolder={setCurrentDragOverFolder}
-                   />
+                     initial={{ opacity: 0, scale: 0.8 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     transition={{ delay: index * 0.05 }}
+                   >
+                     <FolderTile
+                       item={item}
+                       onFolderClick={handleFolderClick}
+                       onContextMenu={handleFolderContextMenu}
+                       renamingFolderId={renamingFolderId}
+                       renameInputValue={renameInputValue}
+                       setRenameInputValue={setRenameInputValue}
+                       setRenamingFolderId={setRenamingFolderId}
+                       handleRenameSubmit={handleRenameSubmit}
+                       onImagesUploaded={onImagesUploaded}
+                       currentImages={currentImages}
+                       selectedImages={selectedImages}
+                       handleMoveImagesToFolder={handleMoveImagesToFolder}
+                       handleMoveSlideshowToFolder={handleMoveSlideshowToFolder}
+                       selectedSlideshows={selectedSlideshows}
+                       setCurrentDragOverFolder={setCurrentDragOverFolder}
+                     />
+                   </motion.div>
                  ) : item.type === 'slideshow' ? (
-                   <SlideshowTile
+                   <motion.div
                      key={item.id}
-                     item={item}
-                     onSlideshowClick={handleSlideshowClick}
-                     onContextMenu={handleSlideshowContextMenu}
-                     selected={selectedSlideshows.includes(item.id)}
-                     onToggleSelection={toggleSelection}
-                     renamingSlideshowId={renamingSlideshowId}
-                     renameSlideshowInputValue={renameSlideshowInputValue}
-                     setRenameSlideshowInputValue={setRenameSlideshowInputValue}
-                     setRenamingSlideshowId={setRenamingSlideshowId}
-                     handleRenameSlideshowSubmit={handleRenameSlideshowSubmit}
-                   />
+                     initial={{ opacity: 0, scale: 0.8 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     transition={{ delay: index * 0.05 }}
+                   >
+                     <SlideshowTile
+                       item={item}
+                       onSlideshowClick={handleSlideshowClick}
+                       onContextMenu={handleSlideshowContextMenu}
+                       selected={selectedSlideshows.includes(item.id)}
+                       onToggleSelection={toggleSelection}
+                       renamingSlideshowId={renamingSlideshowId}
+                       renameSlideshowInputValue={renameSlideshowInputValue}
+                       setRenameSlideshowInputValue={setRenameSlideshowInputValue}
+                       setRenamingSlideshowId={setRenamingSlideshowId}
+                       handleRenameSlideshowSubmit={handleRenameSlideshowSubmit}
+                     />
+                   </motion.div>
                  ) : (
-                   <FileTile
+                   <motion.div
                      key={item.id}
-                     item={item}
-                     selected={selectedImages.includes(item.id)}
-                     onToggleSelection={toggleSelection}
-                     fileTileRefs={fileTileRefs}
-                   />
+                     initial={{ opacity: 0, scale: 0.8 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     transition={{ delay: index * 0.05 }}
+                   >
+                     <FileTile
+                       item={item}
+                       selected={selectedImages.includes(item.id)}
+                       onToggleSelection={toggleSelection}
+                       fileTileRefs={fileTileRefs}
+                     />
+                   </motion.div>
                  )
                )}
-             </div>
-           </div>
+             </motion.div>
+           </motion.div>
           ) : (
-            <table className="w-full text-sm">
-              {/* List view implementation */}
+            <table className="w-full text-sm text-foreground">
+              <thead className="sticky top-0 z-10 bg-background/90 backdrop-blur-sm border-b border-border/50">
+                <tr className="h-12">
+                  <th className="w-12 px-4 text-left font-semibold"></th> {/* For icon/checkbox */}
+                  <th className="px-4 text-left font-semibold">Name</th>
+                  <th className="px-4 text-left font-semibold hidden sm:table-cell">Type</th>
+                  <th className="px-4 text-left font-semibold hidden md:table-cell">Size</th>
+                  <th className="px-4 text-left font-semibold hidden lg:table-cell">Modified</th>
+                  <th className="w-12 px-4 text-right font-semibold"></th> {/* For context menu */}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/30">
+                {filteredAndSortedItems.map((item) => (
+                  <motion.tr
+                    key={item.id}
+                    className={cn(
+                      "group h-14 hover:bg-primary/5 transition-colors duration-200 relative",
+                      (selectedImages.includes(item.id) || selectedSlideshows.includes(item.id)) && "bg-primary/10"
+                    )}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.2 }}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (item.type === 'folder') {
+                        handleFolderContextMenu(item.id, e.clientX, e.clientY);
+                      } else if (item.type === 'slideshow') {
+                        handleSlideshowContextMenu(item.id, e.clientX, e.clientY);
+                      }
+                      // No context menu for individual image files in list view for now
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (item.type === 'folder') {
+                        handleFolderClick(item.id);
+                      } else {
+                        toggleSelection(item.id); // Use toggleSelection for both slideshows and images
+                      }
+                    }}
+                    draggable={item.type !== 'folder'} // Only files and slideshows are draggable
+                    onDragStart={(e: any) => {
+                      if (item.type !== 'folder') {
+                        handleDragStart(e, item);
+                      }
+                    }}
+                    onDragOver={item.type === 'folder' ? (e: React.DragEvent) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      e.dataTransfer.dropEffect = 'move';
+                    } : undefined}
+                    onDragLeave={item.type === 'folder' ? (e: React.DragEvent) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    } : undefined}
+                    onDrop={item.type === 'folder' ? (e: React.DragEvent) => handleDrop(e, item.id) : undefined}
+                  >
+                    <td className="px-4 py-2">
+                      <div className="flex items-center justify-center">
+                        {item.type === 'folder' ? (
+                          <FolderIcon className="w-5 h-5 text-blue-500" />
+                        ) : item.type === 'slideshow' ? (
+                          <Play className="w-5 h-5 text-purple-500" />
+                        ) : (
+                          <FileImage className="w-5 h-5 text-green-500" />
+                        )}
+                        {(item.type === 'file' && selectedImages.includes(item.id)) || (item.type === 'slideshow' && selectedSlideshows.includes(item.id)) ? (
+                          <CheckSquare className="w-4 h-4 text-primary absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-100 transition-opacity duration-200" />
+                        ) : (
+                          <Square className="w-4 h-4 text-muted-foreground absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-2 font-medium">
+                      {item.type === 'folder' && renamingFolderId === item.id ? (
+                        <input
+                          type="text"
+                          value={renameInputValue}
+                          onChange={(e) => setRenameInputValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameSubmit(item.id, renameInputValue);
+                            if (e.key === 'Escape') setRenamingFolderId(null);
+                          }}
+                          onBlur={() => handleRenameSubmit(item.id, renameInputValue)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-background/80 border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          autoFocus
+                        />
+                      ) : item.type === 'slideshow' && renamingSlideshowId === item.id ? (
+                        <input
+                          type="text"
+                          value={renameSlideshowInputValue}
+                          onChange={(e) => setRenameSlideshowInputValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleRenameSlideshowSubmit(item.id, renameSlideshowInputValue);
+                            if (e.key === 'Escape') setRenamingSlideshowId(null);
+                          }}
+                          onBlur={() => handleRenameSlideshowSubmit(item.id, renameSlideshowInputValue)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full bg-background/80 border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="truncate max-w-[200px] block">{item.name}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground hidden sm:table-cell">
+                      {item.type === 'file' ? 'Image' : item.type === 'slideshow' ? 'Slideshow' : 'Folder'}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground hidden md:table-cell">
+                      {item.size ? formatFileSize(item.size) : '-'}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground hidden lg:table-cell">
+                      {item.modified ? formatDate(item.modified) : '-'}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (item.type === 'folder') {
+                            handleFolderContextMenu(item.id, e.clientX, e.clientY);
+                          } else if (item.type === 'slideshow') {
+                            handleSlideshowContextMenu(item.id, e.clientX, e.clientY);
+                          }
+                        }}
+                      >
+                        <MoreVertical className="w-4 h-4" />
+                      </Button>
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
             </table>
           )}
-        </div>
+        </motion.div>
 
 
-        {/* Context Menu */}
+        {/* Modern Context Menu */}
         <AnimatePresence>
           {contextMenu && (
             <motion.div
-              className="fixed z-50 bg-neutral-900 border border-neutral-800 rounded-lg shadow-xl py-2 min-w-48 backdrop-blur-sm"
+              className="fixed z-50 bg-gradient-to-br from-background via-background/95 to-background/90 border border-border/50 rounded-2xl shadow-2xl py-2 min-w-52 backdrop-blur-xl"
               style={{ left: contextMenu.x, top: contextMenu.y }}
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
               onClick={() => setContextMenu(null)}
             >
               {contextMenu.items.map((item, index) => (
-                <button
+                <motion.button
                   key={index}
-                  className="w-full text-left px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-800 flex items-center space-x-2 transition-colors"
+                  className="w-full text-left px-4 py-3 text-sm text-foreground hover:bg-primary/10 flex items-center space-x-3 transition-all duration-200 group"
                   onClick={() => {
                     if (item === 'New Folder') {
                       setShowCreateFolderDialog(true);
@@ -1955,29 +2222,31 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                     }
                     setContextMenu(null);
                   }}
+                  whileHover={{ x: 4 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
-                  {item === 'New Folder' && <FolderPlus className="w-4 h-4 text-blue-400" />}
-                  {item === 'Paste' && <FilePlus className="w-4 h-4 text-green-400" />}
-                  {item === 'Refresh' && <Upload className="w-4 h-4 text-yellow-400" />}
-                  {item === 'Properties' && <Eye className="w-4 h-4 text-purple-400" />}
-                  {item === 'Rename' && <Pencil className="w-4 h-4 text-orange-400" />}
-                  {item === 'Delete' && <Trash2 className="w-4 h-4 text-red-400" />}
-                  {item === 'Load' && <Play className="w-4 h-4 text-green-400" />}
-                  {item === 'Open' && <Play className="w-4 h-4 text-green-400" />}
-                  {item === 'Unload' && <X className="w-4 h-4 text-orange-400" />}
-                  {item === 'Post to TikTok' && <Send className="w-4 h-4 text-pink-400" />}
-                  <span>{item}</span>
-                </button>
+                  {item === 'New Folder' && <FolderPlus className="w-4 h-4 text-blue-500 group-hover:text-blue-400" />}
+                  {item === 'Paste' && <FilePlus className="w-4 h-4 text-green-500 group-hover:text-green-400" />}
+                  {item === 'Refresh' && <Upload className="w-4 h-4 text-yellow-500 group-hover:text-yellow-400" />}
+                  {item === 'Properties' && <Eye className="w-4 h-4 text-purple-500 group-hover:text-purple-400" />}
+                  {item === 'Rename' && <Pencil className="w-4 h-4 text-orange-500 group-hover:text-orange-400" />}
+                  {item === 'Delete' && <Trash2 className="w-4 h-4 text-red-500 group-hover:text-red-400" />}
+                  {item === 'Load' && <Play className="w-4 h-4 text-green-500 group-hover:text-green-400" />}
+                  {item === 'Open' && <Play className="w-4 h-4 text-green-500 group-hover:text-green-400" />}
+                  {item === 'Unload' && <X className="w-4 h-4 text-orange-500 group-hover:text-orange-400" />}
+                  {item === 'Post to TikTok' && <Send className="w-4 h-4 text-pink-500 group-hover:text-pink-400" />}
+                  <span className="font-medium">{item}</span>
+                </motion.button>
               ))}
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Create Folder Dialog */}
+        {/* Modern Create Folder Dialog */}
         <AnimatePresence>
           {showCreateFolderDialog && (
             <motion.div
-              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -1987,14 +2256,15 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
               }}
             >
               <motion.div
-                className="bg-neutral-900 border border-neutral-800 rounded-lg p-6 w-96"
+                className="bg-gradient-to-br from-background via-background/95 to-background/90 border border-border/50 rounded-2xl p-8 w-96 shadow-2xl backdrop-blur-xl"
                 initial={{ scale: 0.9, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ type: "spring", stiffness: 300, damping: 20 }}
                 onClick={(e) => e.stopPropagation()}
               >
-                <h3 className="text-lg font-semibold text-white mb-4">Create New Folder</h3>
-                <input
+                <h3 className="text-xl font-semibold text-foreground mb-6">Create New Folder</h3>
+                <motion.input
                   type="text"
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
@@ -2006,28 +2276,33 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                       setNewFolderName('');
                     }
                   }}
-                  className="w-full px-3 py-2 bg-neutral-800 border border-neutral-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 placeholder-neutral-400"
+                  className="w-full px-4 py-3 bg-background/80 backdrop-blur-sm border border-border rounded-xl text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent placeholder-muted-foreground transition-all duration-200"
                   placeholder="Folder name"
                   autoFocus
+                  whileFocus={{ scale: 1.02 }}
                 />
-                <div className="flex justify-end space-x-2 mt-4">
-                  <Button
-                    variant="secondary"
-                    onClick={() => {
-                      setShowCreateFolderDialog(false);
-                      setNewFolderName('');
-                    }}
-                    className="bg-neutral-800 hover:bg-neutral-700 text-white"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleCreateFolderSubmit}
-                    disabled={!newFolderName.trim()}
-                    className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Create
-                  </Button>
+                <div className="flex justify-end space-x-3 mt-6">
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      variant="secondary"
+                      onClick={() => {
+                        setShowCreateFolderDialog(false);
+                        setNewFolderName('');
+                      }}
+                      className="bg-background/80 backdrop-blur-sm hover:bg-background/90 border border-border text-foreground px-6 py-2 rounded-xl transition-all duration-200"
+                    >
+                      Cancel
+                    </Button>
+                  </motion.div>
+                  <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                    <Button
+                      onClick={handleCreateFolderSubmit}
+                      disabled={!newFolderName.trim()}
+                      className="bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground px-6 py-2 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Create
+                    </Button>
+                  </motion.div>
                 </div>
               </motion.div>
             </motion.div>
@@ -2134,20 +2409,29 @@ const RootMoveZone: React.FC<{
   };
 
   return (
-    <div
+    <motion.div
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        "flex items-center justify-center p-4 border-2 border-dashed border-neutral-700 rounded-lg mb-4 transition-colors",
-        isOver ? "border-blue-500 bg-blue-900/20" : "hover:border-neutral-600"
+        "flex items-center justify-center p-6 border-2 border-dashed rounded-2xl mb-6 transition-all duration-300",
+        isOver
+          ? "border-primary bg-primary/10 shadow-2xl shadow-primary/20 scale-105"
+          : "border-border/50 hover:border-border bg-background/50 hover:bg-background/80"
       )}
+      whileHover={{ scale: 1.02 }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       <div className="text-center">
-        <Upload className="w-8 h-8 text-neutral-500 mx-auto mb-2" />
-        <p className="text-sm text-neutral-400">Drop files here to move to root</p>
+        <motion.div
+          animate={isOver ? { rotate: 360 } : { rotate: 0 }}
+          transition={{ duration: 1, repeat: isOver ? Infinity : 0, ease: "linear" }}
+        >
+          <Upload className="w-10 h-10 text-primary/60 mx-auto mb-3" />
+        </motion.div>
+        <p className="text-sm text-muted-foreground font-medium">Drop files here to move to root</p>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -2361,7 +2645,7 @@ const FolderTile: React.FC<{
   };
 
   return (
-    <div
+    <motion.div
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -2395,47 +2679,85 @@ const FolderTile: React.FC<{
         }
       }}
       className={cn(
-        "relative group aspect-square rounded-lg overflow-hidden bg-blue-900/20 border-2 transition-all cursor-pointer",
-        isDragOver ? "border-blue-500 ring-4 ring-blue-400/50 bg-blue-500/30 scale-105 shadow-2xl shadow-blue-500/25" : "border-transparent hover:shadow-lg hover:border-blue-400/50"
+        "relative group aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-blue-500/20 via-blue-500/10 to-blue-500/5 border-2 transition-all duration-300 cursor-pointer backdrop-blur-sm",
+        isDragOver
+          ? "border-primary ring-4 ring-primary/50 bg-primary/30 scale-105 shadow-2xl shadow-primary/25"
+          : "border-transparent hover:shadow-xl hover:border-primary/30 hover:bg-gradient-to-br hover:from-primary/15 hover:via-primary/10 hover:to-primary/5"
       )}
       style={{
         zIndex: isDragOver ? 50 : 1,
         cursor: isRenaming ? 'text' : 'pointer',
-        transform: isDragOver ? 'scale(1.05)' : 'scale(1)',
       }}
+      whileHover={{ scale: isDragOver ? 1.05 : 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      animate={{
+        scale: isDragOver ? 1.05 : 1,
+        borderColor: isDragOver ? "rgb(var(--primary))" : "transparent"
+      }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
       {/* Enhanced drop zone overlay for better visual feedback */}
-      {isDragOver && (
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/30 to-blue-400/20 border-2 border-blue-400 rounded-lg flex items-center justify-center z-10 pointer-events-none backdrop-blur-sm animate-pulse">
-          <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white px-4 py-2 rounded-full text-sm font-bold shadow-xl border border-blue-300 flex items-center space-x-2">
-            <Move className="w-4 h-4" />
-            <span>Drop here</span>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {isDragOver && (
+          <motion.div
+            className="absolute inset-0 bg-gradient-to-br from-primary/40 via-primary/30 to-primary/20 border-2 border-primary rounded-2xl flex items-center justify-center z-10 pointer-events-none backdrop-blur-xl"
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            transition={{ type: "spring", stiffness: 300, damping: 20 }}
+          >
+            <motion.div
+              className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground px-6 py-3 rounded-full text-sm font-bold shadow-2xl border-2 border-primary/30 flex items-center space-x-3"
+              initial={{ y: 10, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+            >
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+              >
+                <Move className="w-5 h-5" />
+              </motion.div>
+              <span>Drop here</span>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Clickable content area - doesn't interfere with drop detection */}
       <div
-        className="flex flex-col items-center justify-center h-full relative z-0"
+        className="flex flex-col items-center justify-center h-full relative z-0 p-3"
         onClick={handleClick}
       >
-        <FolderIcon className="w-1/2 h-1/2 text-blue-400" />
+        <motion.div
+          animate={isDragOver ? { scale: 1.1, rotate: 5 } : { scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 300, damping: 20 }}
+        >
+          <FolderIcon className="w-8 h-8 text-primary/80" />
+        </motion.div>
         {isRenaming ? (
-          <input
+          <motion.input
             type="text"
             value={renameInputValue}
             onChange={(e) => setRenameInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
             onBlur={() => handleRenameSubmit(item.id, renameInputValue)}
-            className="text-center text-xs font-medium text-white mt-2 px-2 py-1 border border-blue-500 rounded bg-neutral-900 w-full max-w-20 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            className="text-center text-xs font-medium text-foreground mt-2 px-2 py-1 border border-primary/50 rounded-lg bg-background/80 backdrop-blur-sm w-full max-w-20 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-transparent transition-all duration-200"
             autoFocus
+            whileFocus={{ scale: 1.05 }}
           />
         ) : (
-          <p className="text-center text-xs font-medium text-neutral-200 mt-2 truncate px-2">{item.name}</p>
+          <motion.p
+            className="text-center text-xs font-medium text-foreground mt-2 truncate px-2"
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
+            {item.name}
+          </motion.p>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -2476,7 +2798,7 @@ const SlideshowTile: React.FC<{
     }
   };
 
-  const handleDragStart = (e: React.DragEvent) => {
+  const handleDragStart = (event: React.DragEvent) => {
     console.log('🎬 Starting drag for slideshow:', item.id, item.name);
     
     const dragData = {
@@ -2485,21 +2807,21 @@ const SlideshowTile: React.FC<{
       name: item.name
     };
     
-    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
-    e.dataTransfer.effectAllowed = 'move';
-    
-    // Add visual feedback during drag
-    e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
-    
     // Set dragging state
     setIsDragging(true);
+    
+    // Store drag data for drop handling
+    event.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    event.dataTransfer.effectAllowed = 'move';
     
     // Clear dragging state after a short delay
     setTimeout(() => setIsDragging(false), 100);
   };
 
-  const handleDragEnd = (e: React.DragEvent) => {
+  const handleDragEnd = (event: React.DragEvent) => {
     setIsDragging(false);
+    // Clear drag data
+    // (window as any).dragData = null; // Not needed if using dataTransfer
   };
 
   // Handle click only if not dragging
@@ -2514,56 +2836,109 @@ const SlideshowTile: React.FC<{
   };
 
   return (
-    <div
+    <motion.div
       onContextMenu={(e) => {
         e.preventDefault();
         e.stopPropagation();
         if (!isRenaming) onContextMenu(item.id, e.clientX, e.clientY);
       }}
       draggable={!isRenaming}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
+      onDragStart={(e: any) => {
+        if (!isRenaming) {
+          const dragData = {
+            type: 'slideshow',
+            id: item.id,
+            name: item.name
+          };
+          
+          e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+          e.dataTransfer.effectAllowed = 'move';
+          setIsDragging(true);
+          setTimeout(() => setIsDragging(false), 100);
+        }
+      }}
+      onDragEnd={(e: any) => {
+        setIsDragging(false);
+      }}
       className={cn(
-        "relative group aspect-square rounded-lg overflow-hidden bg-gradient-to-br from-purple-900/20 to-blue-900/20 border-2 transition-all",
-        selected ? "border-purple-500 ring-2 ring-purple-400/30" : "border-transparent hover:shadow-lg hover:border-purple-400/50",
-        isDragging ? "opacity-50 cursor-grabbing" : "cursor-pointer"
+        "relative group aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-purple-500/20 via-purple-500/10 to-blue-500/5 border-2 transition-all duration-300 cursor-pointer backdrop-blur-sm",
+        selected
+          ? "border-purple-500 ring-4 ring-purple-400/30 shadow-2xl shadow-purple-500/20"
+          : "border-transparent hover:shadow-xl hover:border-purple-400/50 hover:bg-gradient-to-br hover:from-purple-500/25 hover:via-purple-500/15 hover:to-blue-500/10",
+        isDragging ? "opacity-50 cursor-grabbing scale-95" : "cursor-pointer"
       )}
       title={`Slideshow: ${item.slideshow?.title || 'Loading...'}`}
       onClick={handleClick}
+      whileHover={{ scale: isDragging ? 0.95 : 1.02 }}
+      whileTap={{ scale: 0.98 }}
+      animate={{
+        scale: selected ? 1.05 : 1,
+        borderColor: selected ? "rgb(147 51 234)" : "transparent"
+      }}
+      transition={{ type: "spring", stiffness: 300, damping: 20 }}
     >
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center mb-2">
-          <Play className="w-6 h-6 text-purple-400" />
-        </div>
+      <div className="absolute inset-0 flex flex-col items-center justify-center p-3">
+        <motion.div
+          className="w-14 h-14 bg-gradient-to-br from-purple-500/30 to-purple-500/10 rounded-2xl flex items-center justify-center mb-3 shadow-lg"
+          whileHover={{ scale: 1.1, rotate: 5 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        >
+          <Play className="w-7 h-7 text-purple-400" />
+        </motion.div>
+        
         {/* Add visual indicator even when not selected */}
-        <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center z-10 transition-all"
-              style={{
-                backgroundColor: selected ? 'rgb(147 51 234)' : 'transparent',
-                border: selected ? '2px solid rgb(147 51 234)' : '2px solid transparent'
-              }}>
-          {selected ? <CheckSquare className="w-3 h-3 text-white" /> : null}
-        </div>
+        <motion.div
+          className="absolute top-3 right-3 w-6 h-6 rounded-full flex items-center justify-center z-10 transition-all duration-300"
+          style={{
+            backgroundColor: selected ? 'rgb(147 51 234)' : 'transparent',
+            border: selected ? '2px solid rgb(147 51 234)' : '2px solid transparent'
+          }}
+          animate={{
+            scale: selected ? 1.1 : 1,
+            backgroundColor: selected ? 'rgb(147 51 234)' : 'transparent'
+          }}
+        >
+          {selected && (
+            <motion.div
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-white" />
+            </motion.div>
+          )}
+        </motion.div>
+        
         {isRenaming ? (
-          <input
+          <motion.input
             type="text"
             value={renameSlideshowInputValue}
             onChange={(e) => setRenameSlideshowInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             onClick={(e) => e.stopPropagation()}
             onBlur={() => handleRenameSlideshowSubmit(item.id, renameSlideshowInputValue)}
-            className="text-center text-xs font-medium text-white mt-2 px-2 py-1 border border-purple-500 rounded bg-neutral-900 w-full max-w-20 focus:outline-none focus:ring-1 focus:ring-purple-500"
+            className="text-center text-xs font-medium text-foreground mt-2 px-2 py-1 border border-purple-500/50 rounded-lg bg-background/80 backdrop-blur-sm w-full max-w-20 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all duration-200"
             autoFocus
+            whileFocus={{ scale: 1.05 }}
           />
         ) : (
-          <p className="text-center text-xs font-medium text-neutral-200 truncate px-2 max-w-full">
+          <motion.p
+            className="text-center text-xs font-medium text-foreground truncate px-2 max-w-full"
+            whileHover={{ scale: 1.05 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
+          >
             {hasValidSlideshow ? item.slideshow?.title : 'Click to Load'}
-          </p>
+          </motion.p>
         )}
-        <p className="text-center text-xs text-neutral-400 mt-1">
+        <motion.p
+          className="text-center text-xs text-muted-foreground mt-1"
+          whileHover={{ scale: 1.05 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
+        >
           {hasValidSlideshow ? (item.slideshow?.condensedSlides?.length || 0) : '?'} slides
-        </p>
+        </motion.p>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
@@ -2584,7 +2959,7 @@ const FileTile: React.FC<{
 
   const [isDragging, setIsDragging] = useState(false);
 
-  const handleDragStart = (e: React.DragEvent) => {
+  const handleDragStart = (event: React.DragEvent) => {
     console.log('🖼️ Starting drag for file:', item.id, item.name);
     
     const dragData = {
@@ -2593,21 +2968,21 @@ const FileTile: React.FC<{
       name: item.name
     };
     
-    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
-    e.dataTransfer.effectAllowed = 'move';
-    
-    // Add visual feedback during drag
-    e.dataTransfer.setDragImage(e.currentTarget, 0, 0);
-    
     // Set dragging state
     setIsDragging(true);
+    
+    // Store drag data for drop handling
+    event.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    event.dataTransfer.effectAllowed = 'move';
     
     // Clear dragging state after a short delay
     setTimeout(() => setIsDragging(false), 100);
   };
 
-  const handleDragEnd = (e: React.DragEvent) => {
+  const handleDragEnd = (event: React.DragEvent) => {
     setIsDragging(false);
+    // Clear drag data
+    // (window as any).dragData = null; // Not needed if using dataTransfer
   };
 
   // Handle click only if not dragging
@@ -2625,27 +3000,75 @@ const FileTile: React.FC<{
 
   return (
     <>
-      <div
+      <motion.div
         ref={tileRef}
-        draggable={!isDragging}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
+        draggable // Make the div draggable
+        onDragStart={(e: any) => {
+          const dragData = {
+            type: 'file',
+            id: item.id,
+            name: item.name
+          };
+          
+          setIsDragging(true);
+          e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(() => setIsDragging(false), 100);
+        }}
+        onDragEnd={(e: any) => {
+          setIsDragging(false);
+        }}
         className={cn(
-          "relative group aspect-square rounded-lg overflow-hidden bg-neutral-900 border-2 transition-all",
-          selected ? "border-blue-500 ring-2 ring-blue-400/30" : "border-transparent hover:shadow-lg hover:border-neutral-700",
-          isDragging ? "opacity-50 cursor-grabbing" : "cursor-pointer",
+          "relative group aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-background/80 to-background/60 border-2 transition-all duration-300 cursor-pointer backdrop-blur-sm",
+          selected
+            ? "border-primary ring-4 ring-primary/30 shadow-2xl shadow-primary/20"
+            : "border-transparent hover:shadow-xl hover:border-primary/30 hover:bg-gradient-to-br hover:from-background/90 hover:to-background/70",
+          isDragging ? "opacity-50 cursor-grabbing scale-95" : "cursor-pointer",
           className
         )}
         title={selected ? "Selected" : ""}
         onClick={handleClick}
+        whileHover={{ scale: isDragging ? 0.95 : 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        animate={{
+          scale: selected ? 1.05 : 1,
+          borderColor: selected ? "rgb(var(--primary))" : "transparent"
+        }}
+        transition={{ type: "spring", stiffness: 300, damping: 20 }}
       >
-        <div className="absolute inset-0 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
           {item.image && (
-            <img src={item.image.url} alt={item.name} className="w-full h-full object-cover transition-transform hover:scale-105" />
+            <motion.img
+              src={item.image.url}
+              alt={item.name}
+              className="w-full h-full object-cover transition-transform duration-300"
+              whileHover={{ scale: 1.05 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            />
           )}
         </div>
-        {selected && <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center z-10"><CheckSquare className="w-3 h-3 text-white" /></div>}
-      </div>
+        
+        {/* Selection indicator */}
+        <AnimatePresence>
+          {selected && (
+            <motion.div
+              className="absolute top-3 right-3 w-6 h-6 bg-primary rounded-full flex items-center justify-center z-10 shadow-lg"
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              exit={{ scale: 0, rotate: 180 }}
+              transition={{ type: "spring", stiffness: 400, damping: 17 }}
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-primary-foreground" />
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        {/* Hover overlay */}
+        <motion.div
+          className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 transition-opacity duration-300"
+          whileHover={{ opacity: 1 }}
+        />
+      </motion.div>
     </>
   );
 };
