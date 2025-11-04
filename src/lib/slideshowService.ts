@@ -380,6 +380,49 @@ async saveSlideshow(
   }
 
   /**
+   * Load slideshow with clear settings - returns slideshow data but clears text fields for editing
+   * This ensures slideshows always load with clear settings unless the user wants to add something
+   */
+  async loadSlideshowWithClearSettings(slideshowId: string): Promise<SlideshowMetadata | null> {
+    console.log('🧹📋 SLIDESHOW SERVICE: loadSlideshowWithClearSettings called with ID:', slideshowId);
+    
+    // Load the original slideshow first
+    const originalSlideshow = await this.loadSlideshow(slideshowId);
+    
+    if (!originalSlideshow) {
+      console.log('❌ No slideshow found with ID:', slideshowId);
+      return null;
+    }
+    
+    // Create a clean version with cleared text fields
+    const cleanSlideshow: SlideshowMetadata = {
+      ...originalSlideshow,
+      // Clear all text content but preserve images and formatting settings
+      title: '',
+      postTitle: '',
+      caption: '',
+      hashtags: [],
+      textOverlays: [], // Clear all text overlays
+      // Keep structural and formatting settings
+      aspectRatio: originalSlideshow.aspectRatio,
+      transitionEffect: originalSlideshow.transitionEffect,
+      musicEnabled: originalSlideshow.musicEnabled,
+      condensedSlides: originalSlideshow.condensedSlides, // Keep the slides/images
+      updated_at: new Date().toISOString() // Update timestamp to indicate this is a fresh load
+    };
+    
+    console.log('🧹📋 Created clean slideshow with cleared text fields:', {
+      slideshowId,
+      originalTitle: originalSlideshow.title,
+      newTitle: cleanSlideshow.title,
+      slideCount: cleanSlideshow.condensedSlides.length,
+      hasClearedText: !cleanSlideshow.title && !cleanSlideshow.caption && cleanSlideshow.hashtags.length === 0
+    });
+    
+    return cleanSlideshow;
+  }
+
+  /**
    * Load slideshow from file
    */
   async loadSlideshowFromFile(file: File): Promise<SlideshowMetadata> {

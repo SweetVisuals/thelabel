@@ -602,7 +602,7 @@ export const Dashboard: React.FC = () => {
   // Function to construct the full breadcrumb path
     const getFolderPath = (folderId: string | null, allFolders: Folder[]) => {
       const path: { id: string; name: string }[] = [];
-      let current = allFolders.find(f => f.id === folderId);
+      let current: Folder | undefined = allFolders.find(f => f.id === folderId);
 
       while (current) {
         path.unshift({ id: current.id, name: current.name });
@@ -657,7 +657,8 @@ export const Dashboard: React.FC = () => {
       (async () => {
         try {
           const { slideshowService } = await import('../../lib/slideshowService');
-          const slideshow = await slideshowService.loadSlideshow(newlySelected);
+          // Use clean loading approach - slideshow loads with clear text settings
+          const slideshow = await slideshowService.loadSlideshowWithClearSettings(newlySelected);
           if (slideshow) {
             await handleSlideshowLoad(slideshow);
           }
