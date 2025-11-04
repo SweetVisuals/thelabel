@@ -433,28 +433,28 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         if (previewMode) return;
                         e.preventDefault();
                         e.stopPropagation();
-                        
+
                         setIsDraggingText(true);
-                        
+
                         const startX = e.clientX;
                         const startY = e.clientY;
                         const startLeft = overlay.x;
                         const startTop = overlay.y;
                         const container = dragContainerRef.current;
-                        
+
                         if (!container) return;
-                        
+
                         const handleMouseMove = (e: MouseEvent) => {
                           const deltaX = e.clientX - startX;
                           const deltaY = e.clientY - startY;
-                          
+
                           const containerRect = container.getBoundingClientRect();
                           const deltaXPercent = (deltaX / containerRect.width) * 100;
                           const deltaYPercent = (deltaY / containerRect.height) * 100;
-                          
+
                           const newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
                           const newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
-                          
+
                           const updatedOverlays = textOverlays.map(o =>
                             o.id === overlay.id
                               ? { ...o, x: newLeft, y: newTop }
@@ -462,13 +462,13 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                           );
                           onTextOverlaysChange?.(updatedOverlays);
                         };
-                        
+
                         const handleMouseUp = () => {
                           setIsDraggingText(false);
                           document.removeEventListener('mousemove', handleMouseMove);
                           document.removeEventListener('mouseup', handleMouseUp);
                         };
-                        
+
                         document.addEventListener('mousemove', handleMouseMove);
                         document.addEventListener('mouseup', handleMouseUp);
                       }}
@@ -476,7 +476,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         if (previewMode) return;
                         e.preventDefault();
                         e.stopPropagation();
-                        
+
                         setEditingTextId(overlay.id);
                         setEditingTextValue(overlay.text);
                       }}
@@ -552,6 +552,23 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                   );
                 })
               }
+
+              {/* Caption and hashtags overlay for saved slideshows */}
+              {currentSlideshow && (
+                <div className="absolute top-4 left-4 right-16 z-10 bg-black/50 p-2 rounded">
+                  <p className="text-white text-sm font-medium mb-1 truncate">{title}</p>
+                  <p className="text-white text-xs mb-1 line-clamp-2">{caption}</p>
+                  {hashtags && hashtags.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {hashtags.map((tag, index) => (
+                        <span key={index} className="text-xs text-blue-400">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* TikTok-style side panel - positioned within video container */}
               <div className="absolute right-6 bottom-24 flex flex-col space-y-5 z-10">
