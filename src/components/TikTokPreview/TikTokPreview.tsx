@@ -556,11 +556,15 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
               {/* Caption and hashtags overlay for saved slideshows */}
               {currentSlideshow && (
                 <div className="absolute top-4 left-4 right-16 z-10 bg-black/50 p-2 rounded">
-                  <p className="text-white text-sm font-medium mb-1 truncate">{title}</p>
-                  <p className="text-white text-xs mb-1 line-clamp-2">{caption}</p>
-                  {hashtags && hashtags.length > 0 && (
+                  <p className="text-white text-sm font-medium mb-1 truncate">
+                    {currentSlideshow.title || title}
+                  </p>
+                  <p className="text-white text-xs mb-1 line-clamp-2">
+                    {currentSlideshow.caption || caption}
+                  </p>
+                  {(currentSlideshow.hashtags || hashtags) && (currentSlideshow.hashtags || hashtags).length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {hashtags.map((tag, index) => (
+                      {(currentSlideshow.hashtags || hashtags).map((tag: string, index: number) => (
                         <span key={index} className="text-xs text-blue-400">
                           #{tag}
                         </span>
