@@ -84,6 +84,24 @@ export const SlideshowManager: React.FC<SlideshowManagerProps> = ({
     }
   }, [notification]);
 
+  // Load slideshow data when currentSlideshow changes
+  useEffect(() => {
+    if (currentSlideshow) {
+      console.log('📱 Loading slideshow into editor:', currentSlideshow.title);
+      console.log('🏷️ Slideshow hashtags:', currentSlideshow.hashtags);
+
+      // Populate the form fields with slideshow data
+      onTitleChange(currentSlideshow.title);
+      onPostTitleChange(currentSlideshow.postTitle || '');
+      onCaptionChange(currentSlideshow.caption);
+      onHashtagsChange(currentSlideshow.hashtags || []);
+      onAspectRatioChange(currentSlideshow.aspectRatio);
+      onTransitionEffectChange(currentSlideshow.transitionEffect);
+      onMusicEnabledChange(currentSlideshow.musicEnabled);
+      onTextOverlaysChange(currentSlideshow.textOverlays || []);
+    }
+  }, [currentSlideshow, onTitleChange, onPostTitleChange, onCaptionChange, onHashtagsChange, onAspectRatioChange, onTransitionEffectChange, onMusicEnabledChange, onTextOverlaysChange]);
+
   const loadSavedSlideshows = () => {
     if (!user) return;
     const slideshows = slideshowService.getSavedSlideshows(user.id);

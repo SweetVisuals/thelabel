@@ -140,11 +140,13 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       selectedImagesCount: selectedImages.length,
       selectedImageIds: selectedImages,
       currentSlideshow: !!currentSlideshow,
+      currentSlideshowHashtags: currentSlideshow?.hashtags,
       previewMode,
       cutLength,
+      hashtags: hashtags,
       firstFewImages: images.slice(0, 3).map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' }))
     });
-  }, [images, selectedImages, currentSlideshow, previewMode, cutLength]);
+  }, [images, selectedImages, currentSlideshow, previewMode, cutLength, hashtags]);
 
   const handleRemixSlides = () => {
     if (!currentSlideshow || !currentSlideshow.condensedSlides || currentSlideshow.condensedSlides.length < 2) return;
@@ -298,14 +300,16 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       originalSlidesCount,
       selectedImagesCount: selectedImages.length,
       hasCurrentSlideshow: !!currentSlideshow,
+      currentSlideshowHashtags: currentSlideshow?.hashtags,
       previewMode,
       currentSlide,
+      hashtags: hashtags,
       textOverlaysCount: textOverlays?.length || 0,
       textOverlaysForCurrentSlide: textOverlays?.filter(overlay => overlay.slideIndex === currentSlide).length || 0,
       firstTextOverlay: textOverlays?.[0],
       firstImageUrl: slideshowImages[0]?.url?.substring(0, 50) + '...'
     });
-  }, [slideshowImages, selectedImages, currentSlideshow, previewMode, currentSlide, originalSlidesCount, textOverlays]);
+  }, [slideshowImages, selectedImages, currentSlideshow, previewMode, currentSlide, originalSlidesCount, textOverlays, hashtags]);
 
   // Render the TikTok preview interface
   const renderTikTokPreview = () => {
@@ -639,13 +643,19 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
           <div className="text-white">
             <p className="font-medium mb-1 text-sm truncate">{title}</p>
             <p className="text-xs text-gray-200 mb-2 line-clamp-2">{caption}</p>
-            {hashtags.length > 0 && (
+            {hashtags && hashtags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {hashtags.map((tag, index) => (
                   <span key={index} className="text-xs text-blue-400">
                     #{tag}
                   </span>
                 ))}
+              </div>
+            )}
+            {/* Debug: Show hashtags when slideshow is loaded */}
+            {currentSlideshow && currentSlideshow.hashtags && currentSlideshow.hashtags.length > 0 && (
+              <div className="mt-1 text-xs text-green-400">
+                Loaded hashtags: {currentSlideshow.hashtags.join(', ')}
               </div>
             )}
           </div>
