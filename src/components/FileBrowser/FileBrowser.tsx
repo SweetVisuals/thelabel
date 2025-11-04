@@ -38,7 +38,7 @@ import { cn } from '@/lib/utils';
 import { UploadedImage, Folder, SlideshowMetadata } from '@/types';
 import { ImageEditor } from '../ImageEditor/ImageEditor';
 import { motion, AnimatePresence } from 'framer-motion';
-import { imageService } from '@/lib/imageService';
+import { imageService, ImageCroppingService } from '@/lib/imageService';
 import { slideshowService } from '@/lib/slideshowService';
 import { toast } from 'sonner';
 import { PostizPoster } from '../Postiz/PostizPoster';
@@ -1124,14 +1124,44 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             }))
           });
 
+          // CRITICAL FIX: Crop images to the target aspect ratio BEFORE creating slideshow
+          let processedChunk = chunk;
+          const targetAspectRatio = aspectRatioOverride || template.aspectRatio;
+
+          if (targetAspectRatio !== 'free' && chunk.length > 0) {
+            try {
+              console.log('✂️ Pre-cropping images to target aspect ratio before slideshow creation...');
+
+              // Get image IDs for cropping
+              const imageIds = chunk.map(img => img.id);
+
+              // Use enhanced cropping service to crop images
+              const croppedImages = await ImageCroppingService.changeAspectRatio(
+                imageIds,
+                targetAspectRatio,
+                userId
+              );
+
+              // Update chunk with cropped versions
+              const imageMap = new Map(croppedImages.map(img => [img.id, img]));
+              processedChunk = chunk.map(img => imageMap.get(img.id) || img);
+
+              console.log(`✅ Pre-cropped ${croppedImages.length} images for slideshow creation`);
+
+            } catch (cropError) {
+              console.warn('⚠️ Failed to pre-crop images, proceeding with original images:', cropError);
+              // Continue with original images if cropping fails
+            }
+          }
+
           slideshow = await slideshowService.createOptimizedSlideshow(
             slideshowTitle,
             postTitle,
             caption,
             finalHashtags,
-            chunk,
+            processedChunk,
             chunkTextOverlays,
-            aspectRatioOverride || template.aspectRatio,
+            targetAspectRatio,
             template.transitionEffect,
             template.musicEnabled,
             userId

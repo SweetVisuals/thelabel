@@ -483,13 +483,13 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                       </div>
                     </div>
                     <AspectRatioSelector
-                       selectedAspectRatio={aspectRatioOverride || selectedTemplateData?.aspectRatio || '9:16'}
-                       onAspectRatioChange={(ratio) => {
-                         setAspectRatioOverride(ratio === selectedTemplateData?.aspectRatio ? '' : ratio);
-                       }}
-                       className="w-full"
-                       showPreview={false}
-                     />
+                      selectedAspectRatio={aspectRatioOverride || selectedTemplateData?.aspectRatio || '9:16'}
+                      onAspectRatioChange={(ratio) => {
+                        setAspectRatioOverride(ratio === selectedTemplateData?.aspectRatio ? '' : ratio);
+                      }}
+                      className="w-full"
+                      showPreview={true}
+                    />
                     {aspectRatioOverride && (
                       <div className="mt-2 text-xs text-primary font-medium">
                         ✓ Override active: {aspectRatioOverride}
