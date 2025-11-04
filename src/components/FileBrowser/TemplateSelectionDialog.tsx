@@ -20,6 +20,7 @@ import { SlideshowTemplate } from '@/types';
 import { slideshowService } from '@/lib/slideshowService';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { AspectRatioSelector } from '@/components/ui/aspectRatioSelector';
 
 interface HashtagSelectionDialogProps {
   isOpen: boolean;
@@ -30,16 +31,18 @@ interface HashtagSelectionDialogProps {
 }
 
 interface TemplateSelectionDialogProps {
-   isOpen: boolean;
-   onClose: () => void;
-   onConfirm?: (
-     templateId: string,
-     randomizeHashtags: boolean,
-     randomizePictures: boolean
-   ) => void; // For creating slideshows
-   onApplyToSettings?: (template: SlideshowTemplate) => void; // For applying to edit settings
-   applyToSettingsMode?: boolean; // If true, shows "Apply to Settings" instead of "Create Slideshows"
- }
+    isOpen: boolean;
+    onClose: () => void;
+    onConfirm?: (
+      templateId: string,
+      randomizeHashtags: boolean,
+      randomizePictures: boolean,
+      aspectRatioOverride?: string
+    ) => void; // For creating slideshows
+    onApplyToSettings?: (template: SlideshowTemplate) => void; // For applying to edit settings
+    applyToSettingsMode?: boolean; // If true, shows "Apply to Settings" instead of "Create Slideshows"
+    defaultAspectRatio?: string; // Default aspect ratio to use
+  }
 
 
 const HashtagSelectionDialog: React.FC<HashtagSelectionDialogProps> = ({
@@ -163,17 +166,19 @@ return (
 };
 
 export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = ({
-   isOpen,
-   onClose,
-   onConfirm,
-   onApplyToSettings,
-   applyToSettingsMode = false
- }) => {
+    isOpen,
+    onClose,
+    onConfirm,
+    onApplyToSettings,
+    applyToSettingsMode = false,
+    defaultAspectRatio = '9:16'
+  }) => {
    const { user } = useAuth();
    const [templates, setTemplates] = useState<SlideshowTemplate[]>([]);
    const [selectedTemplate, setSelectedTemplate] = useState<string>('');
    const [randomizeHashtags, setRandomizeHashtags] = useState(false);
    const [randomizePictures, setRandomizePictures] = useState(false);
+   const [aspectRatioOverride, setAspectRatioOverride] = useState<string>(defaultAspectRatio);
    // Removed selectedHashtags and showHashtagSelection as hashtags are now automatically randomized
    const [isLoading, setIsLoading] = useState(true);
    const [isConfirming, setIsConfirming] = useState(false);
@@ -219,7 +224,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
           await onApplyToSettings(template);
         }
       } else if (onConfirm) {
-        await onConfirm(selectedTemplate, randomizeHashtags, randomizePictures);
+        await onConfirm(selectedTemplate, randomizeHashtags, randomizePictures, aspectRatioOverride || undefined);
       }
       onClose();
     } catch (error) {
@@ -456,6 +461,42 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                 </div>
               )}
 
+              {/* Aspect Ratio Override */}
+              {!applyToSettingsMode && (
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center">
+                    <Settings className="w-4 h-4 mr-2" />
+                    Aspect Ratio Override
+                  </h4>
+                  <div className="p-3 border rounded-lg bg-muted/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <label className="font-medium text-sm">Override Template Aspect Ratio</label>
+                        <p className="text-xs text-muted-foreground">
+                          {aspectRatioOverride
+                            ? `Will use ${aspectRatioOverride} instead of template's ${selectedTemplateData?.aspectRatio}`
+                            : `Uses template's ${selectedTemplateData?.aspectRatio} aspect ratio`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <AspectRatioSelector
+                       selectedAspectRatio={aspectRatioOverride || selectedTemplateData?.aspectRatio || '9:16'}
+                       onAspectRatioChange={(ratio) => {
+                         setAspectRatioOverride(ratio === selectedTemplateData?.aspectRatio ? '' : ratio);
+                       }}
+                       className="w-full"
+                       showPreview={false}
+                     />
+                    {aspectRatioOverride && (
+                      <div className="mt-2 text-xs text-primary font-medium">
+                        ✓ Override active: {aspectRatioOverride}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Preview */}
               <div className="bg-muted/30 rounded-lg p-3">
                 <h5 className="font-medium mb-2 text-sm">Configuration Preview</h5>
@@ -472,6 +513,13 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                     <span className="text-muted-foreground">Content:</span>
                     <div className="font-medium">
                       {selectedTemplateData?.title} + {selectedTemplateData?.hashtags.length} hashtags
+                    </div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Aspect Ratio:</span>
+                    <div className="font-medium">
+                      {aspectRatioOverride || selectedTemplateData?.aspectRatio}
+                      {aspectRatioOverride && <span className="text-xs text-primary ml-1">(override)</span>}
                     </div>
                   </div>
                   {!applyToSettingsMode && (

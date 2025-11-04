@@ -180,11 +180,11 @@ export class SlideshowService {
     const scaledOutlineWidth = outlineWidth * strokeScaleFactor;
     const scaledGlowIntensity = Math.max(2, glowIntensity * tiktokScaleFactor);
 
-    // Set font properties
+    // Set font properties with fallback fonts to ensure text is always rendered
     let fontStyle = '';
     if (italic) fontStyle += 'italic ';
     if (bold) fontStyle += 'bold ';
-    fontStyle += `${scaledFontSize}px "${fontFamily}"`;
+    fontStyle += `${scaledFontSize}px "${fontFamily}", "Arial", "Helvetica", sans-serif`;
 
     ctx.font = fontStyle;
     ctx.fillStyle = color;

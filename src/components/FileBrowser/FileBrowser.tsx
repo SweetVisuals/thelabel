@@ -1009,7 +1009,8 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const handleTemplateSelectionConfirm = async (
     templateId: string,
     randomizeHashtags: boolean,
-    randomizePictures: boolean
+    randomizePictures: boolean,
+    aspectRatioOverride?: string
   ) => {
     if (selectedImages.length === 0) {
       toast.error('Please select some images first');
@@ -1130,7 +1131,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             finalHashtags,
             chunk,
             chunkTextOverlays,
-            tiktokAspectRatio,
+            aspectRatioOverride || template.aspectRatio,
             template.transitionEffect,
             template.musicEnabled,
             userId
@@ -2392,6 +2393,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
           isOpen={showTemplateSelectionDialog}
           onClose={() => setShowTemplateSelectionDialog(false)}
           onConfirm={handleTemplateSelectionConfirm}
+          defaultAspectRatio={tiktokAspectRatio}
         />
       </div>
     </div>
