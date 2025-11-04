@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Separator } from '../ui/separator';
-import { 
-  Calendar, 
-  Clock, 
-  Send, 
-  Loader2, 
-  CheckCircle, 
-  AlertCircle, 
-  User, 
+import {
+  Calendar,
+  Clock,
+  Send,
+  Loader2,
+  CheckCircle,
+  AlertCircle,
+  User,
   CalendarDays,
   Image,
   FileText,
@@ -28,6 +28,7 @@ import {
 import { postizAPI } from '../../lib/postiz';
 import { slideshowService } from '../../lib/slideshowService';
 import { postizUploadService } from '../../lib/postizUploadService';
+import { useAuth } from '../../hooks/useAuth';
 
 interface BulkPostizPosterProps {
   slideshows: SlideshowMetadata[];
@@ -49,6 +50,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   onPostSuccess,
   onClose
 }) => {
+  const { user } = useAuth();
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
   const [profiles, setProfiles] = useState<PostizProfile[]>([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
