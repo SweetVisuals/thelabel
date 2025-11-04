@@ -77,13 +77,13 @@ const softSpringEasing = "cubic-bezier(0.25, 1.1, 0.4, 1)";
 
 function InterfacesLogoSquare() {
   return (
-    <div className="aspect-[24/24] grow min-h-px min-w-px overflow-clip relative shrink-0">
+    <div className="aspect-[24/24] grow min-h-px min-w-px overflow-clip relative shrink-0 text-foreground">
       <div className="absolute aspect-[24/16] left-0 right-0 top-1/2 -translate-y-1/2">
         <svg className="block size-full" fill="none" viewBox="0 0 24 16">
           <g>
-            <path d={svgPaths.p36880f80} fill="#FAFAFA" />
-            <path d={svgPaths.p355df480} fill="#FAFAFA" />
-            <path d={svgPaths.pfa0d600} fill="#FAFAFA" />
+            <path d={svgPaths.p36880f80} fill="currentColor" />
+            <path d={svgPaths.p355df480} fill="currentColor" />
+            <path d={svgPaths.pfa0d600} fill="currentColor" />
           </g>
         </svg>
       </div>
@@ -99,7 +99,7 @@ function BrandBadge() {
           <InterfacesLogoSquare />
         </div>
         <div className="px-2 py-1">
-          <div className="font-['Lexend:SemiBold',_sans-serif] text-[16px] text-neutral-50">
+          <div className="font-['Lexend:SemiBold',_sans-serif] text-[16px] text-foreground">
             TikTok Bulk Uploader
           </div>
         </div>
@@ -112,13 +112,13 @@ function BrandBadge() {
 
 function AvatarCircle() {
   return (
-    <div className="relative rounded-full shrink-0 size-8 bg-black">
+    <div className="relative rounded-full shrink-0 size-8 bg-gradient-to-br from-primary/20 to-primary/10 border border-border/50">
       <div className="flex items-center justify-center size-8">
-        <User size={16} className="text-neutral-50" />
+        <User size={16} className="text-foreground" />
       </div>
       <div
         aria-hidden="true"
-        className="absolute inset-0 rounded-full border border-neutral-800 pointer-events-none"
+        className="absolute inset-0 rounded-full border border-primary/30 pointer-events-none"
       />
     </div>
   );
@@ -137,7 +137,7 @@ function SearchContainer({ isCollapsed = false }: { isCollapsed?: boolean }) {
       style={{ transitionTimingFunction: softSpringEasing }}
     >
       <div
-        className={`bg-black h-10 relative rounded-lg flex items-center transition-all duration-500 ${
+        className={`bg-card/80 backdrop-blur-sm border border-border/50 h-10 relative rounded-lg flex items-center transition-all duration-500 ${
           isCollapsed ? "w-10 min-w-10 justify-center" : "w-full"
         }`}
         style={{ transitionTimingFunction: softSpringEasing }}
@@ -149,7 +149,7 @@ function SearchContainer({ isCollapsed = false }: { isCollapsed?: boolean }) {
           style={{ transitionTimingFunction: softSpringEasing }}
         >
           <div className="size-8 flex items-center justify-center">
-            <Search size={16} className="text-neutral-50" />
+            <Search size={16} className="text-foreground" />
           </div>
         </div>
 
@@ -166,7 +166,7 @@ function SearchContainer({ isCollapsed = false }: { isCollapsed?: boolean }) {
                 placeholder="Search..."
                 value={searchValue}
                 onChange={(e) => setSearchValue(e.target.value)}
-                className="w-full bg-transparent border-none outline-none font-['Lexend:Regular',_sans-serif] text-[14px] text-neutral-50 placeholder:text-neutral-400 leading-[20px]"
+                className="w-full bg-transparent border-none outline-none font-['Lexend:Regular',_sans-serif] text-[14px] text-foreground placeholder:text-muted-foreground leading-[20px]"
                 tabIndex={isCollapsed ? -1 : 0}
               />
             </div>
@@ -175,7 +175,7 @@ function SearchContainer({ isCollapsed = false }: { isCollapsed?: boolean }) {
 
         <div
           aria-hidden="true"
-          className="absolute inset-0 rounded-lg border border-neutral-800 pointer-events-none"
+          className="absolute inset-0 rounded-lg border border-border/30 pointer-events-none"
         />
       </div>
     </div>
@@ -208,29 +208,29 @@ function getSidebarContent(activeSection: string): SidebarContent {
         {
           title: "Upload & Import",
           items: [
-            { icon: <Upload size={16} className="text-neutral-50" />, label: "Upload Images" },
-            { icon: <Folder size={16} className="text-neutral-50" />, label: "Import Folder" },
-            { icon: <Image size={16} className="text-neutral-50" />, label: "From URL" },
+            { icon: <Upload size={16} className="text-foreground" />, label: "Upload Images" },
+            { icon: <Folder size={16} className="text-foreground" />, label: "Import Folder" },
+            { icon: <Image size={16} className="text-foreground" />, label: "From URL" },
           ]
         },
         {
           title: "Edit & Enhance",
           items: [
-            { icon: <Palette size={16} className="text-neutral-50" />, label: "Batch Edit" },
+            { icon: <Palette size={16} className="text-foreground" />, label: "Batch Edit" },
           ]
         },
         {
           title: "Export & Share",
           items: [
-            { icon: <Share2 size={16} className="text-neutral-50" />, label: "Schedule to Buffer" },
-            { icon: <Send size={16} className="text-neutral-50" />, label: "Post to TikTok" },
+            { icon: <Share2 size={16} className="text-foreground" />, label: "Schedule to Buffer" },
+            { icon: <Send size={16} className="text-foreground" />, label: "Post to TikTok" },
           ]
         },
         {
           title: "Tools & Effects",
           items: [
-            { icon: <Star size={16} className="text-neutral-50" />, label: "Templates" },
-            { icon: <Settings size={16} className="text-neutral-50" />, label: "Settings" },
+            { icon: <Star size={16} className="text-foreground" />, label: "Templates" },
+            { icon: <Settings size={16} className="text-foreground" />, label: "Settings" },
           ]
         },
         {
@@ -262,8 +262,8 @@ function IconNavButton({
   return (
     <button
       type="button"
-      className={`flex items-center justify-center rounded-lg size-10 min-w-10 transition-colors duration-500
-        ${isActive ? "bg-neutral-800 text-neutral-50" : "hover:bg-neutral-800 text-neutral-400 hover:text-neutral-300"}`}
+      className={`flex items-center justify-center rounded-lg size-10 min-w-10 transition-all duration-500
+        ${isActive ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 hover:bg-primary/90" : "hover:bg-accent hover:text-accent-foreground text-muted-foreground hover-lift"}`}
       style={{ transitionTimingFunction: softSpringEasing }}
       onClick={onClick}
     >
@@ -290,10 +290,10 @@ function IconNavigation({
   ];
 
   return (
-    <aside className="bg-black flex flex-col gap-2 items-center p-4 w-16 h-full border-r border-neutral-800 rounded-l-2xl">
+    <aside className="bg-card/80 backdrop-blur-sm flex flex-col gap-2 items-center p-4 w-16 h-full border-r border-border/50 rounded-l-2xl shadow-xl">
       {/* Logo */}
       <div className="mb-2 size-10 flex items-center justify-center">
-        <div className="size-7">
+        <div className="size-7 hover-glow">
           <InterfacesLogoSquare />
         </div>
       </div>
@@ -318,7 +318,7 @@ function IconNavigation({
         <IconNavButton isActive={activeSection === "settings"} onClick={() => onSectionChange("settings")}>
           <Settings size={16} />
         </IconNavButton>
-        <div className="size-8">
+        <div className="size-8 hover-scale">
           <AvatarCircle />
         </div>
       </div>
@@ -343,7 +343,7 @@ function SectionTitle({
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="flex items-center justify-center rounded-lg size-10 min-w-10 transition-all duration-500 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-300"
+          className="flex items-center justify-center rounded-lg size-10 min-w-10 transition-all duration-500 hover:bg-accent text-muted-foreground hover:text-accent-foreground"
           style={{ transitionTimingFunction: softSpringEasing }}
           aria-label="Expand sidebar"
         >
@@ -360,7 +360,7 @@ function SectionTitle({
       <div className="flex items-center justify-between">
         <div className="flex items-center h-10">
           <div className="px-2 py-1">
-            <div className="font-['Lexend:SemiBold',_sans-serif] text-[18px] text-neutral-50 leading-[27px]">
+            <div className="font-['Lexend:SemiBold',_sans-serif] text-[18px] text-foreground leading-[27px]">
               {title}
             </div>
           </div>
@@ -369,7 +369,7 @@ function SectionTitle({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="flex items-center justify-center rounded-lg size-10 min-w-10 transition-all duration-500 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-300"
+            className="flex items-center justify-center rounded-lg size-10 min-w-10 transition-all duration-500 hover:bg-accent text-muted-foreground hover:text-accent-foreground"
             style={{ transitionTimingFunction: softSpringEasing }}
             aria-label="Collapse sidebar"
           >
@@ -414,7 +414,7 @@ export function DetailSidebar({
 
   return (
     <aside
-      className={`bg-black flex flex-col gap-4 items-start p-4 rounded-r-2xl transition-all duration-500 h-screen ${
+      className={`bg-card/80 backdrop-blur-sm flex flex-col gap-4 items-start p-4 rounded-r-2xl transition-all duration-500 h-screen border-l border-border/30 shadow-xl ${
         isCollapsed ? "w-16 min-w-16 !px-0 justify-center" : "w-80"
       }`}
       style={{ transitionTimingFunction: softSpringEasing }}
@@ -443,19 +443,19 @@ export function DetailSidebar({
       </div>
 
       {!isCollapsed && (
-        <div className="w-full mt-auto pt-2 border-t border-neutral-800">
+        <div className="w-full mt-auto pt-2 border-t border-border/50">
           <div className="flex items-center gap-2 px-2 py-2">
             <AvatarCircle />
-            <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-neutral-50">TikTok Bulk Uploader</div>
+            <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-foreground">TikTok Bulk Uploader</div>
             <button
               type="button"
-              className="ml-auto size-8 rounded-md flex items-center justify-center hover:bg-neutral-800"
+              className="ml-auto size-8 rounded-md flex items-center justify-center hover:bg-accent hover-lift transition-all duration-200"
               aria-label="More"
             >
-              <svg className="size-4" viewBox="0 0 16 16" fill="none">
-                <circle cx="4" cy="8" r="1" fill="#FAFAFA" />
-                <circle cx="8" cy="8" r="1" fill="#FAFAFA" />
-                <circle cx="12" cy="8" r="1" fill="#FAFAFA" />
+              <svg className="size-4 text-foreground" viewBox="0 0 16 16" fill="currentColor">
+                <circle cx="4" cy="8" r="1" />
+                <circle cx="8" cy="8" r="1" />
+                <circle cx="12" cy="8" r="1" />
               </svg>
             </button>
           </div>
@@ -493,8 +493,8 @@ function MenuItem({
       style={{ transitionTimingFunction: softSpringEasing }}
     >
       <div
-        className={`rounded-lg cursor-pointer transition-all duration-500 flex items-center relative ${
-          item.isActive ? "bg-neutral-800" : "hover:bg-neutral-800"
+        className={`rounded-lg cursor-pointer transition-all duration-500 flex items-center relative group ${
+          item.isActive ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25" : "hover:bg-accent hover-lift"
         } ${isCollapsed ? "w-10 min-w-10 h-10 justify-center p-4" : "w-full h-10 px-4 py-2"}`}
         style={{ transitionTimingFunction: softSpringEasing }}
         onClick={handleClick}
@@ -503,26 +503,28 @@ function MenuItem({
         <div className="flex items-center justify-center shrink-0">{item.icon}</div>
 
         <div
-          className={`flex-1 relative transition-opacity duration-500 overflow-hidden ${
+          className={`flex-1 relative transition-all duration-500 overflow-hidden ${
             isCollapsed ? "opacity-0 w-0" : "opacity-100 ml-3"
           }`}
           style={{ transitionTimingFunction: softSpringEasing }}
         >
-          <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-neutral-50 leading-[20px] truncate">
+          <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-foreground leading-[20px] truncate">
             {item.label}
           </div>
         </div>
 
         {item.hasDropdown && (
           <div
-            className={`flex items-center justify-center shrink-0 transition-opacity duration-500 ${
+            className={`flex items-center justify-center shrink-0 transition-all duration-500 ${
               isCollapsed ? "opacity-0 w-0" : "opacity-100 ml-2"
             }`}
             style={{ transitionTimingFunction: softSpringEasing }}
           >
             <ChevronDown
               size={16}
-              className="text-neutral-50 transition-transform duration-500"
+              className={`transition-transform duration-500 ${
+                item.isActive ? "text-primary-foreground" : "text-foreground group-hover:text-primary"
+              }`}
               style={{
                 transitionTimingFunction: softSpringEasing,
                 transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
@@ -539,11 +541,11 @@ function SubMenuItem({ item, onItemClick }: { item: MenuItemT; onItemClick?: (la
   return (
     <div className="w-full pl-9 pr-1 py-[1px]">
       <div
-        className="h-10 w-full rounded-lg cursor-pointer transition-colors hover:bg-neutral-800 flex items-center px-3 py-1"
+        className="h-10 w-full rounded-lg cursor-pointer transition-all duration-200 hover:bg-accent hover-lift flex items-center px-3 py-1 group"
         onClick={() => onItemClick?.(item.label)}
       >
         <div className="flex-1 min-w-0">
-          <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-neutral-300 leading-[18px] truncate">
+          <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-muted-foreground group-hover:text-foreground leading-[18px] truncate transition-colors duration-200">
             {item.label}
           </div>
         </div>
@@ -574,7 +576,7 @@ function MenuSection({
         style={{ transitionTimingFunction: softSpringEasing }}
       >
         <div className="flex items-center h-10 px-4">
-          <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-neutral-400">
+          <div className="font-['Lexend:Regular',_sans-serif] text-[14px] text-muted-foreground">
             {section.title}
           </div>
         </div>

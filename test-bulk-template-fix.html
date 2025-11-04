@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Bulk Template Fix</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            background: #f5f5f5;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+        }
+        .success {
+            color: green;
+        }
+        .error {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Bulk Template Text Overlay Fix Test</h1>
+    
+    <div class="test-section">
+        <h2>Issue Summary</h2>
+        <p>Only the first slideshow was getting text overlays applied during bulk template creation.</p>
+        
+        <h3>Root Cause</h3>
+        <p>Text overlays kept their original slide indices from the template, but each slideshow group needed to have text overlays adapted to its specific image positions.</p>
+        
+        <h3>Fix Applied</h3>
+        <ul>
+            <li><strong>Slide Index Adaptation:</strong> Text overlays are now properly mapped to slide indices within each slideshow group</li>
+            <li><strong>Bounds Checking:</strong> If a template has more slides than images in a group, indices are capped appropriately</li>
+            <li><strong>Debug Logging:</strong> Added comprehensive logging to track text overlay application</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>Code Changes</h2>
+        
+        <h3>Before (Broken)</h3>
+        <pre><code>const adaptedTextOverlays = template.textOverlays.map(overlay => ({
+    ...overlay,
+    id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    slideIndex: overlay.slideIndex // ❌ Keep original slide index
+}));</code></pre>
+        
+        <h3>After (Fixed)</h3>
+        <pre><code>const adaptedTextOverlays = template.textOverlays.map(overlay => ({
+    ...overlay,
+    id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    slideIndex: overlay.slideIndex >= imageGroup.length ? imageGroup.length - 1 : overlay.slideIndex // ✅ Adapt to current group
+}));</code></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>Expected Behavior After Fix</h2>
+        
+        <h3>Template: 4 slides with text overlays</h3>
+        <ul>
+            <li>Slide 1: "Welcome" text</li>
+            <li>Slide 2: "Title" text</li>
+            <li>Slide 3: "Subtitle" text</li>
+            <li>Slide 4: "Footer" text</li>
+        </ul>
+        
+        <h3>Bulk Creation: 10 images, 4-slide template</h3>
+        <ul>
+            <li><strong>Slideshow 1:</strong> Images 1-4 → All 4 text overlays applied</li>
+            <li><strong>Slideshow 2:</strong> Images 5-8 → All 4 text overlays applied</li>
+            <li><strong>Slideshow 3:</strong> Images 9-10 → Text overlays for slides 1-2 applied (indices capped to available slides)</li>
+        </ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>How to Test</h2>
+        <ol>
+            <li>Create a template with multiple text overlays on different slides</li>
+            <li>Upload more images than the template slide count</li>
+            <li>Use "Create Multiple Slideshows from Template"</li>
+            <li>Check that all slideshows have text overlays applied</li>
+            <li>Check browser console for debug logs showing text overlay adaptation</li>
+        </ol>
+    </div>
+    
+    <div class="test-section">
+        <h2>Debug Output to Look For</h2>
+        <p>In browser console, you should see:</p>
+        <pre><code>🎬 Creating 3 slideshows from 10 images with template: My Template
+📝 Slideshow 1 text overlays: {
+  templateOverlays: 4,
+  adaptedOverlays: 4,
+  imageGroupSize: 4,
+  overlayDetails: [...]
+}
+🎬 Creating condensed slides: {
+  imageCount: 4,
+  textOverlayCount: 4,
+  textOverlays: [...]
+}
+🖼️ Slide 1/4: {
+  textOverlaysForSlide: 1,
+  overlays: ["Welcome"]
+}</code></pre>
+    </div>
+</body>
+</html>

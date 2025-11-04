@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Text Overlays Issue</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .debug-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .console-output {
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        .test-button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #005a9e;
+        }
+        .issue-summary {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .solution-steps {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 **TEXT OVERLAY DEBUGGING TOOL**</h1>
+    
+    <div class="issue-summary">
+        <h2>🐛 **CURRENT ISSUE**</h2>
+        <p><strong>Problem:</strong> When using bulk template creation, only the first slideshow gets text overlays applied. Subsequent slideshows are missing text overlays.</p>
+        
+        <h3>🔍 **DEBUGGING QUESTIONS TO ANSWER:**</h3>
+        <ol>
+            <li><strong>Are text overlays properly saved in the template?</strong></li>
+            <li><strong>Are text overlays properly adapted for each slideshow group?</strong></li>
+            <li><strong>Do the adapted text overlays have correct slide indices?</strong></li>
+            <li><strong>Are text overlays properly filtered in createCondensedSlides?</strong></li>
+            <li><strong>Are text overlays properly drawn on each slide?</strong></li>
+        </ol>
+    </div>
+
+    <div class="debug-section">
+        <h2>🧪 **TEST SCENARIO**</h2>
+        <p><strong>Setup:</strong></p>
+        <ul>
+            <li>Create a template with 4 slides and text overlays on each slide</li>
+            <li>Upload 10 images</li>
+            <li>Use "Create Multiple Slideshows from Template"</li>
+        </ul>
+        
+        <p><strong>Expected Result:</strong></p>
+        <ul>
+            <li>Slideshow 1: Images 1-4 + All 4 text overlays</li>
+            <li>Slideshow 2: Images 5-8 + All 4 text overlays</li>
+            <li>Slideshow 3: Images 9-10 + Text overlays for available slides</li>
+        </ul>
+        
+        <button class="test-button" onclick="runDebugTest()">🔍 Run Debug Test</button>
+        <button class="test-button" onclick="clearConsole()">🗑️ Clear Console</button>
+    </div>
+
+    <div class="debug-section">
+        <h2>📊 **CONSOLE OUTPUT**</h2>
+        <div id="console" class="console-output">Click "Run Debug Test" to see debug output...</div>
+    </div>
+
+    <div class="debug-section">
+        <h2>🔧 **DEBUGGING CODE ADDED**</h2>
+        <p>I've added comprehensive debugging to trace text overlay flow:</p>
+        <ul>
+            <li><strong>Template Creation:</strong> Log text overlays when creating template</li>
+            <li><strong>Bulk Creation:</strong> Log text overlay adaptation for each slideshow</li>
+            <li><strong>Slideshow Save:</strong> Log text overlays passed to saveSlideshow</li>
+            <li><strong>Condensed Slides:</strong> Log text overlay filtering for each slide</li>
+            <li><strong>Final Slideshow:</strong> Log final text overlays in created slideshow</li>
+        </ul>
+    </div>
+
+    <div class="solution-steps">
+        <h2>✅ **EXPECTED CONSOLE OUTPUT**</h2>
+        <p>Look for these debug messages in browser console:</p>
+        <pre>
+🎯 Creating template with enhanced aspect ratio persistence:
+  sourceTextOverlays: 4
+  templateTextOverlays: 4
+  textOverlayDetails: [...]
+
+🎬 Creating 3 slideshows from 10 images with template: My Template
+
+📝 Text overlays for slideshow 1:
+  templateOverlays: 4
+  adaptedOverlays: 4
+  adaptedOverlayDetails: [...]
+
+🎬 Creating condensed slides:
+  imageCount: 4
+  textOverlayCount: 4
+
+🖼️ Slide 1/4:
+  textOverlaysForSlide: 1
+  filteredTextOverlays: [...]
+
+✅ Slideshow textOverlays count: 4
+        </pre>
+    </div>
+
+    <div class="debug-section">
+        <h2>🐛 **LIKELY CAUSES**</h2>
+        <ol>
+            <li><strong>Text overlay slide indices not being properly adapted</strong> - The template has text overlays with indices 0,1,2,3 but they need to be remapped for each slideshow group</li>
+            <li><strong>Text overlays not being passed correctly to saveSlideshow</strong> - The adapted text overlays might not be reaching the slideshow creation</li>
+            <li><strong>Text overlay filtering issue</strong> - The createCondensedSlides filtering might not be working correctly</li>
+            <li><strong>Template text overlays not preserved</strong> - The template might not be saving text overlays correctly</li>
+        </ol>
+    </div>
+
+    <script>
+        function addToConsole(message) {
+            const console = document.getElementById('console');
+            console.textContent += message + '\n';
+            console.scrollTop = console.scrollHeight;
+        }
+
+        function clearConsole() {
+            document.getElementById('console').textContent = 'Console cleared. Run debug test to see output...\n';
+        }
+
+        function runDebugTest() {
+            clearConsole();
+            addToConsole('🔍 STARTING TEXT OVERLAY DEBUG TEST...\n');
+            addToConsole('📋 Test Scenario:');
+            addToConsole('  - Template: 4 slides with text overlays on each slide');
+            addToConsole('  - Images: 10 images');
+            addToConsole('  - Expected: 3 slideshows with text overlays\n');
+            
+            addToConsole('🔍 DEBUG CHECKLIST:');
+            addToConsole('1. Open browser Developer Tools (F12)');
+            addToConsole('2. Go to Console tab');
+            addToConsole('3. Look for the debug messages I added to the code');
+            addToConsole('4. Check if text overlays appear for all slideshows\n');
+            
+            addToConsole('📊 WHAT TO LOOK FOR:');
+            addToConsole('✅ Template creation shows text overlays');
+            addToConsole('✅ Bulk creation shows adapted text overlays');
+            addToConsole('✅ Each slideshow creation shows text overlays');
+            addToConsole('✅ createCondensedSlides shows filtered overlays');
+            addToConsole('✅ Final slideshow has textOverlays count > 0\n');
+            
+            addToConsole('❌ IF YOU SEE:');
+            addToConsole('  - Template has 0 text overlays: Template creation issue');
+            addToConsole('  - Bulk creation shows 0 adapted overlays: Adaptation issue');
+            addToConsole('  - Slideshow 1 has overlays, others don\'t: Adaptation loop issue');
+            addToConsole('  - All slideshows have 0 overlays: Passing issue\n');
+            
+            addToConsole('🎯 NEXT STEPS BASED ON FINDINGS:');
+            addToConsole('  - Check template creation if no overlays in template');
+            addToConsole('  - Check adaptation logic if overlays not being adapted');
+            addToConsole('  - Check saveSlideshow if adapted overlays not passed');
+            addToConsole('  - Check createCondensedSlides if filtering issue\n');
+            
+            addToConsole('📝 Now test the actual bulk template creation in the app and check the console!');
+        }
+
+        // Initialize
+        clearConsole();
+    </script>
+</body>
+</html>

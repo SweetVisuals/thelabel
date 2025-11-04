@@ -270,18 +270,18 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   return (
     <div className="space-y-6">
       {uploadError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="text-red-600 text-sm">{uploadError}</p>
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4">
+          <p className="text-destructive text-sm">{uploadError}</p>
         </div>
       )}
 
       <div
-        className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 ${
+        className={`relative border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 hover-lift ${
             isDragOver
-              ? 'border-purple-400 bg-purple-50 scale-[1.02]'
+              ? 'border-primary bg-primary/10 scale-[1.02] shadow-xl shadow-primary/20'
               : isUploading
-              ? 'border-blue-300 bg-blue-50'
-              : 'border-gray-300 hover:border-purple-300 hover:bg-gray-50'
+              ? 'border-primary/50 bg-primary/5'
+              : 'border-border hover:border-primary/50 hover:bg-accent/10'
         }`}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
@@ -298,18 +298,18 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         
         <div className="space-y-4">
           <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center transition-all duration-200 ${
-            isDragOver ? 'bg-purple-200' : isUploading ? 'bg-blue-200' : 'bg-gray-100'
+            isDragOver ? 'bg-primary/20' : isUploading ? 'bg-primary/10' : 'bg-accent/30'
           }`}>
             <Upload className={`w-8 h-8 transition-colors duration-200 ${
-              isDragOver ? 'text-purple-600' : isUploading ? 'text-blue-600' : 'text-gray-400'
+              isDragOver ? 'text-primary' : isUploading ? 'text-primary' : 'text-muted-foreground'
             }`} />
           </div>
 
           <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
+            <h3 className="text-lg font-medium text-foreground mb-2">
               {isUploading ? 'Uploading Images...' : 'Upload Your Images'}
             </h3>
-            <p className="text-gray-600 mb-4">
+            <p className="text-muted-foreground mb-4">
               {isUploading
                 ? 'Please wait while your images are being uploaded and stored permanently'
                 : 'Drag and drop your images here, or click to browse'
@@ -318,10 +318,10 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading || !user}
-              className={`inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg text-white transition-all duration-200 ${
+              className={`inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg text-white transition-all duration-200 hover-lift ${
                 isUploading || !user
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500'
+                  ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                  : 'btn-modern bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary/50'
               }`}
             >
               <ImageIcon className="w-4 h-4 mr-2" />
@@ -340,17 +340,17 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                   variant="secondary"
                   size="sm"
                   onClick={selectAll}
-                  className="flex items-center space-x-2 bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2 h-8 text-sm border-neutral-700"
+                  className="flex items-center space-x-2 bg-accent hover:bg-accent/80 text-accent-foreground px-3 py-2 h-8 text-sm border-border hover-lift transition-all duration-200"
                 >
                   {selectedImages.length === images.length ? (
-                    <CheckSquare className="w-4 h-4 text-green-400" />
+                    <CheckSquare className="w-4 h-4 text-emerald-500" />
                   ) : (
-                    <Square className="w-4 h-4 text-neutral-300" />
+                    <Square className="w-4 h-4 text-muted-foreground" />
                   )}
                   <span>{selectedImages.length === images.length ? 'Deselect All' : 'Select All'}</span>
                 </Button>
               )}
-              <h4 className="text-lg font-medium text-gray-900">
+              <h4 className="text-lg font-medium text-foreground">
                 Uploaded Images ({images.length})
               </h4>
             </div>
@@ -361,7 +361,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                     variant="secondary"
                     size="sm"
                     onClick={removeSelectedImages}
-                    className="flex items-center space-x-2 bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2 h-8 text-sm transition-colors"
+                    className="flex items-center space-x-2 bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 px-3 py-2 h-8 text-sm transition-all duration-200 hover-lift"
                   >
                     <Trash2 className="w-4 h-4" />
                     <span>Delete ({selectedImages.length})</span>
@@ -370,9 +370,9 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                   {/* Template Application for Selected Images */}
                   {availableTemplates.length > 0 && onApplyTemplateToBulk && (
                     <div className="flex items-center space-x-2">
-                      <span className="text-sm text-gray-500">Apply to selected:</span>
+                      <span className="text-sm text-muted-foreground">Apply to selected:</span>
                       <select
-                        className="text-xs bg-neutral-800 text-white border border-neutral-700 rounded px-2 py-1 h-8"
+                        className="text-xs bg-card border border-border rounded px-2 py-1 h-8 input-modern"
                         onChange={(e) => {
                           const templateId = e.target.value;
                           if (templateId) {
@@ -396,17 +396,17 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               
               <button
                 onClick={() => onImagesUploaded([])}
-                className="text-sm text-gray-500 hover:text-red-500 transition-colors"
+                className="text-sm text-muted-foreground hover:text-destructive transition-colors duration-200"
               >
                 Clear All
               </button>
               
               {/* Template Application for All Images */}
               {images.length > 0 && availableTemplates.length > 0 && onApplyTemplateToBulk && (
-                <div className="flex items-center space-x-2 border-l border-neutral-700 pl-2">
-                  <span className="text-sm text-gray-500">Apply to all:</span>
+                <div className="flex items-center space-x-2 border-l border-border/50 pl-2">
+                  <span className="text-sm text-muted-foreground">Apply to all:</span>
                   <select
-                    className="text-xs bg-neutral-800 text-white border border-neutral-700 rounded px-2 py-1 h-8"
+                    className="text-xs bg-card border border-border rounded px-2 py-1 h-8 input-modern"
                     onChange={(e) => {
                       const templateId = e.target.value;
                       if (templateId) {
@@ -433,19 +433,19 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               <div
                 key={image.id}
                 className={cn(
-                  "relative group aspect-square rounded-lg overflow-hidden bg-gray-100 hover:shadow-lg transition-shadow duration-200 cursor-pointer",
-                  selectedImages.includes(image.id) && "ring-2 ring-blue-500"
+                  "relative group aspect-square rounded-lg overflow-hidden bg-accent/20 hover:shadow-xl hover-lift transition-all duration-200 cursor-pointer border border-border/50",
+                  selectedImages.includes(image.id) && "ring-2 ring-primary shadow-lg shadow-primary/25"
                 )}
                 onClick={() => onSelectionChange && toggleSelection(image.id)}
               >
                 <img
                   src={image.preview}
                   alt="Uploaded"
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
                 />
                 {selectedImages.includes(image.id) && (
-                  <div className="absolute top-2 left-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center">
-                    <CheckSquare className="w-3 h-3 text-white" />
+                  <div className="absolute top-2 left-2 w-5 h-5 bg-primary rounded-full flex items-center justify-center shadow-lg">
+                    <CheckSquare className="w-3 h-3 text-primary-foreground" />
                   </div>
                 )}
                 <button
@@ -453,7 +453,7 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                     e.stopPropagation();
                     removeImage(image.id);
                   }}
-                  className="absolute top-2 right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 hover:bg-red-600"
+                  className="absolute top-2 right-2 w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-destructive/90 hover-lift"
                 >
                   <X className="w-3 h-3" />
                 </button>

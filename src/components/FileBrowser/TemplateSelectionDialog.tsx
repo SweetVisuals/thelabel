@@ -35,8 +35,7 @@ interface TemplateSelectionDialogProps {
    onConfirm?: (
      templateId: string,
      randomizeHashtags: boolean,
-     randomizePictures: boolean,
-     selectedHashtags?: string[]
+     randomizePictures: boolean
    ) => void; // For creating slideshows
    onApplyToSettings?: (template: SlideshowTemplate) => void; // For applying to edit settings
    applyToSettingsMode?: boolean; // If true, shows "Apply to Settings" instead of "Create Slideshows"
@@ -175,8 +174,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
    const [selectedTemplate, setSelectedTemplate] = useState<string>('');
    const [randomizeHashtags, setRandomizeHashtags] = useState(false);
    const [randomizePictures, setRandomizePictures] = useState(false);
-   const [selectedHashtags, setSelectedHashtags] = useState<string[]>([]);
-   const [showHashtagSelection, setShowHashtagSelection] = useState(false);
+   // Removed selectedHashtags and showHashtagSelection as hashtags are now automatically randomized
    const [isLoading, setIsLoading] = useState(true);
    const [isConfirming, setIsConfirming] = useState(false);
    const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
@@ -221,7 +219,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
           await onApplyToSettings(template);
         }
       } else if (onConfirm) {
-        await onConfirm(selectedTemplate, randomizeHashtags, randomizePictures, selectedHashtags);
+        await onConfirm(selectedTemplate, randomizeHashtags, randomizePictures);
       }
       onClose();
     } catch (error) {
@@ -231,13 +229,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
     }
   };
 
-  const handleHashtagSelection = (hashtags: string[]) => {
-    setSelectedHashtags(hashtags);
-  };
-
-  const openHashtagSelection = () => {
-    setShowHashtagSelection(true);
-  };
+  // Removed handleHashtagSelection as hashtags are now automatically randomized
 
   const toggleTemplateExpansion = (templateId: string) => {
     const newExpanded = new Set(expandedTemplates);
@@ -441,9 +433,12 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                       <div className="p-2 bg-muted/50 rounded-lg">
                         <h6 className="font-medium text-sm mb-2 flex items-center">
                           <Tags className="w-4 h-4 mr-2" />
-                          Hashtag Selection
+                          Hashtag Randomization
                         </h6>
-                        <div className="flex flex-wrap gap-2 mb-3">
+                        <p className="text-xs text-muted-foreground mb-3">
+                          4 random hashtags will be automatically selected from the template for each slideshow variant.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
                           {selectedTemplateData.hashtags.slice(0, 6).map(tag => (
                             <span key={tag} className="bg-primary/10 text-primary px-2 py-1 rounded-full text-xs">
                               #{tag}
@@ -455,17 +450,6 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                             </span>
                           )}
                         </div>
-                        <Button
-                          onClick={openHashtagSelection}
-                          variant="outline"
-                          size="sm"
-                          className="w-full"
-                        >
-                          {selectedHashtags.length > 0
-                            ? `Selected ${selectedHashtags.length} hashtags`
-                            : 'Select Hashtags to Randomize'
-                          }
-                        </Button>
                       </div>
                     )}
                   </div>
@@ -540,16 +524,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
         )}
       </motion.div>
 
-      {/* Hashtag Selection Dialog */}
-      {selectedTemplateData && (
-        <HashtagSelectionDialog
-          isOpen={showHashtagSelection}
-          onClose={() => setShowHashtagSelection(false)}
-          availableHashtags={selectedTemplateData.hashtags}
-          selectedHashtags={selectedHashtags}
-          onConfirm={handleHashtagSelection}
-        />
-      )}
+      {/* Hashtag Selection Dialog - Removed as hashtags are now automatically randomized */}
     </div>
   );
 };

@@ -50,6 +50,7 @@ import { supabase } from '../../lib/supabase';
 import { postizAPI } from '../../lib/postiz';
 import { PostizPoster } from '../Postiz/PostizPoster';
 import { TemplateSelectionDialog } from '../FileBrowser/TemplateSelectionDialog';
+import { TemplateManager } from '../Slideshow/TemplateManager';
 
 interface FolderPathItem {
   id: string;
@@ -291,6 +292,36 @@ export const Dashboard: React.FC = () => {
       newSelection.add(tag);
     }
     setSelectedSavedHashtags(newSelection);
+  };
+
+  // Enhanced hashtag sync - synchronize hashtags from templates with saved hashtag library
+  const syncTemplateHashtagsWithLibrary = async (templateHashtags: string[]) => {
+    if (!user || !templateHashtags.length) return;
+
+    try {
+      const newHashtags = templateHashtags.filter(tag => !savedHashtags.includes(tag));
+      if (newHashtags.length === 0) return;
+
+      console.log('🔄 Syncing template hashtags with library:', newHashtags);
+
+      const { error } = await supabase
+        .from('hashtags')
+        .upsert(
+          newHashtags.map(tag => ({
+            user_id: user.id,
+            tag: tag,
+            updated_at: new Date().toISOString()
+          }))
+        );
+
+      if (error) throw error;
+      
+      // Reload saved hashtags to reflect changes
+      await loadSavedHashtags();
+      console.log('✅ Synced template hashtags with library');
+    } catch (error) {
+      console.error('❌ Failed to sync template hashtags:', error);
+    }
   };
 
   // Text overlay functions
@@ -563,7 +594,7 @@ export const Dashboard: React.FC = () => {
       const { slideshowService } = await import('../../lib/slideshowService');
       const userTemplates = slideshowService.getSavedTemplates(user!.id);
       const template = userTemplates.find(t => t.id === templateId);
-      
+
       if (!template) {
         setNotification({ message: 'Template not found', type: 'error' });
         return;
@@ -599,6 +630,28 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const handleApplyTemplateToSettings = async (template: SlideshowTemplate) => {
+    try {
+      // Apply template settings to edit settings (similar to handleTemplateSelection but without slideshow creation)
+      setTitle(template.title);
+      setPostTitle(template.postTitle || template.title);
+      setCaption(template.caption);
+      setHashtags(template.hashtags);
+      setTextOverlays(template.textOverlays || []);
+      setTransitionEffect(template.transitionEffect);
+      setMusicEnabled(template.musicEnabled);
+      setAspectRatio(template.aspectRatio); // This includes the aspect ratio
+
+      // Clear any current slideshow to exit preview mode
+      setCurrentSlideshow(null);
+
+      setNotification({ message: `Template "${template.name}" applied to settings!`, type: 'success' });
+    } catch (error) {
+      console.error('Failed to apply template to settings:', error);
+      setNotification({ message: 'Failed to apply template to settings. Please try again.', type: 'error' });
+    }
+  };
+
   // Function to construct the full breadcrumb path
     const getFolderPath = (folderId: string | null, allFolders: Folder[]) => {
       const path: { id: string; name: string }[] = [];
@@ -606,7 +659,8 @@ export const Dashboard: React.FC = () => {
 
       while (current) {
         path.unshift({ id: current.id, name: current.name });
-        current = current.parent_id ? allFolders.find(f => f.id === current.parent_id) : undefined;
+        const nextFolder = current.parent_id ? allFolders.find(f => f.id === current.parent_id) : undefined;
+        current = nextFolder;
       }
       return path;
     };
@@ -960,6 +1014,51 @@ export const Dashboard: React.FC = () => {
                       console.log('Template applied to editor settings:', result.slideshow.title);
                     }
                   }}
+                />
+
+                {/* Template Manager Section */}
+                <TemplateManager
+                  currentSlideshow={currentSlideshow}
+                  uploadedImages={derivedCurrentImages}
+                  selectedImages={currentSelectedImages}
+                  onTemplateApplied={(result) => {
+                    if (result.success && result.slideshow) {
+                      // Apply template settings to the editor without entering preview mode
+                      setTitle(result.slideshow.title);
+                      setPostTitle(result.slideshow.postTitle || '');
+                      setCaption(result.slideshow.caption);
+                      setHashtags(result.slideshow.hashtags);
+                      setTextOverlays(result.slideshow.textOverlays || []);
+                      setTransitionEffect(result.slideshow.transitionEffect || 'fade');
+                      setMusicEnabled(result.slideshow.musicEnabled || false);
+
+                      // Clear any current slideshow to exit preview mode
+                      setCurrentSlideshow(null);
+
+                      // Automatically select appropriate images for the template
+                      const currentImages = getCurrentImages();
+                      const imagesToSelect = currentImages.slice(0, result.processedImages || 3);
+                      const imageIdsToSelect = imagesToSelect.map(img => img.id);
+
+                      if (imageIdsToSelect.length > 0) {
+                        setSelectedImages(imageIdsToSelect);
+                        setSelectedImagesOrdered(imageIdsToSelect);
+                      }
+                    }
+                  }}
+                  onImagesSelectForBulk={(images) => {
+                    const imageIds = images.map(img => img.id);
+                    setSelectedImages(imageIds);
+                    setSelectedImagesOrdered(imageIds);
+                  }}
+                  currentTitle={title}
+                  currentPostTitle={postTitle}
+                  currentCaption={caption}
+                  currentHashtags={hashtags}
+                  currentTextOverlays={textOverlays}
+                  currentAspectRatio={aspectRatio}
+                  currentTransitionEffect={transitionEffect}
+                  currentMusicEnabled={musicEnabled}
                 />
 
                 {/* Text Edit Controls - Always show for editing */}
@@ -1557,6 +1656,7 @@ export const Dashboard: React.FC = () => {
         isOpen={showTemplateSelection}
         onClose={() => setShowTemplateSelection(false)}
         onConfirm={handleTemplateSelection}
+        onApplyToSettings={handleApplyTemplateToSettings}
         applyToSettingsMode={true}
       />
       </SidebarProvider>

@@ -346,11 +346,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
         };
       }
 
-      const [width, height] = currentAspectRatio.split(':').map(Number);
-      const aspectRatio = width / height;
-
       return {
-        aspectRatio,
         objectFit: 'cover' as const,
         objectPosition: 'center' as const,
       };
@@ -510,6 +506,9 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                             fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
                             textAlign: overlay.alignment,
                             lineHeight: '1.2',
+                            whiteSpace: 'pre', // Prevent automatic line breaks, preserve explicit newlines
+                            overflow: 'hidden', // Hide overflow instead of wrapping
+                            textOverflow: 'ellipsis', // Show ellipsis if text is too long
                             textShadow: overlay.outline
                               ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
                               : overlay.glow
@@ -532,8 +531,9 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                             fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
                             textAlign: overlay.alignment,
                             lineHeight: '1.2',
-                            whiteSpace: 'pre-wrap',
-                            wordWrap: 'break-word',
+                            whiteSpace: 'pre', // Changed from 'pre-wrap' to 'pre' to prevent automatic line breaks
+                            overflow: 'hidden', // Hide overflow instead of wrapping
+                            textOverflow: 'ellipsis', // Show ellipsis if text is too long
                             textShadow: overlay.outline
                               ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
                               : overlay.glow

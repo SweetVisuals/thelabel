@@ -1009,8 +1009,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const handleTemplateSelectionConfirm = async (
     templateId: string,
     randomizeHashtags: boolean,
-    randomizePictures: boolean,
-    selectedHashtags: string[] = []
+    randomizePictures: boolean
   ) => {
     if (selectedImages.length === 0) {
       toast.error('Please select some images first');
@@ -1071,12 +1070,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       // Generate unique hashtag combinations for each slide if randomization is enabled
       let hashtagCombinations: string[][] = [];
       if (randomizeHashtags) {
-        const hashtagPool = selectedHashtags.length > 0 ? selectedHashtags : template.hashtags;
-        
+        const hashtagPool = template.hashtags;
+
         if (hashtagPool.length >= 4) {
-          // Generate unique combinations for each slide
+          // Generate unique combinations for each slide - automatically select 4 random hashtags
           hashtagCombinations = generateUniqueHashtagCombinations(hashtagPool, imageChunks.length, 4);
-          console.log(`🎯 Generated ${hashtagCombinations.length} unique hashtag combinations`);
+          console.log(`🎯 Generated ${hashtagCombinations.length} unique hashtag combinations with 4 random hashtags each`);
         } else if (hashtagPool.length > 0) {
           // If less than 4 hashtags available, use all for each slide
           hashtagCombinations = imageChunks.map(() => hashtagPool);
@@ -1102,11 +1101,27 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
           let slideshow: SlideshowMetadata;
 
-          // Use the toolbar's aspect ratio for all slideshows
-          const textOverlays = template.textOverlays.map(overlay => ({
-            ...overlay,
-            id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-          }));
+          // CRITICAL FIX: Map ALL template text overlays to each chunk
+          // Each slideshow should get the complete template text overlay pattern
+          const chunkTextOverlays = template.textOverlays
+            .filter(overlay => overlay.slideIndex < chunk.length) // Only include overlays that fit within this chunk
+            .map(overlay => ({
+              ...overlay,
+              id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              // Keep the original slideIndex since each slideshow repeats the template pattern
+              slideIndex: overlay.slideIndex
+            }));
+
+          console.log(`📝 Chunk ${chunkNumber} text overlays (FINAL):`, {
+            chunkNumber,
+            chunkSlidesCount: chunk.length,
+            templateOverlaysCount: template.textOverlays.length,
+            finalChunkOverlays: chunkTextOverlays.length,
+            overlays: chunkTextOverlays.map(o => ({
+              slideIndex: o.slideIndex,
+              text: o.text?.substring(0, 50) + (o.text?.length > 50 ? '...' : '')
+            }))
+          });
 
           slideshow = await slideshowService.createOptimizedSlideshow(
             slideshowTitle,
@@ -1114,7 +1129,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             caption,
             finalHashtags,
             chunk,
-            textOverlays,
+            chunkTextOverlays,
             tiktokAspectRatio,
             template.transitionEffect,
             template.musicEnabled,

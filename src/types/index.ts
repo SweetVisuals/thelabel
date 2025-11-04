@@ -239,3 +239,32 @@ export interface BulkUploadWithTemplate {
     hashtags?: string[];
   };
 }
+
+// Bulk Template Creation Options
+export interface BulkTemplateOptions {
+  randomizeImages?: boolean;
+  customizations?: {
+    title?: string;
+    caption?: string;
+    hashtags?: string[];
+  };
+  slideshowTitles?: string[]; // Optional custom titles for each slideshow
+}
+
+// Bulk Template Creation Result
+export interface BulkTemplateCreationResult {
+  success: boolean;
+  slideshows: SlideshowMetadata[];
+  error?: string;
+  totalImages: number;
+  slideshowCount: number;
+}
+
+// Bulk Template Creation Preview
+export interface BulkTemplatePreview {
+  totalImages: number;
+  slideshowCount: number;
+  slidesPerSlideshow: number;
+  groups: UploadedImage[][];
+  willCreatePartialSlideshow: boolean;
+}

@@ -20,13 +20,17 @@ import {
   XCircle,
   AlertCircle,
   Shuffle,
-  Tags
+  Tags,
+  Eye,
+  Loader2
 } from 'lucide-react';
 import { SlideshowMetadata, SlideshowTemplate, UploadedImage, TemplateApplicationResult } from '../../types';
 import { slideshowService } from '../../lib/slideshowService';
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
+import { BulkTemplateOptions, BulkTemplateCreationResult, BulkTemplatePreview } from '../../types';
+import { BulkPostizPoster } from '../Postiz/BulkPostizPoster';
 
 interface TemplateManagerProps {
   currentSlideshow?: SlideshowMetadata | null;
@@ -446,6 +450,297 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
   );
 };
 
+interface BulkCreateFromTemplateModalProps {
+  isOpen: boolean;
+  templates: SlideshowTemplate[];
+  uploadedImages: UploadedImage[];
+  onClose: () => void;
+  onBulkCreate: (templateId: string, options: BulkTemplateOptions) => Promise<BulkTemplateCreationResult>;
+}
+
+const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = ({
+  isOpen,
+  templates,
+  uploadedImages,
+  onClose,
+  onBulkCreate
+}) => {
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [customTitle, setCustomTitle] = useState('');
+  const [customCaption, setCustomCaption] = useState('');
+  const [customHashtags, setCustomHashtags] = useState('');
+  const [randomizeImages, setRandomizeImages] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [preview, setPreview] = useState<BulkTemplatePreview | null>(null);
+
+  useEffect(() => {
+    if (templates.length > 0 && !selectedTemplate) {
+      setSelectedTemplate(templates[0].id);
+    }
+  }, [templates, selectedTemplate]);
+
+  const selectedTemplateData = templates.find(t => t.id === selectedTemplate);
+  
+  // Update preview when template, images, or randomize setting changes
+  useEffect(() => {
+    if (selectedTemplateData && uploadedImages.length > 0) {
+      const newPreview = slideshowService.previewBulkTemplateCreation(
+        uploadedImages,
+        selectedTemplateData,
+        randomizeImages
+      );
+      setPreview(newPreview);
+    } else {
+      setPreview(null);
+    }
+  }, [selectedTemplateData, uploadedImages, randomizeImages]);
+
+  const handleCreate = async () => {
+    if (!selectedTemplate) return;
+
+    setIsCreating(true);
+    try {
+      const customizations = {
+        title: customTitle || undefined,
+        caption: customCaption || undefined,
+        hashtags: customHashtags ? customHashtags.split(',').map(tag => tag.trim()).filter(Boolean) : undefined
+      };
+
+      const options: BulkTemplateOptions = {
+        randomizeImages,
+        customizations
+      };
+
+      const result = await onBulkCreate(selectedTemplate, options);
+      
+      if (result.success) {
+        onClose();
+        // Trigger a notification for successful bulk creation
+        window.dispatchEvent(new CustomEvent('showNotification', {
+          detail: {
+            type: 'success',
+            message: `Successfully created ${result.slideshowCount} slideshows from ${result.totalImages} images!`
+          }
+        }));
+      } else {
+        window.dispatchEvent(new CustomEvent('showNotification', {
+          detail: {
+            type: 'error',
+            message: `Bulk creation failed: ${result.error}`
+          }
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to create bulk slideshows:', error);
+      window.dispatchEvent(new CustomEvent('showNotification', {
+        detail: {
+          type: 'error',
+          message: 'Failed to create bulk slideshows'
+        }
+      }));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <motion.div
+        className="bg-background rounded-lg shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden border border-border"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.2 }}
+      >
+        <div className="p-6 border-b border-border">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold flex items-center">
+              <Zap className="w-5 h-5 mr-2" />
+              Bulk Create from Template
+            </h3>
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              <XCircle className="w-4 h-4" />
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">
+            Create multiple slideshows from a single template using all your images
+          </p>
+        </div>
+
+        <div className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto">
+          {templates.length === 0 ? (
+            <div className="text-center py-8">
+              <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No templates available</p>
+              <p className="text-sm text-muted-foreground">Create a template first to use this feature</p>
+            </div>
+          ) : (
+            <>
+              {/* Template Selection */}
+              <div>
+                <label className="text-sm font-medium block mb-3">Choose Template</label>
+                <div className="grid gap-3">
+                  {templates.filter(template => template.slideCount <= uploadedImages.length).map(template => (
+                    <div
+                      key={template.id}
+                      className={cn(
+                        "border rounded-lg p-4 cursor-pointer transition-all",
+                        selectedTemplate === template.id
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-primary/50"
+                      )}
+                      onClick={() => setSelectedTemplate(template.id)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium">{template.name}</h4>
+                          {template.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{template.description}</p>
+                          )}
+                          <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3" />
+                              {template.slideCount} slides each
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Hash className="w-3 h-3" />
+                              {template.hashtags.length} hashtags
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Zap className="w-3 h-3" />
+                              {template.aspectRatio}
+                            </span>
+                          </div>
+                        </div>
+                        {selectedTemplate === template.id && (
+                          <CheckCircle className="w-5 h-5 text-primary" />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <label htmlFor="randomize-images" className="font-medium">Randomize Images</label>
+                    <p className="text-xs text-muted-foreground">Shuffle images randomly across slideshows</p>
+                  </div>
+                  <Switch
+                    id="randomize-images"
+                    checked={randomizeImages}
+                    onCheckedChange={setRandomizeImages}
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium block mb-2">Custom Title (Optional)</label>
+                  <input
+                    type="text"
+                    value={customTitle}
+                    onChange={(e) => setCustomTitle(e.target.value)}
+                    placeholder={`Default: ${selectedTemplateData?.title || 'Slideshow'}`}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium block mb-2">Custom Caption (Optional)</label>
+                  <textarea
+                    value={customCaption}
+                    onChange={(e) => setCustomCaption(e.target.value)}
+                    placeholder={`Default: ${selectedTemplateData?.caption || ''}`}
+                    rows={2}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none resize-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium block mb-2">Custom Hashtags (Optional)</label>
+                  <input
+                    type="text"
+                    value={customHashtags}
+                    onChange={(e) => setCustomHashtags(e.target.value)}
+                    placeholder="tag1, tag2, tag3"
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {/* Preview */}
+              {preview && (
+                <div className="bg-muted/50 rounded-lg p-4">
+                  <h4 className="font-medium mb-3 flex items-center">
+                    <Eye className="w-4 h-4 mr-2" />
+                    Bulk Creation Preview
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                    <div>
+                      <span className="text-muted-foreground">Total images:</span>
+                      <div className="font-medium">{preview.totalImages} images</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Slideshows to create:</span>
+                      <div className="font-medium">{preview.slideshowCount} slideshows</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Slides per slideshow:</span>
+                      <div className="font-medium">{preview.slidesPerSlideshow} slides</div>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Partial slideshow:</span>
+                      <div className="font-medium">{preview.willCreatePartialSlideshow ? 'Yes' : 'No'}</div>
+                    </div>
+                  </div>
+                  
+                  {randomizeImages && (
+                    <div className="flex items-center gap-2 text-xs text-green-600 mb-2">
+                      <Shuffle className="w-3 h-3" />
+                      <span>Images will be randomized across slideshows</span>
+                    </div>
+                  )}
+                  
+                  <div className="text-xs text-muted-foreground">
+                    Each slideshow will contain the template settings (text overlays, aspect ratio, etc.)
+                    applied to a different set of {preview.slidesPerSlideshow} images.
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" onClick={onClose} className="flex-1">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreate}
+                  disabled={!selectedTemplate || !preview || isCreating}
+                  className="flex-1 bg-primary hover:bg-primary/90"
+                >
+                  {isCreating ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 mr-2" />
+                      Create {preview?.slideshowCount || 0} Slideshows
+                    </>
+                  )}
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 export const TemplateManager: React.FC<TemplateManagerProps> = ({
   currentSlideshow,
   uploadedImages,
@@ -465,8 +760,12 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
   const [templates, setTemplates] = useState<SlideshowTemplate[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isApplyModalOpen, setIsApplyModalOpen] = useState(false);
+  const [isBulkCreateModalOpen, setIsBulkCreateModalOpen] = useState(false);
+  const [showBulkPostizPoster, setShowBulkPostizPoster] = useState(false);
+  const [createdSlideshows, setCreatedSlideshows] = useState<SlideshowMetadata[]>([]);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | null }>({ message: '', type: null });
   const [isLoading, setIsLoading] = useState(false);
+  const [isBulkCreating, setIsBulkCreating] = useState(false);
 
   // Load templates on mount and when user changes
   useEffect(() => {
@@ -647,6 +946,90 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
     onImagesSelectForBulk(uploadedImages);
   };
 
+  const handleBulkCreateFromTemplate = async (templateId: string, options: BulkTemplateOptions): Promise<BulkTemplateCreationResult> => {
+    if (!user) {
+      return {
+        success: false,
+        slideshows: [],
+        error: 'Please log in to create slideshows',
+        totalImages: uploadedImages.length,
+        slideshowCount: 0
+      };
+    }
+
+    setIsBulkCreating(true);
+    try {
+      const template = templates.find(t => t.id === templateId);
+      if (!template) {
+        return {
+          success: false,
+          slideshows: [],
+          error: 'Template not found',
+          totalImages: uploadedImages.length,
+          slideshowCount: 0
+        };
+      }
+
+      if (uploadedImages.length === 0) {
+        return {
+          success: false,
+          slideshows: [],
+          error: 'No images to process',
+          totalImages: 0,
+          slideshowCount: 0
+        };
+      }
+
+      const result = await slideshowService.createBulkSlideshowsFromTemplate(
+        template,
+        uploadedImages,
+        user.id,
+        options
+      );
+
+      if (result.success && result.slideshows.length > 0) {
+        // Store created slideshows for potential bulk posting
+        setCreatedSlideshows(result.slideshows);
+        
+        // Show success message with option to post to TikTok
+        setNotification({
+          message: `✅ Created ${result.slideshowCount} slideshows! Would you like to post them to TikTok?`,
+          type: 'success'
+        });
+        
+        // Automatically show bulk postiz poster for immediate posting
+        setTimeout(() => {
+          setShowBulkPostizPoster(true);
+        }, 2000); // Delay to allow user to see the success message
+      }
+
+      // Refresh slideshows list after bulk creation
+      window.dispatchEvent(new CustomEvent('slideshowUpdated'));
+      
+      return result;
+    } catch (error) {
+      console.error('Bulk template creation failed:', error);
+      return {
+        success: false,
+        slideshows: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+        totalImages: uploadedImages.length,
+        slideshowCount: 0
+      };
+    } finally {
+      setIsBulkCreating(false);
+    }
+  };
+
+  const handleBulkPostSuccess = (postIds: string[]) => {
+    setNotification({
+      message: `🎉 Successfully posted ${postIds.length} slideshow(s) to TikTok!`,
+      type: 'success'
+    });
+    setShowBulkPostizPoster(false);
+    setCreatedSlideshows([]); // Clear after successful posting
+  };
+
   return (
     <div className="space-y-4">
       {/* Notification */}
@@ -699,6 +1082,44 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
           Apply Template
         </Button>
       </div>
+
+      {/* Bulk Actions */}
+      {uploadedImages.length > 0 && templates.length > 0 && (
+        <>
+          <Separator />
+          
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h5 className="font-medium text-sm flex items-center">
+                <Zap className="w-4 h-4 mr-2" />
+                Bulk Template Creation
+              </h5>
+            </div>
+            
+            <Button
+              onClick={() => setIsBulkCreateModalOpen(true)}
+              disabled={!user || templates.length === 0 || uploadedImages.length === 0 || isBulkCreating}
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white"
+            >
+              {isBulkCreating ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating Slideshows...
+                </>
+              ) : (
+                <>
+                  <Zap className="w-4 h-4 mr-2" />
+                  Create Multiple Slideshows from Template
+                </>
+              )}
+            </Button>
+            
+            <p className="text-xs text-muted-foreground text-center">
+              Create multiple slideshows from one template using all your images
+            </p>
+          </div>
+        </>
+      )}
 
       {/* Bulk Upload Helper */}
       {uploadedImages.length > 0 && (
@@ -828,6 +1249,30 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
         onClose={() => setIsApplyModalOpen(false)}
         onApply={handleApplyTemplate}
       />
+
+      <BulkCreateFromTemplateModal
+        isOpen={isBulkCreateModalOpen}
+        templates={templates}
+        uploadedImages={uploadedImages}
+        onClose={() => setIsBulkCreateModalOpen(false)}
+        onBulkCreate={handleBulkCreateFromTemplate}
+      />
+
+      {/* Bulk Postiz Poster Modal */}
+      {showBulkPostizPoster && createdSlideshows.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden border border-border">
+            <BulkPostizPoster
+              slideshows={createdSlideshows}
+              onPostSuccess={handleBulkPostSuccess}
+              onClose={() => {
+                setShowBulkPostizPoster(false);
+                setCreatedSlideshows([]);
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

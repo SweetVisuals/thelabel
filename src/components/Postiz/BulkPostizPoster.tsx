@@ -429,37 +429,37 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   return (
     <div className="max-h-[80vh] overflow-y-auto">
       {/* Header */}
-      <div className="flex items-center justify-between sticky top-0 bg-slate-900 border-b border-slate-700 pb-2 -mx-4 px-4 py-2 backdrop-blur-sm z-10">
-        <h3 className="text-lg font-semibold text-slate-100 flex items-center">
-          <Send className="w-5 h-5 mr-2 text-slate-400" />
+      <div className="flex items-center justify-between sticky top-0 bg-card/95 backdrop-blur-sm border-b border-border/50 pb-2 -mx-4 px-4 py-2 z-10 shadow-lg">
+        <h3 className="text-lg font-semibold text-foreground flex items-center">
+          <Send className="w-5 h-5 mr-2 text-primary" />
           Bulk Post to TikTok ({slideshows.length})
         </h3>
         {onClose && (
-          <Button variant="ghost" size="sm" onClick={onClose} className="hover:bg-red-900/50 hover:text-red-400 text-slate-400">
+          <Button variant="ghost" size="sm" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all duration-200">
             ×
           </Button>
         )}
       </div>
 
       {/* Slideshows Overview */}
-      <div className="bg-slate-900 rounded-lg border border-slate-700 shadow-lg overflow-hidden mb-4">
+      <div className="bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 shadow-xl overflow-hidden mb-4 hover-lift">
         {/* Header */}
-        <div className="bg-slate-800 px-4 py-3 border-b border-slate-700">
+        <div className="bg-card/50 px-4 py-3 border-b border-border/30">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
-              <div className="flex items-center justify-center w-8 h-8 bg-slate-700 rounded-lg">
-                <Image className="w-4 h-4 text-slate-300" />
+              <div className="flex items-center justify-center w-8 h-8 bg-primary/20 rounded-lg">
+                <Image className="w-4 h-4 text-primary" />
               </div>
               <div>
-                <h4 className="text-base font-semibold text-slate-100">Bulk Posts ({slideshows.length})</h4>
-                <p className="text-xs text-slate-400">
+                <h4 className="text-base font-semibold text-foreground">Bulk Posts ({slideshows.length})</h4>
+                <p className="text-xs text-muted-foreground">
                   Ready for scheduling
                 </p>
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs text-emerald-400">Captions Preserved</span>
+              <CheckCircle className="w-4 h-4 text-emerald-500" />
+              <span className="text-xs text-emerald-500">Captions Preserved</span>
             </div>
           </div>
         </div>
@@ -468,11 +468,11 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         <div className="p-4">
           <div className="grid grid-cols-1 gap-2">
             {slideshows.map((slideshow, index) => (
-              <div key={slideshow.id} className="bg-slate-800 rounded-lg border border-slate-600 p-3">
+              <div key={slideshow.id} className="bg-accent/20 rounded-lg border border-border/30 p-3 hover:bg-accent/30 transition-all duration-200 hover-lift">
                 <div className="flex items-center space-x-3">
                   {/* Image Preview */}
                   <div className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-lg bg-slate-700 border border-slate-600 flex items-center justify-center overflow-hidden">
+                    <div className="w-10 h-10 rounded-lg bg-accent/30 border border-border/50 flex items-center justify-center overflow-hidden">
                       {slideshow.condensedSlides && slideshow.condensedSlides[0] ? (
                         <img
                           src={slideshow.condensedSlides[0].condensedImageUrl || slideshow.condensedSlides[0].originalImageUrl}
@@ -480,7 +480,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <Play className="w-4 h-4 text-slate-500" />
+                        <Play className="w-4 h-4 text-muted-foreground" />
                       )}
                     </div>
                   </div>
@@ -489,21 +489,21 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
-                        <h5 className="font-medium text-slate-200 truncate text-sm" title={slideshow.title}>
+                        <h5 className="font-medium text-foreground truncate text-sm" title={slideshow.title}>
                           {slideshow.title}
                         </h5>
                         <div className="flex items-center space-x-2 mt-1">
-                          <span className="text-xs text-slate-400">
+                          <span className="text-xs text-muted-foreground">
                             {slideshow.condensedSlides?.length || 0} slides
                           </span>
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-muted-foreground">
                             {slideshow.aspectRatio}
                           </span>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <span className="text-xs text-slate-400">#{index + 1}</span>
-                        <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+                        <span className="text-xs text-muted-foreground">#{index + 1}</span>
+                        <div className="w-2 h-2 bg-emerald-500 rounded-full pulse-glow"></div>
                       </div>
                     </div>
                   </div>
@@ -514,9 +514,9 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
 
         {/* Summary Footer */}
-        <div className="bg-slate-800 px-4 py-3 border-t border-slate-700">
+        <div className="bg-accent/20 px-4 py-3 border-t border-border/30">
           <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-3 text-slate-400">
+            <div className="flex items-center space-x-3 text-muted-foreground">
               <span>Total Slides: {slideshows.reduce((sum, s) => sum + (s.condensedSlides?.length || 0), 0)}</span>
               <span>•</span>
               <span>Aspect Ratios: {Array.from(new Set(slideshows.map(s => s.aspectRatio))).join(', ')}</span>
@@ -528,8 +528,8 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       {/* TikTok Profiles Selection */}
       <div className="space-y-3 mb-4">
         <div className="flex items-center justify-between">
-          <h4 className="font-medium text-slate-200 flex items-center">
-            <User className="w-4 h-4 mr-2" />
+          <h4 className="font-medium text-foreground flex items-center">
+            <User className="w-4 h-4 mr-2 text-primary" />
             TikTok Accounts ({profiles.length})
           </h4>
           {profiles.length > 1 && (
@@ -537,7 +537,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
               variant="outline"
               size="sm"
               onClick={handleSelectAll}
-              className="border-slate-600 text-slate-300 hover:bg-slate-700"
+              className="border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground hover-lift transition-all duration-200"
             >
               {selectedProfiles.length === profiles.length ? 'Deselect All' : 'Select All'}
             </Button>
@@ -546,16 +546,16 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
         {isLoadingProfiles ? (
           <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            <span className="text-sm text-slate-400">Loading accounts...</span>
+            <Loader2 className="w-4 h-4 animate-spin mr-2 text-primary" />
+            <span className="text-sm text-muted-foreground">Loading accounts...</span>
           </div>
         ) : profiles.length === 0 ? (
           <div className="text-center py-4">
-            <AlertCircle className="w-6 h-6 mx-auto text-slate-500 mb-2" />
-            <p className="text-sm text-slate-400 mb-2">
+            <AlertCircle className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground mb-2">
               No accounts found
             </p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-muted-foreground">
               Connect accounts in Postiz dashboard
             </p>
           </div>
@@ -565,29 +565,29 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
               <label
                 key={profile.id}
                 className={cn(
-                  "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-colors",
+                  "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 hover-lift",
                   selectedProfiles.includes(profile.id)
-                    ? "border-blue-500 bg-slate-800"
-                    : "border-slate-600 hover:border-blue-400 hover:bg-slate-800/50"
+                    ? "border-primary bg-primary/10 shadow-lg shadow-primary/25"
+                    : "border-border/50 hover:border-primary/50 hover:bg-accent/30"
                 )}
               >
                 <input
                   type="checkbox"
                   checked={selectedProfiles.includes(profile.id)}
                   onChange={() => handleProfileToggle(profile.id)}
-                  className="w-4 h-4 text-blue-500 border-slate-600 rounded focus:ring-blue-500 focus:ring-1"
+                  className="w-4 h-4 text-primary border-border rounded focus:ring-primary focus:ring-2"
                 />
                 <div className="flex items-center space-x-3 flex-1">
                   {profile.avatar && (
                     <img
                       src={profile.avatar}
                       alt={profile.displayName}
-                      className="w-6 h-6 rounded-full"
+                      className="w-6 h-6 rounded-full border border-border/50"
                     />
                   )}
                   <div className="flex-1">
-                    <div className="font-medium text-slate-200 text-sm">{profile.displayName}</div>
-                    <div className="text-xs text-slate-400">
+                    <div className="font-medium text-foreground text-sm">{profile.displayName}</div>
+                    <div className="text-xs text-muted-foreground">
                       @{profile.username}
                     </div>
                   </div>
@@ -601,12 +601,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       {/* Posting Strategy */}
       <div className="space-y-3 mb-4">
         <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-8 h-8 bg-slate-700 rounded-lg">
-            <Settings className="w-4 h-4 text-slate-300" />
+          <div className="flex items-center justify-center w-8 h-8 bg-primary/20 rounded-lg">
+            <Settings className="w-4 h-4 text-primary" />
           </div>
           <div>
-            <h4 className="text-base font-semibold text-slate-200">Posting Strategy</h4>
-            <p className="text-xs text-slate-400">Choose how to schedule posts</p>
+            <h4 className="text-base font-semibold text-foreground">Posting Strategy</h4>
+            <p className="text-xs text-muted-foreground">Choose how to schedule posts</p>
           </div>
         </div>
         
@@ -615,31 +615,31 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           <button
             onClick={() => setPostingStrategy('interval')}
             className={cn(
-              "p-4 rounded-lg border-2 text-left transition-all duration-200",
+              "p-4 rounded-lg border-2 text-left transition-all duration-200 hover-lift",
               postingStrategy === 'interval'
-                ? "border-blue-600 bg-slate-800 shadow-lg"
-                : "border-slate-600 hover:border-blue-500 hover:bg-slate-800/50"
+                ? "border-primary bg-primary/10 shadow-lg shadow-primary/25"
+                : "border-border/50 hover:border-primary/50 hover:bg-accent/30"
             )}
           >
             <div className="flex items-center space-x-2 mb-2">
               <div className={cn(
                 "flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
                 postingStrategy === 'interval'
-                  ? "bg-blue-700"
-                  : "bg-slate-700 group-hover:bg-blue-700/50"
+                  ? "bg-primary shadow-lg"
+                  : "bg-accent/50 group-hover:bg-primary/20"
               )}>
                 <Calendar className={cn(
                   "w-4 h-4 transition-colors duration-200",
-                  postingStrategy === 'interval' ? "text-white" : "text-slate-400 group-hover:text-blue-400"
+                  postingStrategy === 'interval' ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
                 )} />
               </div>
               <div>
-                <h5 className="font-medium text-slate-200 text-sm">Schedule All</h5>
-                <p className="text-xs text-slate-400">Time intervals from start</p>
+                <h5 className="font-medium text-foreground text-sm">Schedule All</h5>
+                <p className="text-xs text-muted-foreground">Time intervals from start</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2 text-xs text-slate-400">
-              <CheckCircle className="w-3 h-3 text-emerald-400" />
+            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+              <CheckCircle className="w-3 h-3 text-emerald-500" />
               <span>Automated scheduling</span>
             </div>
           </button>
@@ -647,45 +647,45 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           <button
             onClick={() => setPostingStrategy('first-now')}
             className={cn(
-              "p-4 rounded-lg border-2 text-left transition-all duration-200",
+              "p-4 rounded-lg border-2 text-left transition-all duration-200 hover-lift",
               postingStrategy === 'first-now'
-                ? "border-blue-600 bg-slate-800 shadow-lg"
-                : "border-slate-600 hover:border-blue-500 hover:bg-slate-800/50"
+                ? "border-primary bg-primary/10 shadow-lg shadow-primary/25"
+                : "border-border/50 hover:border-primary/50 hover:bg-accent/30"
             )}
           >
             <div className="flex items-center space-x-2 mb-2">
               <div className={cn(
                 "flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
                 postingStrategy === 'first-now'
-                  ? "bg-blue-700"
-                  : "bg-slate-700 group-hover:bg-blue-700/50"
+                  ? "bg-primary shadow-lg"
+                  : "bg-accent/50 group-hover:bg-primary/20"
               )}>
                 <Play className={cn(
                   "w-4 h-4 transition-colors duration-200",
-                  postingStrategy === 'first-now' ? "text-white" : "text-slate-400 group-hover:text-blue-400"
+                  postingStrategy === 'first-now' ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
                 )} />
               </div>
               <div>
-                <h5 className="font-medium text-slate-200 text-sm">Post 1 Now</h5>
-                <p className="text-xs text-slate-400">Immediate + schedule rest</p>
+                <h5 className="font-medium text-foreground text-sm">Post 1 Now</h5>
+                <p className="text-xs text-muted-foreground">Immediate + schedule rest</p>
               </div>
             </div>
-            <div className="flex items-center space-x-2 text-xs text-slate-400">
-              <CheckCircle className="w-3 h-3 text-emerald-400" />
+            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+              <CheckCircle className="w-3 h-3 text-emerald-500" />
               <span>Instant engagement</span>
             </div>
           </button>
         </div>
 
         {/* Interval Settings */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+        <div className="bg-accent/20 rounded-lg border border-border/50 p-4 hover-lift">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="block text-sm font-medium text-slate-200">Interval Between Posts</label>
+              <label className="block text-sm font-medium text-foreground">Interval Between Posts</label>
               <select
                 value={intervalHours}
                 onChange={(e) => setIntervalHours(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-slate-900 text-slate-200 rounded-lg border border-slate-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 focus:outline-none transition-all text-sm"
+                className="w-full px-3 py-2 bg-card border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm input-modern"
               >
                 <option value={0.5}>30 minutes</option>
                 <option value={1}>1 hour</option>
@@ -698,22 +698,22 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                 <option value={12}>12 hours</option>
                 <option value={24}>24 hours</option>
               </select>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-muted-foreground">
                 Optimal: 3-6 hours
               </p>
             </div>
 
             {postingStrategy === 'interval' && (
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-slate-200">Start Time</label>
+                <label className="block text-sm font-medium text-foreground">Start Time</label>
                 <input
                   type="datetime-local"
                   value={startTime}
                   onChange={(e) => setStartTime(e.target.value)}
                   min={new Date().toISOString().slice(0, 16)}
-                  className="w-full px-3 py-2 bg-slate-900 text-slate-200 rounded-lg border border-slate-600 focus:border-blue-600 focus:ring-2 focus:ring-blue-600/20 focus:outline-none transition-all text-sm"
+                  className="w-full px-3 py-2 bg-card border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm input-modern"
                 />
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-muted-foreground">
                   Schedule start time
                 </p>
               </div>
@@ -725,24 +725,24 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       {/* Schedule Preview */}
       <div className="space-y-3">
         <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-8 h-8 bg-slate-700 rounded-lg">
-            <Eye className="w-4 h-4 text-slate-300" />
+          <div className="flex items-center justify-center w-8 h-8 bg-primary/20 rounded-lg">
+            <Eye className="w-4 h-4 text-primary" />
           </div>
           <div>
-            <h4 className="text-base font-semibold text-slate-200">Schedule Preview</h4>
-            <p className="text-xs text-slate-400">Review timeline before posting</p>
+            <h4 className="text-base font-semibold text-foreground">Schedule Preview</h4>
+            <p className="text-xs text-muted-foreground">Review timeline before posting</p>
           </div>
         </div>
         
         {/* Schedule Constraints Notice */}
-        <div className="bg-slate-800 border border-slate-600 rounded-lg p-3">
+        <div className="bg-accent/20 border border-border/50 rounded-lg p-3 hover-lift">
           <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0 w-6 h-6 bg-slate-700 rounded-lg flex items-center justify-center">
-              <Clock className="w-3 h-3 text-slate-400" />
+            <div className="flex-shrink-0 w-6 h-6 bg-primary/20 rounded-lg flex items-center justify-center">
+              <Clock className="w-3 h-3 text-primary" />
             </div>
             <div>
-              <div className="font-medium text-slate-200 mb-2 text-sm">Schedule Rules</div>
-              <div className="space-y-1 text-xs text-slate-400">
+              <div className="font-medium text-foreground mb-2 text-sm">Schedule Rules</div>
+              <div className="space-y-1 text-xs text-muted-foreground">
                 <div>• Posts every {intervalHours} hours (9am-10pm)</div>
                 <div>• Posts after 10pm → next day at 9am</div>
                 <div>• No posts 12am-9am</div>
@@ -752,29 +752,29 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
         
         {/* Schedule Timeline */}
-        <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+        <div className="bg-accent/20 rounded-lg border border-border/50 p-4 hover-lift">
           {getSchedulePreview().length === 0 ? (
             <div className="text-center py-6">
-              <AlertCircle className="w-6 h-6 text-slate-500 mx-auto mb-2" />
-              <h5 className="font-medium text-slate-300 mb-2 text-sm">No Posts Scheduled</h5>
-              <p className="text-xs text-slate-500">
+              <AlertCircle className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
+              <h5 className="font-medium text-foreground mb-2 text-sm">No Posts Scheduled</h5>
+              <p className="text-xs text-muted-foreground">
                 Adjust settings to schedule posts
               </p>
             </div>
           ) : (
             <div className="space-y-2">
               {getSchedulePreview().map((item, index) => (
-                <div key={item.slideshowId} className="bg-slate-900 rounded-lg border border-slate-600 p-3">
+                <div key={item.slideshowId} className="bg-card/50 rounded-lg border border-border/30 p-3 hover:bg-accent/20 transition-all duration-200 hover-lift">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
-                      <div className="flex items-center justify-center w-6 h-6 bg-slate-700 rounded-lg">
-                        <span className="text-xs font-medium text-slate-300">{index + 1}</span>
+                      <div className="flex items-center justify-center w-6 h-6 bg-primary/20 rounded-lg">
+                        <span className="text-xs font-medium text-primary">{index + 1}</span>
                       </div>
                       <div>
-                        <h6 className="font-medium text-slate-200 text-xs">{item.slideshowTitle}</h6>
+                        <h6 className="font-medium text-foreground text-xs">{item.slideshowTitle}</h6>
                         <div className="flex items-center space-x-1 mt-1">
-                          <Clock className="w-3 h-3 text-slate-500" />
-                          <span className="text-xs text-slate-400">
+                          <Clock className="w-3 h-3 text-muted-foreground" />
+                          <span className="text-xs text-muted-foreground">
                             {item.isImmediate ? 'Post now' : item.displayTime}
                           </span>
                         </div>
@@ -782,25 +782,25 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                     </div>
                     <div className="flex items-center space-x-2">
                       {item.status === 'pending' && (
-                        <div className="flex items-center space-x-1 text-emerald-400">
-                          <div className="w-2 h-2 bg-emerald-400 rounded-full"></div>
+                        <div className="flex items-center space-x-1 text-emerald-500">
+                          <div className="w-2 h-2 bg-emerald-500 rounded-full pulse-glow"></div>
                           <span className="text-xs">Pending</span>
                         </div>
                       )}
                       {item.status === 'posting' && (
-                        <div className="flex items-center space-x-1 text-blue-400">
+                        <div className="flex items-center space-x-1 text-primary">
                           <Loader2 className="w-3 h-3 animate-spin" />
                           <span className="text-xs">Posting</span>
                         </div>
                       )}
                       {item.status === 'success' && (
-                        <div className="flex items-center space-x-1 text-emerald-400">
+                        <div className="flex items-center space-x-1 text-emerald-500">
                           <CheckCircle className="w-3 h-3" />
                           <span className="text-xs">Success</span>
                         </div>
                       )}
                       {item.status === 'error' && (
-                        <div className="flex items-center space-x-1 text-red-400">
+                        <div className="flex items-center space-x-1 text-destructive">
                           <AlertCircle className="w-3 h-3" />
                           <span className="text-xs">Error</span>
                         </div>
@@ -815,12 +815,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         
         {/* Skipped Posts Notice */}
         {slideshows.length > postingSchedule.length && (
-          <div className="bg-slate-800 border border-slate-600 rounded-lg p-3">
+          <div className="bg-accent/20 border border-border/50 rounded-lg p-3 hover-lift">
             <div className="flex items-center space-x-3">
-              <AlertCircle className="w-4 h-4 text-slate-400" />
+              <AlertCircle className="w-4 h-4 text-muted-foreground" />
               <div>
-                <div className="font-medium text-slate-200 text-sm">Posts Adjusted</div>
-                <div className="text-xs text-slate-400">
+                <div className="font-medium text-foreground text-sm">Posts Adjusted</div>
+                <div className="text-xs text-muted-foreground">
                   {slideshows.length - postingSchedule.length} post(s) moved to next day 9am
                 </div>
               </div>
@@ -863,12 +863,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       <Separator />
 
       {/* Action Buttons - Sticky at bottom */}
-      <div className="sticky bottom-0 bg-slate-900/95 backdrop-blur-sm border-t border-slate-700 pt-4 -mx-4 px-4">
+      <div className="sticky bottom-0 bg-card/95 backdrop-blur-sm border-t border-border/50 pt-4 -mx-4 px-4 shadow-xl">
         <div className="flex gap-3">
           <Button
             onClick={handleBulkPost}
             disabled={isPosting || selectedProfiles.length === 0 || slideshows.length === 0}
-            className="flex-1 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white font-medium py-2 shadow-lg"
+            className="flex-1 btn-modern bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground font-medium py-2 shadow-lg hover:shadow-xl transition-all duration-300"
           >
             {isPosting ? (
               <>
@@ -884,7 +884,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           </Button>
 
           {onClose && (
-            <Button variant="outline" onClick={onClose} className="px-4 border-slate-600 text-slate-300 hover:bg-slate-800">
+            <Button variant="outline" onClick={onClose} className="px-4 border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground hover-lift transition-all duration-200">
               Cancel
             </Button>
           )}

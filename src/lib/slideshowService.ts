@@ -26,9 +26,31 @@ export class SlideshowService {
   ): Promise<CondensedSlide[]> {
     const condensedSlides: CondensedSlide[] = [];
 
+    console.log(`🎬 Creating condensed slides:`, {
+      imageCount: images.length,
+      textOverlayCount: textOverlays.length,
+      textOverlays: textOverlays.map(overlay => ({
+        text: overlay.text?.substring(0, 20) + '...',
+        slideIndex: overlay.slideIndex
+      }))
+    });
+
     for (let i = 0; i < images.length; i++) {
       const image = images[i];
       const slideTextOverlays = textOverlays.filter(overlay => overlay.slideIndex === i);
+
+      console.log(`🖼️ Slide ${i + 1}/${images.length}:`, {
+        imageId: image.id,
+        textOverlaysForSlide: slideTextOverlays.length,
+        allTextOverlays: textOverlays.map(overlay => ({
+          text: overlay.text?.substring(0, 20) + '...',
+          slideIndex: overlay.slideIndex
+        })),
+        filteredTextOverlays: slideTextOverlays.map(overlay => ({
+          text: overlay.text?.substring(0, 20) + '...',
+          slideIndex: overlay.slideIndex
+        }))
+      });
 
       try {
         const condensedSlide = await this.createCondensedSlide(image, slideTextOverlays, aspectRatio);
@@ -244,16 +266,37 @@ async saveSlideshow(
   ): Promise<SlideshowMetadata> {
     try {
       console.log('🚀 Starting enhanced slideshow save with smart cropping...');
+      console.log('📝 TEXT OVERLAYS DEBUG - saveSlideshow called with:', {
+        title,
+        textOverlaysCount: textOverlays.length,
+        textOverlays: textOverlays.map(overlay => ({
+          text: overlay.text?.substring(0, 20) + '...',
+          slideIndex: overlay.slideIndex
+        }))
+      });
 
-      // Determine final aspect ratio - use provided one or fall back to first image's
+      // CRITICAL FIX: Validate and ensure aspect ratio is properly determined
       const finalAspectRatio = aspectRatio || images[0]?.aspectRatio || '9:16';
       
-      console.log('🎯 Final aspect ratio for slideshow:', finalAspectRatio);
+      // Validate the final aspect ratio
+      const validatedAspectRatio = this.validateAspectRatio(finalAspectRatio) ? finalAspectRatio : '9:16';
+      
+      console.log('🎯 Final aspect ratio for slideshow:', {
+        original: aspectRatio,
+        fallback: images[0]?.aspectRatio,
+        final: finalAspectRatio,
+        validated: validatedAspectRatio
+      });
+      
+      // Use the validated aspect ratio
+      const finalAR = validatedAspectRatio;
+      
+      console.log('🎯 Final aspect ratio for slideshow:', finalAR);
 
       // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
       let processedImages = images;
       
-      if (finalAspectRatio !== 'free' && images.length > 0) {
+      if (finalAR !== 'free' && images.length > 0) {
         try {
           console.log('✂️ Pre-cropping images to target aspect ratio before slideshow creation...');
           
@@ -263,7 +306,7 @@ async saveSlideshow(
           // Use enhanced cropping service to crop images
           const croppedImages = await ImageCroppingService.changeAspectRatio(
             imageIds,
-            finalAspectRatio,
+            finalAR,
             userId
           );
           
@@ -279,8 +322,13 @@ async saveSlideshow(
         }
       }
 
+      console.log('📝 TEXT OVERLAYS DEBUG - Calling createCondensedSlides with:', {
+        processedImagesCount: processedImages.length,
+        textOverlaysCount: textOverlays.length
+      });
+
       // Create condensed slides (text consolidated into images) for slideshow display
-      const condensedSlides = await this.createCondensedSlides(processedImages, textOverlays, finalAspectRatio);
+      const condensedSlides = await this.createCondensedSlides(processedImages, textOverlays, finalAR);
 
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
@@ -298,7 +346,7 @@ async saveSlideshow(
         hashtags,
         condensedSlides: optimizedCondensedSlides, // These now have imgbb URLs instead of base64!
         textOverlays, // Keep original text overlays for editing
-        aspectRatio: finalAspectRatio,
+        aspectRatio: finalAR, // Use the validated aspect ratio
         transitionEffect: transitionEffect, // Keep original transition effect
         musicEnabled: musicEnabled, // Keep original music setting
         created_at: new Date().toISOString(),
@@ -1615,7 +1663,7 @@ async createOptimizedSlideshow(
   }
 
   /**
-   * Create a template from a slideshow
+   * Create a template from a slideshow with enhanced aspect ratio persistence
    */
   async createTemplateFromSlideshow(
     name: string,
@@ -1623,6 +1671,9 @@ async createOptimizedSlideshow(
     slideshow: SlideshowMetadata,
     userId: string
   ): Promise<SlideshowTemplate> {
+    // CRITICAL FIX: Ensure aspect ratio is properly saved
+    const finalAspectRatio = slideshow.aspectRatio || '9:16';
+    
     const template: SlideshowTemplate = {
       id: `template_${crypto.randomUUID()}`, // Full ID for memory/localStorage
       name,
@@ -1633,13 +1684,25 @@ async createOptimizedSlideshow(
       caption: slideshow.caption,
       hashtags: slideshow.hashtags,
       textOverlays: slideshow.textOverlays,
-      aspectRatio: slideshow.aspectRatio,
-      transitionEffect: slideshow.transitionEffect,
-      musicEnabled: slideshow.musicEnabled,
+      aspectRatio: finalAspectRatio, // Ensure aspect ratio is always set
+      transitionEffect: slideshow.transitionEffect || 'fade',
+      musicEnabled: slideshow.musicEnabled || false,
       slideCount: slideshow.condensedSlides.length,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+
+    console.log('🎯 Creating template with enhanced aspect ratio persistence:', {
+      name: template.name,
+      aspectRatio: template.aspectRatio,
+      slideCount: template.slideCount,
+      sourceTextOverlays: slideshow.textOverlays.length,
+      templateTextOverlays: template.textOverlays.length,
+      textOverlayDetails: template.textOverlays.map(overlay => ({
+        text: overlay.text?.substring(0, 20) + '...',
+        slideIndex: overlay.slideIndex
+      }))
+    });
 
     // Store in memory
     this.templates.set(template.id, template);
@@ -1653,7 +1716,8 @@ async createOptimizedSlideshow(
     // Dispatch event to update UI
     window.dispatchEvent(new CustomEvent('templatesUpdated'));
 
-    console.log('Template created:', template.name);
+    console.log('✅ Template created successfully:', template.name, 'with aspect ratio:', template.aspectRatio);
+    console.log('📝 Template text overlays preserved:', template.textOverlays.length);
     return template;
   }
 
@@ -1848,7 +1912,7 @@ async createOptimizedSlideshow(
   }
 
   /**
-   * Bulk upload with template application
+   * Bulk upload with template application - creates multiple slideshows from one template
    */
   async bulkUploadWithTemplate(bulkData: BulkUploadWithTemplate, userId: string): Promise<TemplateApplicationResult> {
     try {
@@ -1862,6 +1926,7 @@ async createOptimizedSlideshow(
         };
       }
 
+      // Apply template to images (legacy single slideshow method)
       return await this.applyTemplateToImages(
         template,
         bulkData.images,
@@ -1877,6 +1942,226 @@ async createOptimizedSlideshow(
         totalImages: bulkData.images.length
       };
     }
+  }
+
+  /**
+   * Create multiple slideshows from template with bulk image processing
+   * This is the main method for bulk template creation
+   */
+  async createBulkSlideshowsFromTemplate(
+    template: SlideshowTemplate,
+    images: UploadedImage[],
+    userId: string,
+    options: {
+      randomizeImages?: boolean;
+      customizations?: {
+        title?: string;
+        caption?: string;
+        hashtags?: string[];
+      };
+      slideshowTitles?: string[]; // Optional custom titles for each slideshow
+    } = {}
+  ): Promise<{
+    success: boolean;
+    slideshows: SlideshowMetadata[];
+    error?: string;
+    totalImages: number;
+    slideshowCount: number;
+  }> {
+    try {
+      const { randomizeImages = false, customizations = {}, slideshowTitles = [] } = options;
+      
+      if (images.length === 0) {
+        return {
+          success: false,
+          slideshows: [],
+          error: 'No images provided',
+          totalImages: 0,
+          slideshowCount: 0
+        };
+      }
+
+      // Determine number of slideshows to create
+      const slideCount = template.slideCount;
+      const slideshowCount = Math.ceil(images.length / slideCount);
+      
+      if (slideshowCount === 0) {
+        return {
+          success: false,
+          slideshows: [],
+          error: `Template requires ${slideCount} images but none provided`,
+          totalImages: images.length,
+          slideshowCount: 0
+        };
+      }
+
+      console.log(`🎬 Creating ${slideshowCount} slideshows from ${images.length} images with template: ${template.name}`);
+
+      // Group images into sets for each slideshow
+      const imageGroups = this.groupImagesForSlideshows(images, slideCount, randomizeImages);
+      
+      const createdSlideshows: SlideshowMetadata[] = [];
+      const finalTitle = customizations.title || template.title;
+      const finalCaption = customizations.caption || template.caption;
+      const finalHashtags = customizations.hashtags || template.hashtags;
+
+      // Create each slideshow
+      for (let i = 0; i < imageGroups.length; i++) {
+        const imageGroup = imageGroups[i];
+        const slideshowTitle = slideshowTitles[i] || `${finalTitle} - Set ${i + 1}`;
+        
+        try {
+          console.log(`🎬 Starting slideshow ${i + 1}/${imageGroups.length}: ${slideshowTitle}`);
+          console.log(`📋 Image group details:`, {
+            images: imageGroup.map(img => img.id),
+            imageCount: imageGroup.length
+          });
+          
+          // Apply template text overlays with new image IDs adapted for this group
+          // CRITICAL FIX: For partial groups, map text overlays to available slides
+          let adaptedTextOverlays = template.textOverlays.map(overlay => ({
+            ...overlay,
+            id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          }));
+
+          // If this group has fewer images than template, remap text overlay indices
+          if (imageGroup.length < template.slideCount) {
+            adaptedTextOverlays = adaptedTextOverlays.map(overlay => {
+              // If overlay slide index exceeds available slides, map to last available slide
+              if (overlay.slideIndex >= imageGroup.length) {
+                console.log(`🔄 Mapping overlay slide ${overlay.slideIndex} to slide ${imageGroup.length - 1} for partial group`);
+                return { ...overlay, slideIndex: imageGroup.length - 1 };
+              }
+              return overlay;
+            });
+          }
+
+          console.log(`📝 Text overlays for slideshow ${i + 1}:`, {
+            templateOverlays: template.textOverlays.length,
+            adaptedOverlays: adaptedTextOverlays.length,
+            imageGroupSize: imageGroup.length,
+            isPartialGroup: imageGroup.length < template.slideCount,
+            templateOverlayDetails: template.textOverlays.map(overlay => ({
+              text: overlay.text?.substring(0, 20) + '...',
+              slideIndex: overlay.slideIndex
+            })),
+            adaptedOverlayDetails: adaptedTextOverlays.map(overlay => ({
+              text: overlay.text?.substring(0, 20) + '...',
+              slideIndex: overlay.slideIndex
+            }))
+          });
+
+          // Create the slideshow with adapted text overlays
+          const slideshow = await this.saveSlideshow(
+            slideshowTitle,
+            template.postTitle || slideshowTitle,
+            finalCaption,
+            finalHashtags,
+            imageGroup,
+            adaptedTextOverlays,
+            template.aspectRatio,
+            template.transitionEffect,
+            template.musicEnabled,
+            userId
+          );
+
+          console.log(`🎯 FINAL VERIFICATION - Slideshow ${i + 1}:`, {
+            title: slideshow.title,
+            finalTextOverlaysCount: slideshow.textOverlays.length,
+            finalTextOverlays: slideshow.textOverlays.map(overlay => ({
+              text: overlay.text?.substring(0, 20) + '...',
+              slideIndex: overlay.slideIndex
+            }))
+          });
+
+          createdSlideshows.push(slideshow);
+          console.log(`✅ Created slideshow ${i + 1}/${imageGroups.length}: ${slideshowTitle} (${imageGroup.length} images)`);
+          console.log(`✅ Slideshow textOverlays count:`, slideshow.textOverlays.length);
+          
+        } catch (error) {
+          console.error(`❌ Failed to create slideshow ${i + 1}:`, error);
+          // Continue with other slideshows even if one fails
+        }
+      }
+
+      console.log(`🎉 Bulk template creation completed: ${createdSlideshows.length}/${imageGroups.length} slideshows created`);
+
+      return {
+        success: createdSlideshows.length > 0,
+        slideshows: createdSlideshows,
+        error: createdSlideshows.length === 0 ? 'Failed to create any slideshows' : undefined,
+        totalImages: images.length,
+        slideshowCount: createdSlideshows.length
+      };
+
+    } catch (error) {
+      console.error('Bulk template creation failed:', error);
+      return {
+        success: false,
+        slideshows: [],
+        error: error instanceof Error ? error.message : 'Unknown error',
+        totalImages: images.length,
+        slideshowCount: 0
+      };
+    }
+  }
+
+  /**
+   * Group images into sets for multiple slideshows
+   * Ensures no duplicate images within the same slideshow
+   */
+  private groupImagesForSlideshows(
+    images: UploadedImage[],
+    slidesPerSlideshow: number,
+    randomize: boolean = false
+  ): UploadedImage[][] {
+    const workingImages = [...images]; // Create a copy to avoid modifying original
+    
+    if (randomize) {
+      // Fisher-Yates shuffle for true randomization
+      for (let i = workingImages.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [workingImages[i], workingImages[j]] = [workingImages[j], workingImages[i]];
+      }
+    }
+
+    const groups: UploadedImage[][] = [];
+    
+    // Split images into groups of slidesPerSlideshow
+    for (let i = 0; i < workingImages.length; i += slidesPerSlideshow) {
+      const group = workingImages.slice(i, i + slidesPerSlideshow);
+      if (group.length > 0) {
+        groups.push(group);
+      }
+    }
+
+    return groups;
+  }
+
+  /**
+   * Get preview of bulk template creation - shows how images will be grouped
+   */
+  previewBulkTemplateCreation(
+    images: UploadedImage[],
+    template: SlideshowTemplate,
+    randomizeImages: boolean = false
+  ): {
+    totalImages: number;
+    slideshowCount: number;
+    slidesPerSlideshow: number;
+    groups: UploadedImage[][];
+    willCreatePartialSlideshow: boolean;
+  } {
+    const groups = this.groupImagesForSlideshows(images, template.slideCount, randomizeImages);
+    const lastGroupSize = groups[groups.length - 1]?.length || 0;
+    
+    return {
+      totalImages: images.length,
+      slideshowCount: groups.length,
+      slidesPerSlideshow: template.slideCount,
+      groups,
+      willCreatePartialSlideshow: lastGroupSize > 0 && lastGroupSize < template.slideCount
+    };
   }
 
   /**
@@ -1981,7 +2266,7 @@ async createOptimizedSlideshow(
   }
 
   /**
-   * Load templates from database for user
+   * Load templates from database for user with enhanced aspect ratio persistence
    */
   async loadUserTemplates(userId: string): Promise<void> {
     try {
@@ -2010,10 +2295,14 @@ async createOptimizedSlideshow(
       this.templates.clear();
       userTemplates.forEach(template => this.templates.set(template.id, template));
 
-      // Convert database format to SlideshowTemplate
+      // Convert database format to SlideshowTemplate with enhanced aspect ratio handling
       templates?.forEach(dbTemplate => {
         // Add "template_" prefix to match internal ID format
         const templateId = `template_${dbTemplate.id}`;
+        
+        // CRITICAL FIX: Ensure aspect ratio is properly loaded and validated
+        const loadedAspectRatio = dbTemplate.aspect_ratio || '9:16';
+        const validAspectRatio = this.validateAspectRatio(loadedAspectRatio) ? loadedAspectRatio : '9:16';
         
         const template: SlideshowTemplate = {
           id: templateId, // Use prefixed ID for memory/localStorage consistency
@@ -2025,7 +2314,7 @@ async createOptimizedSlideshow(
           caption: dbTemplate.caption,
           hashtags: dbTemplate.hashtags || [],
           textOverlays: dbTemplate.text_overlays || [],
-          aspectRatio: dbTemplate.aspect_ratio || '9:16',
+          aspectRatio: validAspectRatio, // Ensure aspect ratio is valid and properly loaded
           transitionEffect: dbTemplate.transition_effect || 'fade',
           musicEnabled: dbTemplate.music_enabled || false,
           previewImage: dbTemplate.preview_image,
@@ -2033,6 +2322,13 @@ async createOptimizedSlideshow(
           created_at: dbTemplate.created_at,
           updated_at: dbTemplate.updated_at,
         };
+
+        console.log('🔄 Loaded template with validated aspect ratio:', {
+          name: template.name,
+          loadedAspectRatio: loadedAspectRatio,
+          finalAspectRatio: template.aspectRatio,
+          isValid: this.validateAspectRatio(template.aspectRatio)
+        });
 
         this.templates.set(template.id, template);
       });
@@ -2047,6 +2343,22 @@ async createOptimizedSlideshow(
     } catch (error) {
       console.error('Failed to load templates from database:', error);
     }
+  }
+
+  /**
+   * Validate aspect ratio format
+   */
+  private validateAspectRatio(aspectRatio: string): boolean {
+    if (!aspectRatio) return false;
+    
+    // Check for valid formats: "9:16", "16:9", "1:1", "free", etc.
+    const validFormats = [
+      /^(\d+):(\d+)$/, // Ratios like "9:16", "16:9", "1:1"
+      /^free$/,        // Free form
+      /^auto$/         // Auto detection
+    ];
+    
+    return validFormats.some(format => format.test(aspectRatio.toLowerCase()));
   }
 }
 
