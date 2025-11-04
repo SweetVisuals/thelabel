@@ -276,6 +276,14 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         throw new Error('No images were successfully uploaded to Postiz storage');
       }
 
+      // Log slideshow preparation for debugging
+      console.log(`🎬 Posting slideshow: ${slideshow.title}`, {
+        aspectRatio: slideshow.aspectRatio,
+        slidesCount: slideshow.condensedSlides.length,
+        captionLength: captionText.length,
+        uploadedImages: postizMedia.length
+      });
+
       // Create the post using Postiz image gallery URLs
       const result = await postizUploadService.createPostWithUploadedImages(
         captionText,
@@ -284,6 +292,11 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         scheduledAt,
         postNow
       );
+
+      console.log(`✅ Successfully posted slideshow: ${slideshow.title}`, {
+        postId: result.postId,
+        aspectRatio: slideshow.aspectRatio
+      });
 
       return {
         success: true,

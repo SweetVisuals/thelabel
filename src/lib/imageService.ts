@@ -3,6 +3,213 @@ import { uploadToImgbb, getImageDimensions } from './imgbb';
 import { UploadedImage, Folder } from '@/types';
 import { cropImage, parseAspectRatio, batchCropImages } from './aspectRatio';
 
+/**
+ * Enhanced image cropping service with smart positioning and posting optimization
+ */
+export class ImageCroppingService {
+  /**
+   * Enhanced change aspect ratio with smart cropping for posting
+   */
+  static async changeAspectRatio(
+    imageIds: string[],
+    targetAspectRatio: string,
+    userId: string
+  ): Promise<UploadedImage[]> {
+    try {
+      console.log('🔄 Starting enhanced aspect ratio change for posting...', {
+        imageIds: imageIds.length,
+        targetAspectRatio,
+        userId
+      });
+
+      // Get image data for all selected images
+      const { data: images, error: fetchError } = await supabase
+        .from('images')
+        .select('*')
+        .in('id', imageIds)
+        .eq('user_id', userId);
+
+      if (fetchError) {
+        throw new Error(`Failed to fetch images: ${fetchError.message}`);
+      }
+
+      if (!images || images.length === 0) {
+        throw new Error('No images found');
+      }
+
+      // Skip cropping for 'free' aspect ratio
+      if (targetAspectRatio === 'free') {
+        console.log('📏 Skipping cropping for free aspect ratio');
+        return images.map(img => ({
+          id: img.id,
+          file: new File([], img.filename, { type: img.mime_type }),
+          url: img.file_path,
+          preview: img.file_path,
+          permanentUrl: img.file_path,
+          filename: img.filename,
+          fileSize: img.file_size,
+          mimeType: img.mime_type,
+          width: img.width,
+          height: img.height,
+          aspectRatio: img.aspect_ratio || undefined,
+        })) as UploadedImage[];
+      }
+
+      // Convert aspect ratio string to numeric value
+      const numericAspectRatio = parseAspectRatio(targetAspectRatio);
+      if (numericAspectRatio === 0) {
+        throw new Error('Invalid aspect ratio');
+      }
+
+      console.log('🎯 Target aspect ratio:', numericAspectRatio);
+
+      // Process images with enhanced cropping
+      const updatedImages: UploadedImage[] = [];
+      let processedCount = 0;
+      
+      for (const image of images) {
+        try {
+          console.log(`🖼️ Processing image ${++processedCount}/${images.length}: ${image.filename}`);
+          
+          // Convert imgbb URL to File object for cropping
+          const imageFile = await this.urlToFile(image.file_path, image.filename, image.mime_type);
+          
+          // Use enhanced cropImage function with smart positioning
+          const cropResult = await cropImage(imageFile, numericAspectRatio, 0.92);
+          
+          // Create new file from cropped result
+          const newFile = new File([cropResult.blob], image.filename, {
+            type: image.mime_type.includes('png') ? 'image/png' : 'image/jpeg'
+          });
+
+          // Upload to imgbb
+          const imgbbResponse = await uploadToImgbb(newFile);
+
+          // Update database with new dimensions and aspect ratio
+          const { data: updatedImage, error: updateError } = await supabase
+            .from('images')
+            .update({
+              file_path: imgbbResponse.data.url,
+              width: cropResult.width,
+              height: cropResult.height,
+              file_size: cropResult.blob.size,
+              aspect_ratio: targetAspectRatio,
+            })
+            .eq('id', image.id)
+            .eq('user_id', userId)
+            .select()
+            .single();
+
+          if (updateError) {
+            throw new Error(`Failed to update image: ${updateError.message}`);
+          }
+
+          // Convert to UploadedImage format
+          const updatedImageData = {
+            id: updatedImage.id,
+            file: newFile,
+            url: imgbbResponse.data.url,
+            preview: imgbbResponse.data.url,
+            permanentUrl: imgbbResponse.data.url,
+            deleteUrl: imgbbResponse.data.delete_url,
+            filename: image.filename,
+            fileSize: cropResult.blob.size,
+            mimeType: newFile.type,
+            width: cropResult.width,
+            height: cropResult.height,
+            aspectRatio: targetAspectRatio,
+          };
+          
+          updatedImages.push(updatedImageData);
+          console.log(`✅ Successfully processed ${image.filename}`, {
+            originalSize: `${image.width}x${image.height}`,
+            newSize: `${cropResult.width}x${cropResult.height}`,
+            fileSize: cropResult.blob.size
+          });
+          
+        } catch (imageError) {
+          console.error(`❌ Failed to process image ${image.filename}:`, imageError);
+          
+          // Add original image without cropping on error
+          const fallbackImage = {
+            id: image.id,
+            file: new File([], image.filename, { type: image.mime_type }),
+            url: image.file_path,
+            preview: image.file_path,
+            permanentUrl: image.file_path,
+            filename: image.filename,
+            fileSize: image.file_size,
+            mimeType: image.mime_type,
+            width: image.width,
+            height: image.height,
+            aspectRatio: image.aspect_ratio || undefined,
+          };
+          
+          updatedImages.push(fallbackImage);
+          
+          // Try to update aspect ratio even on failure
+          try {
+            await supabase
+              .from('images')
+              .update({ aspect_ratio: targetAspectRatio })
+              .eq('id', image.id)
+              .eq('user_id', userId);
+          } catch (updateError) {
+            console.warn(`⚠️ Failed to update aspect ratio for ${image.filename}:`, updateError);
+          }
+        }
+      }
+
+      console.log(`🎉 Aspect ratio change completed: ${updatedImages.length}/${images.length} images processed`);
+      return updatedImages;
+      
+    } catch (error) {
+      console.error('❌ Failed to change aspect ratios:', error);
+      throw new Error(`Failed to change aspect ratios: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Convert URL to File object for processing
+   */
+  private static async urlToFile(url: string, filename: string, mimeType: string): Promise<File> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch image: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      return new File([blob], filename, { type: mimeType });
+    } catch (error) {
+      throw new Error(`Failed to convert URL to file: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Batch process multiple images for slideshow creation
+   */
+  static async prepareImagesForSlideshow(
+    imageIds: string[],
+    targetAspectRatio: string,
+    userId: string
+  ): Promise<UploadedImage[]> {
+    console.log('🎬 Preparing images for slideshow with aspect ratio:', targetAspectRatio);
+    
+    try {
+      // First change aspect ratio if needed
+      const processedImages = await this.changeAspectRatio(imageIds, targetAspectRatio, userId);
+      
+      console.log(`✅ Prepared ${processedImages.length} images for slideshow`);
+      return processedImages;
+      
+    } catch (error) {
+      console.error('❌ Failed to prepare images for slideshow:', error);
+      throw error;
+    }
+  }
+}
+
 export const imageService = {
   // Upload image to imgbb and save metadata to Supabase
   async uploadImage(file: File, folderId?: string): Promise<UploadedImage> {
@@ -225,8 +432,6 @@ export const imageService = {
         }
         return [];
       }
-
-      
 
       // Load images for each folder
       const foldersWithImages = await Promise.all(folders.map(async (folder) => {
@@ -521,178 +726,31 @@ export const imageService = {
     }
   },
 
-  // Change aspect ratio of images with improved cropping
+  /**
+   * Legacy change aspect ratio method - now uses enhanced service
+   */
   async changeAspectRatio(imageIds: string[], targetAspectRatio: string): Promise<UploadedImage[]> {
-    try {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError || !session?.user) {
-        throw new Error('User not authenticated');
-      }
-
-      const user = session.user;
-
-      // Get image data for all selected images
-      const { data: images, error: fetchError } = await supabase
-        .from('images')
-        .select('*')
-        .in('id', imageIds)
-        .eq('user_id', user.id);
-
-      if (fetchError) {
-        throw new Error(`Failed to fetch images: ${fetchError.message}`);
-      }
-
-      if (!images || images.length === 0) {
-        throw new Error('No images found');
-      }
-
-      // Skip cropping for 'free' aspect ratio
-      if (targetAspectRatio === 'free') {
-        return images.map(img => ({
-          id: img.id,
-          file: new File([], img.filename, { type: img.mime_type }),
-          url: img.file_path,
-          preview: img.file_path,
-          permanentUrl: img.file_path,
-          filename: img.filename,
-          fileSize: img.file_size,
-          mimeType: img.mime_type,
-          width: img.width,
-          height: img.height,
-          aspectRatio: img.aspect_ratio || undefined,
-        })) as UploadedImage[];
-      }
-
-      // Convert aspect ratio string to numeric value
-      const numericAspectRatio = parseAspectRatio(targetAspectRatio);
-      if (numericAspectRatio === 0) {
-        throw new Error('Invalid aspect ratio');
-      }
-
-      // Use client-side cropping to avoid download issues
-      const updatedImages: UploadedImage[] = [];
-      
-      for (const image of images) {
-        try {
-          
-          // Load image as HTMLImageElement for client-side processing
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          
-          await new Promise((resolve, reject) => {
-            img.onload = resolve;
-            img.onerror = reject;
-            img.src = image.file_path;
-          });
-
-          // Calculate crop dimensions
-          const currentAspectRatio = img.width / img.height;
-          let newWidth: number;
-          let newHeight: number;
-
-          if (currentAspectRatio > numericAspectRatio) {
-            // Image is wider than target, crop width
-            newHeight = img.height;
-            newWidth = Math.round(img.height * numericAspectRatio);
-          } else {
-            // Image is taller than target, crop height
-            newWidth = img.width;
-            newHeight = Math.round(img.width / numericAspectRatio);
-          }
-
-          // Create canvas and crop
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) throw new Error('Canvas context not available');
-
-          canvas.width = newWidth;
-          canvas.height = newHeight;
-
-          // Center crop
-          const sourceX = Math.max(0, Math.round((img.width - newWidth) / 2));
-          const sourceY = Math.max(0, Math.round((img.height - newHeight) / 2));
-
-          ctx.drawImage(
-            img,
-            sourceX, sourceY, newWidth, newHeight, // Source rectangle
-            0, 0, newWidth, newHeight // Destination rectangle
-          );
-
-          // Convert to blob
-          const blob = await new Promise<Blob>((resolve, reject) => {
-            canvas.toBlob((b) => {
-              if (b) resolve(b);
-              else reject(new Error('Failed to create blob'));
-            }, 'image/jpeg', 0.9);
-          });
-
-          // Create new file
-          const newFile = new File([blob], image.filename, { type: 'image/jpeg' });
-
-          // Upload to imgbb
-          const imgbbResponse = await uploadToImgbb(newFile);
-
-          // Update database with new dimensions and aspect ratio
-          const { data: updatedImage, error: updateError } = await supabase
-            .from('images')
-            .update({
-              file_path: imgbbResponse.data.url,
-              width: newWidth,
-              height: newHeight,
-              file_size: blob.size,
-              aspect_ratio: targetAspectRatio,
-            })
-            .eq('id', image.id)
-            .eq('user_id', user.id)
-            .select()
-            .single();
-
-          if (updateError) {
-            throw new Error(`Failed to update image: ${updateError.message}`);
-          }
-
-          // Convert to UploadedImage format
-          const updatedImageData = {
-            id: updatedImage.id,
-            file: newFile,
-            url: imgbbResponse.data.url,
-            preview: imgbbResponse.data.url,
-            permanentUrl: imgbbResponse.data.url,
-            deleteUrl: imgbbResponse.data.delete_url,
-            filename: image.filename,
-            fileSize: blob.size,
-            mimeType: 'image/jpeg',
-            width: newWidth,
-            height: newHeight,
-            aspectRatio: targetAspectRatio,
-          };
-          
-          updatedImages.push(updatedImageData);
-          
-        } catch (imageError) {
-          console.error(`Failed to process image ${image.id}:`, imageError);
-          // Add original image without cropping on error
-          updatedImages.push({
-            id: image.id,
-            file: new File([], image.filename, { type: image.mime_type }),
-            url: image.file_path,
-            preview: image.file_path,
-            permanentUrl: image.file_path,
-            filename: image.filename,
-            fileSize: image.file_size,
-            mimeType: image.mime_type,
-            width: image.width,
-            height: image.height,
-            aspectRatio: image.aspect_ratio || undefined,
-          });
-        }
-      }
-
-      return updatedImages;
-    } catch (error) {
-      console.error('Failed to change aspect ratios:', error);
-      throw error;
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.user) {
+      throw new Error('User not authenticated');
     }
+    
+    return ImageCroppingService.changeAspectRatio(imageIds, targetAspectRatio, session.user.id);
+  },
+
+  /**
+   * Prepare images for slideshow with enhanced cropping
+   */
+  async prepareImagesForSlideshow(
+    imageIds: string[],
+    targetAspectRatio: string
+  ): Promise<UploadedImage[]> {
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.user) {
+      throw new Error('User not authenticated');
+    }
+    
+    return ImageCroppingService.prepareImagesForSlideshow(imageIds, targetAspectRatio, session.user.id);
   },
 
   // Create slideshow with aspect ratio

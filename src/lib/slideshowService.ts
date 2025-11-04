@@ -1,6 +1,6 @@
 import { SlideshowMetadata, CondensedSlide, TikTokTextOverlay, UploadedImage, PostizSlideshowData, SlideshowTemplate, TemplateApplicationResult, BulkUploadWithTemplate } from '@/types';
 import { postizAPI } from './postiz';
-import { imageService } from './imageService';
+import { imageService, ImageCroppingService } from './imageService';
 import { postizUploadService } from './postizUploadService';
 import { uploadToImgbb } from './imgbb';
 
@@ -227,9 +227,9 @@ export class SlideshowService {
     return width / height;
   }
 
-  /**
-   * Save slideshow metadata
-   */
+/**
+ * Save slideshow metadata with enhanced cropping integration
+ */
 async saveSlideshow(
     title: string,
     postTitle: string,
@@ -243,13 +243,44 @@ async saveSlideshow(
     userId: string
   ): Promise<SlideshowMetadata> {
     try {
-      console.log('🚀 Starting optimized slideshow save with immediate imgbb upload...');
+      console.log('🚀 Starting enhanced slideshow save with smart cropping...');
 
-      // Use the aspect ratio from the first image if available, otherwise use the provided aspect ratio
-      const finalAspectRatio = images[0]?.aspectRatio || aspectRatio;
+      // Determine final aspect ratio - use provided one or fall back to first image's
+      const finalAspectRatio = aspectRatio || images[0]?.aspectRatio || '9:16';
+      
+      console.log('🎯 Final aspect ratio for slideshow:', finalAspectRatio);
+
+      // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
+      let processedImages = images;
+      
+      if (finalAspectRatio !== 'free' && images.length > 0) {
+        try {
+          console.log('✂️ Pre-cropping images to target aspect ratio before slideshow creation...');
+          
+          // Get image IDs for cropping
+          const imageIds = images.map(img => img.id);
+          
+          // Use enhanced cropping service to crop images
+          const croppedImages = await ImageCroppingService.changeAspectRatio(
+            imageIds,
+            finalAspectRatio,
+            userId
+          );
+          
+          // Update images array with cropped versions
+          const imageMap = new Map(croppedImages.map(img => [img.id, img]));
+          processedImages = images.map(img => imageMap.get(img.id) || img);
+          
+          console.log(`✅ Pre-cropped ${croppedImages.length} images for slideshow creation`);
+          
+        } catch (cropError) {
+          console.warn('⚠️ Failed to pre-crop images, proceeding with original images:', cropError);
+          // Continue with original images if cropping fails
+        }
+      }
 
       // Create condensed slides (text consolidated into images) for slideshow display
-      const condensedSlides = await this.createCondensedSlides(images, textOverlays, finalAspectRatio);
+      const condensedSlides = await this.createCondensedSlides(processedImages, textOverlays, finalAspectRatio);
 
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
@@ -276,10 +307,11 @@ async saveSlideshow(
         folder_id: null // Initialize with no folder
       };
 
-      console.log('✅ Slideshow object created with imgbb URLs:', {
+      console.log('✅ Enhanced slideshow object created with smart cropping:', {
         id: slideshow.id,
         title: slideshow.title,
         condensedSlidesCount: slideshow.condensedSlides.length,
+        aspectRatio: slideshow.aspectRatio,
         hasImgbbUrls: slideshow.condensedSlides.every(slide => slide.condensedImageUrl?.includes('i.ibb.co'))
       });
 
@@ -311,8 +343,8 @@ async saveSlideshow(
         // Don't fail the entire save operation if file export fails
       }
 
-      console.log('✅💾 Optimized slideshow saved successfully:', slideshow.title, 'with', optimizedCondensedSlides.length, 'slides (imgbb URLs)');
-      console.log('🎯 Slideshow ID for file browser:', slideshow.id);
+      console.log('✅💾 Enhanced slideshow saved successfully:', slideshow.title, 'with', optimizedCondensedSlides.length, 'slides (smart cropped, imgbb URLs)');
+      console.log('🎯 Slideshow ready for posting with aspect ratio:', slideshow.aspectRatio);
 
       return slideshow;
     } catch (error) {
