@@ -23,10 +23,25 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
     const { user, signOut } = useAuth();
     const { theme } = useTheme();
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [rateLimitCountdown, setRateLimitCountdown] = useState<string>('');
 
     const handleSignOut = async () => {
         await signOut();
     };
+
+    // Listen for rate limit events from BulkPostizPoster
+    useEffect(() => {
+        const handleRateLimitUpdate = (event: CustomEvent) => {
+            const { countdown } = event.detail;
+            setRateLimitCountdown(countdown);
+        };
+
+        window.addEventListener('rateLimitUpdate', handleRateLimitUpdate as EventListener);
+
+        return () => {
+            window.removeEventListener('rateLimitUpdate', handleRateLimitUpdate as EventListener);
+        };
+    }, []);
 
     const navigationItems = [
         {
@@ -271,7 +286,7 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
             >
                 <div className="px-6 lg:px-8 py-1">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <motion.div 
+                        <motion.div
                             className="flex items-center space-x-4"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
@@ -282,7 +297,14 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
                                 <span>Connected</span>
                             </span>
                             <span>•</span>
-                            <span>Ready to create amazing content</span>
+                            {rateLimitCountdown ? (
+                                <span className="flex items-center space-x-1 text-yellow-500">
+                                    <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                                    <span>Rate limit: {rateLimitCountdown}</span>
+                                </span>
+                            ) : (
+                                <span>Ready to create amazing content</span>
+                            )}
                         </motion.div>
                         <motion.div
                             initial={{ opacity: 0 }}

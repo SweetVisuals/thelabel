@@ -76,10 +76,42 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     totalPosts: number;
   } | null>(null);
 
+  // Rate limit state
+  const [rateLimitResetTime, setRateLimitResetTime] = useState<Date | null>(null);
+  const [countdown, setCountdown] = useState('');
+
   useEffect(() => {
     loadProfiles();
     generatePostingSchedule();
   }, [slideshows, postingStrategy, intervalHours, startTime]);
+
+  // Countdown effect for rate limit
+  useEffect(() => {
+    if (!rateLimitResetTime) return;
+
+    const interval = setInterval(() => {
+      const now = new Date();
+      const timeLeft = rateLimitResetTime.getTime() - now.getTime();
+
+      if (timeLeft <= 0) {
+        setCountdown('');
+        setRateLimitResetTime(null);
+        // Dispatch event to clear header countdown
+        window.dispatchEvent(new CustomEvent('rateLimitUpdate', { detail: { countdown: '' } }));
+        clearInterval(interval);
+      } else {
+        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+        const countdownStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        setCountdown(countdownStr);
+        // Dispatch event to update header countdown
+        window.dispatchEvent(new CustomEvent('rateLimitUpdate', { detail: { countdown: countdownStr } }));
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [rateLimitResetTime]);
 
   const loadProfiles = async () => {
     setIsLoadingProfiles(true);
@@ -255,7 +287,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   };
 
   const postSingleSlideshow = async (
-    slideshow: SlideshowMetadata, 
+    slideshow: SlideshowMetadata,
     scheduledAt?: Date,
     postNow: boolean = false
   ): Promise<{ success: boolean; postId?: string; error?: string }> => {
@@ -268,10 +300,10 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       });
 
       const captionText = slideshowService.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags);
-      
+
       // Upload images to Postiz storage
       const postizMedia = await postizUploadService.uploadImagesToPostizStorage(slideshow);
-      
+
       if (postizMedia.length === 0) {
         throw new Error('No images were successfully uploaded to Postiz storage');
       }
@@ -305,9 +337,19 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
     } catch (error) {
       console.error(`Failed to post slideshow ${slideshow.title}:`, error);
+
+      // Check if it's a rate limit error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('too many requests')) {
+        // Set rate limit reset time to 1 hour from now
+        const resetTime = new Date();
+        resetTime.setHours(resetTime.getHours() + 1);
+        setRateLimitResetTime(resetTime);
+      }
+
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error'
+        error: errorMessage
       };
     }
   };
@@ -315,11 +357,22 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   const handleBulkPost = async () => {
     const validationError = validateForm();
     if (validationError) {
-      setPostResult({ 
-        success: false, 
-        message: validationError, 
-        completedPosts: 0, 
-        totalPosts: slideshows.length 
+      setPostResult({
+        success: false,
+        message: validationError,
+        completedPosts: 0,
+        totalPosts: slideshows.length
+      });
+      return;
+    }
+
+    // Check if rate limit is active
+    if (rateLimitResetTime && countdown) {
+      setPostResult({
+        success: false,
+        message: `Rate limit active. Please wait ${countdown} before posting again.`,
+        completedPosts: 0,
+        totalPosts: slideshows.length
       });
       return;
     }
@@ -334,9 +387,9 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       for (let i = 0; i < postingSchedule.length; i++) {
         const scheduleItem = postingSchedule[i];
         setCurrentPostIndex(i);
-        
+
         // Update status to posting
-        setPostingSchedule(prev => prev.map((item, index) => 
+        setPostingSchedule(prev => prev.map((item, index) =>
           index === i ? { ...item, status: 'posting' as const } : item
         ));
 
@@ -355,23 +408,34 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
         if (result.success) {
           // Update status to success
-          setPostingSchedule(prev => prev.map((item, index) => 
-            index === i ? { 
-              ...item, 
-              status: 'success' as const, 
-              postId: result.postId 
+          setPostingSchedule(prev => prev.map((item, index) =>
+            index === i ? {
+              ...item,
+              status: 'success' as const,
+              postId: result.postId
             } : item
           ));
           postIds.push(result.postId!);
         } else {
           // Update status to error
-          setPostingSchedule(prev => prev.map((item, index) => 
-            index === i ? { 
-              ...item, 
-              status: 'error' as const, 
-              error: result.error 
+          setPostingSchedule(prev => prev.map((item, index) =>
+            index === i ? {
+              ...item,
+              status: 'error' as const,
+              error: result.error
             } : item
           ));
+
+          // If rate limit error, stop the bulk posting
+          if (result.error && (result.error.toLowerCase().includes('rate limit') || result.error.toLowerCase().includes('too many requests'))) {
+            setPostResult({
+              success: false,
+              message: `Rate limit hit during posting. ${completedCount} posts completed.`,
+              completedPosts: completedCount,
+              totalPosts: slideshows.length
+            });
+            return;
+          }
         }
 
         completedCount++;
@@ -379,7 +443,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         // Update overall progress
         setPostResult({
           success: completedCount === slideshows.length,
-          message: completedCount === slideshows.length 
+          message: completedCount === slideshows.length
             ? `🎉 Successfully posted all ${completedCount} slideshow(s)!`
             : `📤 Posted ${completedCount}/${slideshows.length} slideshow(s)...`,
           completedPosts: completedCount,
@@ -860,6 +924,21 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
       )}
 
+      {/* Rate Limit Alert */}
+      {rateLimitResetTime && countdown && (
+        <div className="p-3 rounded-lg border bg-yellow-900/20 border-yellow-700 text-yellow-200 space-y-2">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4" />
+            <span className="text-sm font-medium">
+              Rate limit hit - try again in {countdown}
+            </span>
+          </div>
+          <div className="text-sm">
+            TikTok rate limit reached. Please wait for the countdown to complete before posting again.
+          </div>
+        </div>
+      )}
+
       <Separator />
 
       {/* Action Buttons - Sticky at bottom */}
@@ -867,13 +946,18 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         <div className="flex gap-3">
           <Button
             onClick={handleBulkPost}
-            disabled={isPosting || selectedProfiles.length === 0 || slideshows.length === 0}
+            disabled={isPosting || selectedProfiles.length === 0 || slideshows.length === 0 || !!(rateLimitResetTime && countdown)}
             className="flex-1 btn-modern bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground font-medium py-2 shadow-lg hover:shadow-xl transition-all duration-300"
           >
             {isPosting ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                 Posting ({currentPostIndex + 1}/{slideshows.length})...
+              </>
+            ) : rateLimitResetTime && countdown ? (
+              <>
+                <Clock className="w-4 h-4 mr-2" />
+                Rate Limited ({countdown})
               </>
             ) : (
               <>
