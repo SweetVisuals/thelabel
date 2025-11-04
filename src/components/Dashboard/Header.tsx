@@ -29,8 +29,29 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
         await signOut();
     };
 
-    // Listen for rate limit events from BulkPostizPoster
+    // Listen for rate limit events from BulkPostizPoster and load initial state
     useEffect(() => {
+        const loadInitialRateLimitState = async () => {
+            if (user?.id) {
+                try {
+                    const { rateLimitService } = await import('../../lib/supabase');
+                    const rateLimitState = await rateLimitService.getRateLimit(user.id, 'tiktok');
+
+                    if (rateLimitState.isLimited && rateLimitState.timeLeft > 0) {
+                        const hours = Math.floor(rateLimitState.timeLeft / (1000 * 60 * 60));
+                        const minutes = Math.floor((rateLimitState.timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                        const seconds = Math.floor((rateLimitState.timeLeft % (1000 * 60)) / 1000);
+                        const countdownStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+                        setRateLimitCountdown(countdownStr);
+                    }
+                } catch (error) {
+                    console.error('Failed to load initial rate limit state:', error);
+                }
+            }
+        };
+
+        loadInitialRateLimitState();
+
         const handleRateLimitUpdate = (event: CustomEvent) => {
             const { countdown } = event.detail;
             setRateLimitCountdown(countdown);
@@ -41,7 +62,7 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
         return () => {
             window.removeEventListener('rateLimitUpdate', handleRateLimitUpdate as EventListener);
         };
-    }, []);
+    }, [user?.id]);
 
     const navigationItems = [
         {

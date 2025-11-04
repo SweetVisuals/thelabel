@@ -83,19 +83,25 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   useEffect(() => {
     loadProfiles();
     generatePostingSchedule();
+    loadRateLimitState();
   }, [slideshows, postingStrategy, intervalHours, startTime]);
 
   // Countdown effect for rate limit
   useEffect(() => {
     if (!rateLimitResetTime) return;
 
-    const interval = setInterval(() => {
+    const interval = setInterval(async () => {
       const now = new Date();
       const timeLeft = rateLimitResetTime.getTime() - now.getTime();
 
       if (timeLeft <= 0) {
         setCountdown('');
         setRateLimitResetTime(null);
+        // Clear rate limit from database when it expires
+        if (user?.id) {
+          const { rateLimitService } = await import('../../lib/supabase');
+          await rateLimitService.clearRateLimit(user.id, 'tiktok');
+        }
         // Dispatch event to clear header countdown
         window.dispatchEvent(new CustomEvent('rateLimitUpdate', { detail: { countdown: '' } }));
         clearInterval(interval);
@@ -111,7 +117,24 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [rateLimitResetTime]);
+  }, [rateLimitResetTime, user?.id]);
+
+  const loadRateLimitState = async () => {
+    if (!user?.id) return;
+
+    try {
+      const { rateLimitService } = await import('../../lib/supabase');
+      const rateLimitState = await rateLimitService.getRateLimit(user.id, 'tiktok');
+
+      if (rateLimitState.isLimited && rateLimitState.resetAt) {
+        setRateLimitResetTime(rateLimitState.resetAt);
+      } else {
+        setRateLimitResetTime(null);
+      }
+    } catch (error) {
+      console.error('Failed to load rate limit state:', error);
+    }
+  };
 
   const loadProfiles = async () => {
     setIsLoadingProfiles(true);
@@ -341,6 +364,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       // Check if it's a rate limit error
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('too many requests')) {
+        // Store rate limit in database and set local state
+        if (user?.id) {
+          const { rateLimitService } = await import('../../lib/supabase');
+          await rateLimitService.setRateLimit(user.id, 'tiktok', 60); // 60 minutes = 1 hour
+        }
+
         // Set rate limit reset time to 1 hour from now
         const resetTime = new Date();
         resetTime.setHours(resetTime.getHours() + 1);

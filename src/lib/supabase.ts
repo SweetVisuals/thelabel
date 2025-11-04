@@ -201,3 +201,82 @@ export const authService = {
     return authSubscription;
   }
 };
+
+// Rate limit service for managing TikTok rate limit states
+export const rateLimitService = {
+  async setRateLimit(userId: string, platform: string = 'tiktok', durationMinutes: number = 60) {
+    try {
+      const rateLimitResetAt = new Date();
+      rateLimitResetAt.setMinutes(rateLimitResetAt.getMinutes() + durationMinutes);
+
+      const { error } = await supabase
+        .from('rate_limits')
+        .upsert({
+          user_id: userId,
+          platform,
+          rate_limit_hit_at: new Date().toISOString(),
+          rate_limit_reset_at: rateLimitResetAt.toISOString()
+        });
+
+      if (error) throw error;
+
+      console.log(`✅ Rate limit set for user ${userId} on ${platform}, resets at ${rateLimitResetAt.toISOString()}`);
+      return { success: true, resetAt: rateLimitResetAt };
+    } catch (error) {
+      console.error('❌ Failed to set rate limit:', error);
+      return { success: false, error };
+    }
+  },
+
+  async getRateLimit(userId: string, platform: string = 'tiktok') {
+    try {
+      const { data, error } = await supabase
+        .from('rate_limits')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('platform', platform)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "not found"
+        throw error;
+      }
+
+      if (!data) {
+        return { isLimited: false, resetAt: null, timeLeft: 0 };
+      }
+
+      const now = new Date();
+      const resetAt = new Date(data.rate_limit_reset_at);
+      const isLimited = now < resetAt;
+      const timeLeft = isLimited ? resetAt.getTime() - now.getTime() : 0;
+
+      return {
+        isLimited,
+        resetAt,
+        timeLeft,
+        hitAt: new Date(data.rate_limit_hit_at)
+      };
+    } catch (error) {
+      console.error('❌ Failed to get rate limit:', error);
+      return { isLimited: false, resetAt: null, timeLeft: 0, error };
+    }
+  },
+
+  async clearRateLimit(userId: string, platform: string = 'tiktok') {
+    try {
+      const { error } = await supabase
+        .from('rate_limits')
+        .delete()
+        .eq('user_id', userId)
+        .eq('platform', platform);
+
+      if (error) throw error;
+
+      console.log(`✅ Rate limit cleared for user ${userId} on ${platform}`);
+      return { success: true };
+    } catch (error) {
+      console.error('❌ Failed to clear rate limit:', error);
+      return { success: false, error };
+    }
+  }
+};
