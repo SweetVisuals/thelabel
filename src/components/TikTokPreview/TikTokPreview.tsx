@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Play, Pause, Volume2, VolumeX, Download, Edit3, Filter, Type, Crop, Music, Sparkles, Settings, Share2, Heart, MessageCircle, Repeat2, X, ChevronLeft, ChevronRight, Shuffle, Layers, Zap, Palette, Wand2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { AspectRatioSelector } from '@/components/ui/aspectRatioSelector';
@@ -99,6 +99,16 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   const [activeEditTab, setActiveEditTab] = useState<'text' | 'effects' | 'settings'>('text');
   const [localTextOverlays, setLocalTextOverlays] = useState<TextOverlay[]>(textOverlays);
   const [currentAspectRatio, setCurrentAspectRatio] = useState(aspectRatio);
+  const [showAspectRatioSelector, setShowAspectRatioSelector] = useState(false);
+  const [isDraggingText, setIsDraggingText] = useState(false);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [editingTextValue, setEditingTextValue] = useState('');
+
+  // Check if any text overlay is near center
+  const isTextNearCenter = textOverlays.some(overlay =>
+    overlay.slideIndex === currentSlide &&
+    (Math.abs(overlay.x - 50) <= 2 || Math.abs(overlay.y - 50) <= 2)
+  );
 
   useEffect(() => {
     setLocalTextOverlays(textOverlays);
@@ -107,6 +117,21 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   useEffect(() => {
     setCurrentAspectRatio(aspectRatio);
   }, [aspectRatio]);
+
+  // Listen for aspect ratio changes from FileBrowser toolbar
+  useEffect(() => {
+    const handleAspectRatioChange = (event: CustomEvent) => {
+      const { aspectRatio } = event.detail;
+      setCurrentAspectRatio(aspectRatio);
+      onAspectRatioChange?.(aspectRatio);
+    };
+
+    window.addEventListener('tiktokAspectRatioChange', handleAspectRatioChange as EventListener);
+
+    return () => {
+      window.removeEventListener('tiktokAspectRatioChange', handleAspectRatioChange as EventListener);
+    };
+  }, [onAspectRatioChange]);
 
   useEffect(() => {
     console.log('📱 TikTokPreview Props Debug:', {
@@ -238,6 +263,14 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
     return { slideshowImages: imagesToProcess, originalSlidesCount: originalCount };
   }, [images, selectedImages, currentSlideshow, isRemixed, remixedSlideshowImages, cutLength]);
 
+  // Synchronize currentSlide with external changes and ensure it stays within bounds
+  useEffect(() => {
+    if (slideshowImages.length > 0 && currentSlide >= slideshowImages.length) {
+      setCurrentSlide(0);
+      onCurrentSlideChange?.(0);
+    }
+  }, [slideshowImages.length, currentSlide, onCurrentSlideChange]);
+
   // Auto-play functionality
   useEffect(() => {
     if (isPlaying && slideshowImages.length > 1) {
@@ -267,9 +300,12 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       hasCurrentSlideshow: !!currentSlideshow,
       previewMode,
       currentSlide,
+      textOverlaysCount: textOverlays?.length || 0,
+      textOverlaysForCurrentSlide: textOverlays?.filter(overlay => overlay.slideIndex === currentSlide).length || 0,
+      firstTextOverlay: textOverlays?.[0],
       firstImageUrl: slideshowImages[0]?.url?.substring(0, 50) + '...'
     });
-  }, [slideshowImages, selectedImages, currentSlideshow, previewMode, currentSlide, originalSlidesCount]);
+  }, [slideshowImages, selectedImages, currentSlideshow, previewMode, currentSlide, originalSlidesCount, textOverlays]);
 
   // Render the TikTok preview interface
   const renderTikTokPreview = () => {
@@ -301,8 +337,27 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       );
     }
 
+    // Calculate aspect ratio for image cropping (not container)
+    const getAspectRatioStyle = () => {
+      if (currentAspectRatio === 'free') {
+        return {
+          objectFit: 'contain' as const,
+          objectPosition: 'center' as const,
+        };
+      }
+
+      const [width, height] = currentAspectRatio.split(':').map(Number);
+      const aspectRatio = width / height;
+
+      return {
+        aspectRatio,
+        objectFit: 'cover' as const,
+        objectPosition: 'center' as const,
+      };
+    };
+    
     return (
-      <div className="aspect-[9/16] w-full max-w-md mx-auto bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-purple-500/10 border border-purple-500/20 rounded-2xl overflow-hidden relative">
+      <div className={`w-full max-w-md mx-auto bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-purple-500/10 border border-purple-500/20 rounded-2xl overflow-hidden relative aspect-[9/16]`}>
         {/* TikTok-style header */}
         <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-3 bg-gradient-to-b from-black/60 via-black/30 to-transparent">
           <div className="flex items-center space-x-2">
@@ -323,86 +378,175 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
         <div ref={dragContainerRef} className="relative w-full h-full bg-black overflow-hidden">
           {slideshowImages.length > 0 ? (
             <div className="relative w-full h-full">
-              {/* Current slide display */}
-              <motion.img
-                key={`${currentSlide}-${slideshowImages[currentSlide]?.id || 'empty'}`}
-                src={slideshowImages[currentSlide]?.url}
-                alt={`Slide ${currentSlide + 1}`}
-                className="w-full h-full object-cover"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.5 }}
-              />
+              {/* Current slide display - cropped to aspect ratio */}
+              <div className="relative w-full h-full flex items-center justify-center bg-black">
+                <motion.img
+                  key={`${currentSlide}-${slideshowImages[currentSlide]?.id || 'empty'}-${currentAspectRatio}`}
+                  src={slideshowImages[currentSlide]?.url}
+                  alt={`Slide ${currentSlide + 1}`}
+                  className="max-w-full max-h-full"
+                  style={getAspectRatioStyle()}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5 }}
+                />
+              </div>
+
+              {/* Snap lines - only show during active dragging */}
+              {!previewMode && isDraggingText && (
+                <>
+                  {/* Vertical center line */}
+                  <div className="absolute left-1/2 top-0 bottom-0 w-px bg-blue-500/50 z-10 pointer-events-none" />
+                  {/* Horizontal center line */}
+                  <div className="absolute top-1/2 left-0 right-0 h-px bg-blue-500/50 z-10 pointer-events-none" />
+                </>
+              )}
               
-              {/* Text overlays on current slide - only show for unsaved slideshows */}
-              {/* For saved slideshows, text is already embedded in the condensed images */}
-              {!currentSlideshow && textOverlays
+              {/* Text overlays on current slide - show for both saved slideshows and edit settings */}
+              {(textOverlays || [])
                 .filter(overlay => overlay.slideIndex === currentSlide)
-                .map((overlay) => (
-                  <motion.div
-                    key={overlay.id}
-                    className="absolute cursor-grab"
-                    style={{
-                      x: `${overlay.x}%`,
-                      y: `${overlay.y}%`,
-                      width: `${overlay.width}%`,
-                      height: `${overlay.height}%`,
-                      transform: 'translate(-50%, -50%)',
-                    }}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.3 }}
-                    drag={!previewMode}
-                    dragConstraints={dragContainerRef}
-                    dragElastic={0.2}
-                    onDragEnd={(_, info) => {
-                      if (previewMode) return;
+                .map((overlay) => {
+                  console.log('🎨 Rendering text overlay:', {
+                    id: overlay.id,
+                    text: overlay.text,
+                    slideIndex: overlay.slideIndex,
+                    currentSlide,
+                    x: overlay.x,
+                    y: overlay.y,
+                    color: overlay.color,
+                    outline: overlay.outline,
+                    outlineWidth: overlay.outlineWidth
+                  });
 
-                      const container = dragContainerRef.current;
-                      if (!container) return;
-
-                      const containerRect = container.getBoundingClientRect();
-                      const newX = (info.point.x - containerRect.left) / containerRect.width * 100;
-                      const newY = (info.point.y - containerRect.top) / containerRect.height * 100;
-
-                      // Snapping logic (e.g., snap to a grid or center)
-                      const snapGrid = 5; // Snap every 5%
-                      const snappedX = Math.round(newX / snapGrid) * snapGrid;
-                      const snappedY = Math.round(newY / snapGrid) * snapGrid;
-
-                      const updatedOverlays = textOverlays.map(o =>
-                        o.id === overlay.id
-                          ? { ...o, x: Math.max(0, Math.min(100, snappedX)), y: Math.max(0, Math.min(100, snappedY)) }
-                          : o
-                      );
-                      onTextOverlaysChange?.(updatedOverlays);
-                    }}
-                  >
+                  return (
                     <div
-                      className={cn(
-                        "w-full h-full flex items-center justify-center text-center p-1 overflow-hidden",
-                        overlay.bold && "font-bold",
-                        overlay.italic && "italic",
-                      )}
+                      key={overlay.id}
+                      className="absolute cursor-grab z-20"
                       style={{
-                        color: overlay.color,
-                        fontSize: `${Math.max(10, Math.min(overlay.fontSize, 24))}px`, // Keep text small and within bounds
-                        fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', // Always use TikTok Sans
-                        textAlign: overlay.alignment,
-                        lineHeight: '1.2', // Ensure proper line spacing
-                        whiteSpace: 'pre-wrap', // Respect line breaks from edit settings
-                        wordWrap: 'break-word', // Prevent text overflow
-                        textShadow: overlay.outline
-                          ? `${Math.max(1, overlay.outlineWidth)}px ${Math.max(1, overlay.outlineWidth)}px 0 ${overlay.outlineColor}`
-                          : overlay.glow
-                          ? `0 0 ${Math.max(2, overlay.glowIntensity)}px ${overlay.glowColor}`
-                          : 'none',
+                        left: `${overlay.x}%`,
+                        top: `${overlay.y}%`,
+                        width: `${overlay.width}%`,
+                        height: `${overlay.height}%`,
+                        transform: 'translate(-50%, -50%)',
+                      }}
+                      onMouseDown={(e) => {
+                        if (previewMode) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        setIsDraggingText(true);
+                        
+                        const startX = e.clientX;
+                        const startY = e.clientY;
+                        const startLeft = overlay.x;
+                        const startTop = overlay.y;
+                        const container = dragContainerRef.current;
+                        
+                        if (!container) return;
+                        
+                        const handleMouseMove = (e: MouseEvent) => {
+                          const deltaX = e.clientX - startX;
+                          const deltaY = e.clientY - startY;
+                          
+                          const containerRect = container.getBoundingClientRect();
+                          const deltaXPercent = (deltaX / containerRect.width) * 100;
+                          const deltaYPercent = (deltaY / containerRect.height) * 100;
+                          
+                          const newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
+                          const newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
+                          
+                          const updatedOverlays = textOverlays.map(o =>
+                            o.id === overlay.id
+                              ? { ...o, x: newLeft, y: newTop }
+                              : o
+                          );
+                          onTextOverlaysChange?.(updatedOverlays);
+                        };
+                        
+                        const handleMouseUp = () => {
+                          setIsDraggingText(false);
+                          document.removeEventListener('mousemove', handleMouseMove);
+                          document.removeEventListener('mouseup', handleMouseUp);
+                        };
+                        
+                        document.addEventListener('mousemove', handleMouseMove);
+                        document.addEventListener('mouseup', handleMouseUp);
+                      }}
+                      onDoubleClick={(e) => {
+                        if (previewMode) return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        setEditingTextId(overlay.id);
+                        setEditingTextValue(overlay.text);
                       }}
                     >
-                      {overlay.text}
+                      {editingTextId === overlay.id ? (
+                        <input
+                          type="text"
+                          value={editingTextValue}
+                          onChange={(e) => setEditingTextValue(e.target.value)}
+                          onBlur={() => {
+                            const updatedOverlays = textOverlays.map(o =>
+                              o.id === overlay.id
+                                ? { ...o, text: editingTextValue }
+                                : o
+                            );
+                            onTextOverlaysChange?.(updatedOverlays);
+                            setEditingTextId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.currentTarget.blur();
+                            } else if (e.key === 'Escape') {
+                              setEditingTextId(null);
+                              setEditingTextValue('');
+                            }
+                          }}
+                          className="w-full h-full bg-transparent border-none outline-none text-center p-1"
+                          style={{
+                            color: overlay.color || '#ffffff',
+                            fontSize: `${Math.max(10, Math.min(overlay.fontSize, 24))}px`,
+                            fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                            textAlign: overlay.alignment,
+                            lineHeight: '1.2',
+                            textShadow: overlay.outline
+                              ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
+                              : overlay.glow
+                              ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
+                              : 'none',
+                          }}
+                          autoFocus
+                        />
+                      ) : (
+                        <div
+                          className={cn(
+                            "w-full h-full flex items-center justify-center text-center p-1 overflow-hidden select-none",
+                            overlay.bold && "font-bold",
+                            overlay.italic && "italic",
+                            !previewMode && "cursor-text"
+                          )}
+                          style={{
+                            color: overlay.color || '#ffffff',
+                            fontSize: `${Math.max(10, Math.min(overlay.fontSize, 24))}px`,
+                            fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                            textAlign: overlay.alignment,
+                            lineHeight: '1.2',
+                            whiteSpace: 'pre-wrap',
+                            wordWrap: 'break-word',
+                            textShadow: overlay.outline
+                              ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
+                              : overlay.glow
+                              ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
+                              : 'none',
+                          }}
+                        >
+                          {overlay.text || 'Sample Text'}
+                        </div>
+                      )}
                     </div>
-                  </motion.div>
-                ))
+                  );
+                })
               }
 
               {/* TikTok-style side panel - positioned within video container */}
@@ -441,7 +585,10 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                 {slideshowImages.map((_: any, index: number) => (
                   <button
                     key={index}
-                    onClick={() => setCurrentSlide(index)}
+                    onClick={() => {
+                      setCurrentSlide(index);
+                      onCurrentSlideChange?.(index);
+                    }}
                     className={cn(
                       "w-2 h-2 rounded-full transition-all duration-200",
                       index === currentSlide
@@ -456,14 +603,22 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
               {slideshowImages.length > 1 && (
                 <>
                   <button
-                    onClick={() => setCurrentSlide(Math.max(0, currentSlide - 1))}
+                    onClick={() => {
+                      const newSlide = Math.max(0, currentSlide - 1);
+                      setCurrentSlide(newSlide);
+                      onCurrentSlideChange?.(newSlide);
+                    }}
                     disabled={currentSlide === 0}
                     className="absolute left-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
                   >
                     <ChevronLeft className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => setCurrentSlide(Math.min(slideshowImages.length - 1, currentSlide + 1))}
+                    onClick={() => {
+                      const newSlide = Math.min(slideshowImages.length - 1, currentSlide + 1);
+                      setCurrentSlide(newSlide);
+                      onCurrentSlideChange?.(newSlide);
+                    }}
                     disabled={currentSlide === slideshowImages.length - 1}
                     className="absolute right-16 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
                   >
@@ -523,8 +678,11 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   };
 
   return (
-    <div className="h-full w-full flex items-center justify-center bg-black/20 rounded-2xl p-6">
-      {renderTikTokPreview()}
+    <div className="h-full w-full flex flex-col items-center justify-center bg-black/20 rounded-2xl p-6">
+      {/* Main preview container */}
+      <div className="relative">
+        {renderTikTokPreview()}
+      </div>
     </div>
   );
 };

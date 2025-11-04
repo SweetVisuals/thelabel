@@ -6,17 +6,20 @@ import { useTheme } from "../../contexts/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, MoveRight, X, LogOut, User, Folder, Home, ChevronRight, Sparkles } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from "@/lib/utils";
 
-interface HeaderProps {
-  currentFolderId?: string | null;
-  folders?: any[];
-  onNavigateUp?: () => void;
+interface FolderPathItem {
+  id: string;
+  name: string;
 }
 
-function Header1({ currentFolderId, folders = [], onNavigateUp }: HeaderProps) {
+interface HeaderProps {
+  path: FolderPathItem[];
+  onNavigateToFolder?: (folderId: string | null) => void;
+}
+
+function Header1({ path, onNavigateToFolder }: HeaderProps) {
     const { user, signOut } = useAuth();
     const { theme } = useTheme();
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -77,11 +80,9 @@ function Header1({ currentFolderId, folders = [], onNavigateUp }: HeaderProps) {
         },
     ];
 
-    const currentFolder = folders.find((f: any) => f.id === currentFolderId);
-
     return (
         <>
-            <motion.header 
+            <motion.header
                 className="w-full bg-gradient-to-r from-background via-background/95 to-background/90 backdrop-blur-xl border-b border-border/50 relative overflow-hidden"
                 initial={{ y: -50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
@@ -112,34 +113,42 @@ function Header1({ currentFolderId, folders = [], onNavigateUp }: HeaderProps) {
                             </motion.div>
 
                             {/* Breadcrumb */}
-                            {currentFolderId && (
-                                <motion.div 
-                                    className="flex items-center space-x-2 text-sm"
-                                    initial={{ x: -20, opacity: 0 }}
-                                    animate={{ x: 0, opacity: 1 }}
-                                    transition={{ delay: 0.2 }}
+                            <motion.div
+                                className="flex items-center space-x-2 text-sm"
+                                initial={{ x: -20, opacity: 0 }}
+                                animate={{ x: 0, opacity: 1 }}
+                                transition={{ delay: 0.2 }}
+                            >
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onNavigateToFolder?.(null)}
+                                    className="text-muted-foreground hover:text-foreground hover:bg-accent/50 px-3 py-2 h-8 rounded-full transition-all duration-300 hover-lift"
                                 >
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={onNavigateUp}
-                                        className="text-muted-foreground hover:text-foreground hover:bg-accent/50 px-3 py-2 h-8 rounded-full transition-all duration-300 hover-lift"
-                                    >
-                                        <Home className="w-4 h-4 mr-2" />
-                                        Back
-                                    </Button>
-                                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                                    <motion.div 
-                                        className="flex items-center space-x-2 bg-accent/30 px-3 py-1 rounded-full border border-border/50"
-                                        whileHover={{ scale: 1.02 }}
-                                    >
-                                        <Folder className="w-4 h-4 text-primary" />
-                                        <span className="font-medium text-foreground truncate max-w-32">
-                                            {currentFolder?.name}
-                                        </span>
-                                    </motion.div>
-                                </motion.div>
-                            )}
+                                    <Home className="w-4 h-4 mr-2" />
+                                    Home
+                                </Button>
+                                {path.map((folder, index) => (
+                                    <div key={folder.id} className="flex items-center space-x-2">
+                                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                        <motion.div
+                                            className={cn(
+                                                "flex items-center space-x-2 px-3 py-1 rounded-full border border-border/50",
+                                                index === path.length - 1
+                                                    ? "bg-accent/30"
+                                                    : "bg-transparent hover:bg-accent/20 cursor-pointer"
+                                            )}
+                                            whileHover={{ scale: 1.02 }}
+                                            onClick={() => onNavigateToFolder?.(folder.id)}
+                                        >
+                                            <Folder className="w-4 h-4 text-primary" />
+                                            <span className="font-medium text-foreground truncate max-w-32">
+                                                {folder.name}
+                                            </span>
+                                        </motion.div>
+                                    </div>
+                                ))}
+                            </motion.div>
                         </div>
 
                         {/* Right Section - User Info & Actions */}
@@ -223,27 +232,25 @@ function Header1({ currentFolderId, folders = [], onNavigateUp }: HeaderProps) {
                                         transition={{ delay: index * 0.1 }}
                                     >
                                         {item.href ? (
-                                            <Link
-                                                to={item.href}
-                                                className="block py-2 text-foreground hover:text-primary transition-colors duration-300"
+                                            <button
+                                                className="block py-2 text-foreground hover:text-primary transition-colors duration-300 text-left"
                                                 onClick={() => setMobileMenuOpen(false)}
                                             >
                                                 {item.title}
-                                            </Link>
+                                            </button>
                                         ) : (
                                             <div className="space-y-2">
                                                 <p className="text-sm font-medium text-muted-foreground py-2">
                                                     {item.title}
                                                 </p>
                                                 {item.items?.map((subItem) => (
-                                                    <Link
+                                                    <button
                                                         key={subItem.title}
-                                                        to={subItem.href}
-                                                        className="block py-1 pl-4 text-sm text-foreground/80 hover:text-primary transition-colors duration-300"
+                                                        className="block py-1 pl-4 text-sm text-foreground/80 hover:text-primary transition-colors duration-300 text-left"
                                                         onClick={() => setMobileMenuOpen(false)}
                                                     >
                                                         {subItem.title}
-                                                    </Link>
+                                                    </button>
                                                 ))}
                                             </div>
                                         )}

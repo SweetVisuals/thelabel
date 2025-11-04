@@ -7,7 +7,7 @@ import { slideshowService } from '../../lib/slideshowService';
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { PostizPoster } from '../Postiz/PostizPoster';
-import { TemplateManager } from './TemplateManager';
+import { AspectRatioSelector } from '../ui/aspectRatioSelector';
 
 interface SlideshowManagerProps {
    images: UploadedImage[];
@@ -28,7 +28,6 @@ interface SlideshowManagerProps {
    onAspectRatioChange: (ratio: string) => void;
    onTransitionEffectChange: (effect: 'fade' | 'slide' | 'zoom') => void;
    onMusicEnabledChange: (enabled: boolean) => void;
-   onImagesSelectForBulk: (images: UploadedImage[]) => void;
    onTemplateApplied?: (result: TemplateApplicationResult) => void;
    currentSlideshow?: SlideshowMetadata | null;
  }
@@ -52,7 +51,6 @@ export const SlideshowManager: React.FC<SlideshowManagerProps> = ({
    onAspectRatioChange,
    onTransitionEffectChange,
    onMusicEnabledChange,
-   onImagesSelectForBulk,
    onTemplateApplied,
    currentSlideshow,
  }) => {
@@ -268,6 +266,7 @@ export const SlideshowManager: React.FC<SlideshowManagerProps> = ({
             />
           </div>
 
+
           <Button
             onClick={handleSaveSlideshow}
             disabled={isSaving || !user || selectedImages.length === 0}
@@ -364,52 +363,7 @@ export const SlideshowManager: React.FC<SlideshowManagerProps> = ({
         </div>
       )}
 
-      {/* Template Manager */}
-      <Separator />
       
-      <TemplateManager
-        currentSlideshow={currentSlideshow}
-        uploadedImages={images}
-        selectedImages={selectedImages}
-        currentTitle={title}
-        currentPostTitle={postTitle}
-        currentCaption={caption}
-        currentHashtags={hashtags}
-        currentTextOverlays={textOverlays}
-        currentAspectRatio={aspectRatio}
-        currentTransitionEffect={transitionEffect}
-        currentMusicEnabled={musicEnabled}
-        onTemplateApplied={(result) => {
-          if (onTemplateApplied) {
-            onTemplateApplied(result);
-          }
-          if (result.success && result.slideshow) {
-            // Template applied to settings - update the editor with template data
-            const templateData = result.slideshow;
-            
-            // Update all the editor fields with template data
-            onTitleChange(templateData.title);
-            onPostTitleChange(templateData.postTitle || templateData.title);
-            onCaptionChange(templateData.caption);
-            onHashtagsChange(templateData.hashtags);
-            onTextOverlaysChange(templateData.textOverlays);
-            onAspectRatioChange(templateData.aspectRatio);
-            onTransitionEffectChange(templateData.transitionEffect);
-            onMusicEnabledChange(templateData.musicEnabled);
-            
-            setNotification({
-              message: `Template applied to editor! Settings updated for ${result.processedImages} slides.`,
-              type: 'success'
-            });
-          } else {
-            setNotification({
-              message: `Template application failed: ${result.error}`,
-              type: 'error'
-            });
-          }
-        }}
-        onImagesSelectForBulk={onImagesSelectForBulk}
-      />
 
     </div>
   );

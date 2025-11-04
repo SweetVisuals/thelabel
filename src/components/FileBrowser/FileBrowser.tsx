@@ -44,6 +44,7 @@ import { toast } from 'sonner';
 import { PostizPoster } from '../Postiz/PostizPoster';
 import { BulkPostizPoster } from '../Postiz/BulkPostizPoster';
 import { TemplateSelectionDialog } from './TemplateSelectionDialog';
+import { AspectRatioSelector } from '@/components/ui/aspectRatioSelector';
 
 interface FileBrowserProps {
   images: UploadedImage[];
@@ -56,7 +57,6 @@ interface FileBrowserProps {
   onFoldersChange?: (folders: Folder[]) => void;
   currentFolderId?: string | null;
   onCurrentFolderIdChange?: (folderId: string | null) => void;
-  onNavigateUp?: () => void;
   onSlideshowLoad?: (slideshow: SlideshowMetadata) => void;
   onSlideshowUnload?: () => void;
   cutLength?: number;
@@ -118,7 +118,6 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onFoldersChange,
   currentFolderId: externalCurrentFolderId,
   onCurrentFolderIdChange,
-  onNavigateUp,
   onSlideshowLoad,
   onSlideshowUnload,
   cutLength = 5,
@@ -147,6 +146,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [showTemplateSelectionDialog, setShowTemplateSelectionDialog] = useState(false);
   const [randomizeHashtags, setRandomizeHashtags] = useState(false); // New state for randomize hashtags
   const [randomizePictures, setRandomizePictures] = useState(false); // New state for randomize pictures
+  const [tiktokAspectRatio, setTiktokAspectRatio] = useState('9:16'); // State for TikTok aspect ratio
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileTileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [displayedImages, setDisplayedImages] = useState<UploadedImage[]>([]); // Track actual displayed images
@@ -726,11 +726,11 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   };
   const removeSelected = async () => {
     if (selectedImages.length === 0 && selectedSlideshows.length === 0) return;
-    
+
     const imageCount = selectedImages.length;
     const slideshowCount = selectedSlideshows.length;
     const totalCount = imageCount + slideshowCount;
-    
+
     // Create confirmation message
     let confirmMessage = '';
     if (imageCount > 0 && slideshowCount > 0) {
@@ -740,88 +740,65 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     } else {
       confirmMessage = `Are you sure you want to delete ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}? This action cannot be undone.`;
     }
-    
+
     // Show confirmation dialog
     if (!window.confirm(confirmMessage)) {
       return;
     }
-    
-const deletePromise = new Promise<void>(async (resolve, reject) => {
-  try {
-    const deletePromises = [];
-    const errors: string[] = [];
-    
-    // Delete images
-    if (imageCount > 0) {
-      const imageDeletePromises = selectedImages.map(async (id) => {
-        try {
-          await imageService.deleteImage(id);
-        } catch (error) {
-          errors.push(`Failed to delete image: ${error}`);
-          console.error('Failed to delete image:', id, error);
-        }
-      });
-      deletePromises.push(...imageDeletePromises);
-    }
-    
-    // Delete slideshows
-    if (slideshowCount > 0) {
-      const slideshowDeletePromises = selectedSlideshows.map(async (id) => {
-        try {
-          await slideshowService.deleteSlideshow(id);
-        } catch (error) {
-          errors.push(`Failed to delete slideshow: ${error}`);
-          console.error('Failed to delete slideshow:', id, error);
-        }
-      });
-      deletePromises.push(...slideshowDeletePromises);
-    }
-    
-    // Wait for all deletions to complete
-    await Promise.allSettled(deletePromises);
-    
-    // Update local state regardless of individual errors
-    if (imageCount > 0) {
-      const updatedImages = images.filter(img => !selectedImages.includes(img.id));
-      onImagesUploaded(updatedImages);
-      onSelectionChange([]);
-    }
-    
-    if (slideshowCount > 0 && onSlideshowSelectionChange) {
-      onSlideshowSelectionChange([]);
-    }
-    
-    // If there were errors, show them but still resolve
-    if (errors.length > 0) {
-      console.warn('Some deletions failed:', errors);
-      toast.error(`${errors.length} item${errors.length !== 1 ? 's' : ''} failed to delete`);
-    }
-    
-    resolve();
-  } catch (error) {
-    reject(error);
-  }
-});
 
-    // Create dynamic success message based on what's being deleted
-    let successMessage = '';
-    if (imageCount > 0 && slideshowCount > 0) {
-      successMessage = `Successfully deleted ${imageCount} image${imageCount !== 1 ? 's' : ''} and ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}!`;
-    } else if (imageCount > 0) {
-      successMessage = `Successfully deleted ${imageCount} image${imageCount !== 1 ? 's' : ''}!`;
-    } else {
-      successMessage = `Successfully deleted ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}!`;
-    }
-    
-    // Create dynamic loading message
-    let loadingMessage = 'Deleting items...';
-    if (imageCount > 0 && slideshowCount > 0) {
-      loadingMessage = `Deleting ${imageCount} image${imageCount !== 1 ? 's' : ''} and ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}...`;
-    } else if (imageCount > 0) {
-      loadingMessage = `Deleting ${imageCount} image${imageCount !== 1 ? 's' : ''}...`;
-    } else {
-      loadingMessage = `Deleting ${slideshowCount} slideshow${slideshowCount !== 1 ? 's' : ''}...`;
-    }
+    const deletePromise = new Promise<void>(async (resolve, reject) => {
+      try {
+        const deletePromises = [];
+        const errors: string[] = [];
+
+        // Delete images
+        if (imageCount > 0) {
+          const imageDeletePromises = selectedImages.map(async (id) => {
+            try {
+              await imageService.deleteImage(id);
+            } catch (error) {
+              errors.push(`Failed to delete image: ${error}`);
+              console.error('Failed to delete image:', id, error);
+            }
+          });
+          deletePromises.push(...imageDeletePromises);
+        }
+
+        // Delete slideshows
+        if (slideshowCount > 0) {
+          const slideshowDeletePromises = selectedSlideshows.map(async (id) => {
+            try {
+              await slideshowService.deleteSlideshow(id);
+            } catch (error) {
+              errors.push(`Failed to delete slideshow: ${error}`);
+              console.error('Failed to delete slideshow:', id, error);
+            }
+          });
+          deletePromises.push(...slideshowDeletePromises);
+        }
+
+        await Promise.all(deletePromises);
+
+        // Update UI after successful deletion
+        if (imageCount > 0) {
+          onImagesUploaded(images.filter(img => !selectedImages.includes(img.id)));
+        }
+        if (slideshowCount > 0) {
+          onSlideshowSelectionChange?.([]);
+        }
+        onSelectionChange([]);
+
+        // Trigger re-render to update the file list
+        triggerReRender();
+
+        resolve();
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    const loadingMessage = `Deleting ${totalCount} item${totalCount !== 1 ? 's' : ''}...`;
+    const successMessage = `Successfully deleted ${totalCount} item${totalCount !== 1 ? 's' : ''}!`;
 
     toast.promise(deletePromise, {
       loading: loadingMessage,
@@ -1031,7 +1008,6 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
 
   const handleTemplateSelectionConfirm = async (
     templateId: string,
-    aspectRatio: string,
     randomizeHashtags: boolean,
     randomizePictures: boolean,
     selectedHashtags: string[] = []
@@ -1114,59 +1090,36 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
         const slideshowTitle = `Post ${chunkNumber}`;
         const postTitle = template.postTitle || slideshowTitle;
         const caption = template.caption; // Use original caption without numbering
-        
+
         // Use unique hashtag combination for this slide
         let finalHashtags = template.hashtags;
         if (randomizeHashtags && hashtagCombinations.length > 0) {
           finalHashtags = hashtagCombinations[i] || hashtagCombinations[hashtagCombinations.length - 1];
         }
-        
+
         try {
           console.log(`🎬 Creating slideshow ${chunkNumber}/${imageChunks.length}: ${slideshowTitle}`);
 
           let slideshow: SlideshowMetadata;
-          
-          // Check if we need to create with custom aspect ratio
-          if (aspectRatio && aspectRatio !== template.aspectRatio) {
-            // Create slideshow with custom aspect ratio - avoid duplicates by using createOptimizedSlideshow
-            const textOverlays = template.textOverlays.map(overlay => ({
-              ...overlay,
-              id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-            }));
-            
-            slideshow = await slideshowService.createOptimizedSlideshow(
-              slideshowTitle,
-              postTitle,
-              caption,
-              finalHashtags,
-              chunk,
-              textOverlays,
-              aspectRatio,
-              template.transitionEffect,
-              template.musicEnabled,
-              userId
-            );
-          } else {
-            // Use the template application method for standard aspect ratio
-            const result = await slideshowService.applyTemplateToImages(
-              template,
-              chunk,
-              userId,
-              {
-                title: slideshowTitle,
-                caption: caption,
-                hashtags: finalHashtags
-              }
-            );
 
-            if (!result.success || !result.slideshow) {
-              errorCount++;
-              console.error(`❌ Failed to create slideshow ${slideshowTitle}:`, result.error);
-              continue;
-            }
-            
-            slideshow = result.slideshow;
-          }
+          // Use the toolbar's aspect ratio for all slideshows
+          const textOverlays = template.textOverlays.map(overlay => ({
+            ...overlay,
+            id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          }));
+
+          slideshow = await slideshowService.createOptimizedSlideshow(
+            slideshowTitle,
+            postTitle,
+            caption,
+            finalHashtags,
+            chunk,
+            textOverlays,
+            tiktokAspectRatio,
+            template.transitionEffect,
+            template.musicEnabled,
+            userId
+          );
 
           if (slideshow) {
             successCount++;
@@ -1479,8 +1432,6 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
       toast.error('Failed to move item. Please try again.');
     }
   };
-
-  const handleNavigateUp = () => onCurrentFolderIdChange?.(folders.find(f => f.id === currentFolderId)?.parent_id || null);
 
   const handleFolderContextMenu = (folderId: string, x: number, y: number) => {
     setContextMenu({
@@ -1798,6 +1749,24 @@ const deletePromise = new Promise<void>(async (resolve, reject) => {
                   </Button>
                 </motion.div>
               </motion.div>
+
+              {/* TikTok Preview Aspect Ratio Selector */}
+              <div className="relative" style={{ zIndex: 1000 }}>
+                <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                  <AspectRatioSelector
+                    selectedAspectRatio={tiktokAspectRatio}
+                    onAspectRatioChange={(ratio) => {
+                      console.log('🎯 FileBrowser toolbar aspect ratio changed:', ratio);
+                      setTiktokAspectRatio(ratio);
+                      // Dispatch custom event to notify TikTokPreview component
+                      window.dispatchEvent(new CustomEvent('tiktokAspectRatioChange', {
+                        detail: { aspectRatio: ratio }
+                      }));
+                    }}
+                    className="bg-gradient-to-r from-purple-500/20 to-pink-500/10 hover:from-purple-500/30 hover:to-pink-500/20 border border-purple-500/20 shadow-md hover:shadow-lg"
+                  />
+                </motion.div>
+              </div>
             </div>
           </div>
         </motion.div>

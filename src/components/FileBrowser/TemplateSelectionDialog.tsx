@@ -30,33 +30,18 @@ interface HashtagSelectionDialogProps {
 }
 
 interface TemplateSelectionDialogProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm?: (
-    templateId: string,
-    aspectRatio: string,
-    randomizeHashtags: boolean,
-    randomizePictures: boolean,
-    selectedHashtags?: string[]
-  ) => void; // For creating slideshows
-  onApplyToSettings?: (template: SlideshowTemplate, aspectRatio: string) => void; // For applying to edit settings
-  applyToSettingsMode?: boolean; // If true, shows "Apply to Settings" instead of "Create Slideshows"
-}
+   isOpen: boolean;
+   onClose: () => void;
+   onConfirm?: (
+     templateId: string,
+     randomizeHashtags: boolean,
+     randomizePictures: boolean,
+     selectedHashtags?: string[]
+   ) => void; // For creating slideshows
+   onApplyToSettings?: (template: SlideshowTemplate) => void; // For applying to edit settings
+   applyToSettingsMode?: boolean; // If true, shows "Apply to Settings" instead of "Create Slideshows"
+ }
 
-interface AspectRatioOption {
-  value: string;
-  label: string;
-  description: string;
-}
-
-const aspectRatioOptions: AspectRatioOption[] = [
-{ value: '9:16', label: '9:16', description: 'Portrait (TikTok standard)' },
-{ value: '16:9', label: '16:9', description: 'Landscape (YouTube/TikTok)' },
-{ value: '1:1', label: '1:1', description: 'Square (Instagram/Posts)' },
-{ value: '4:5', label: '4:5', description: 'Portrait (Instagram)' },
-{ value: '3:4', label: '3:4', description: 'Portrait (Alternative)' },
-{ value: 'free', label: 'Free', description: 'Use image aspect ratio' }
-];
 
 const HashtagSelectionDialog: React.FC<HashtagSelectionDialogProps> = ({
 isOpen,
@@ -179,23 +164,22 @@ return (
 };
 
 export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  onApplyToSettings,
-  applyToSettingsMode = false
-}) => {
-  const { user } = useAuth();
-  const [templates, setTemplates] = useState<SlideshowTemplate[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
-  const [selectedAspectRatio, setSelectedAspectRatio] = useState<string>('9:16');
-  const [randomizeHashtags, setRandomizeHashtags] = useState(false);
-  const [randomizePictures, setRandomizePictures] = useState(false);
-  const [selectedHashtags, setSelectedHashtags] = useState<string[]>([]);
-  const [showHashtagSelection, setShowHashtagSelection] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
+   isOpen,
+   onClose,
+   onConfirm,
+   onApplyToSettings,
+   applyToSettingsMode = false
+ }) => {
+   const { user } = useAuth();
+   const [templates, setTemplates] = useState<SlideshowTemplate[]>([]);
+   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+   const [randomizeHashtags, setRandomizeHashtags] = useState(false);
+   const [randomizePictures, setRandomizePictures] = useState(false);
+   const [selectedHashtags, setSelectedHashtags] = useState<string[]>([]);
+   const [showHashtagSelection, setShowHashtagSelection] = useState(false);
+   const [isLoading, setIsLoading] = useState(true);
+   const [isConfirming, setIsConfirming] = useState(false);
+   const [expandedTemplates, setExpandedTemplates] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isOpen && user) {
@@ -206,8 +190,6 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
   useEffect(() => {
     if (templates.length > 0 && !selectedTemplate) {
       setSelectedTemplate(templates[0].id);
-      // Set default aspect ratio from first template
-      setSelectedAspectRatio(templates[0].aspectRatio || '9:16');
     }
   }, [templates, selectedTemplate]);
 
@@ -226,24 +208,20 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
-    const template = templates.find(t => t.id === templateId);
-    if (template) {
-      setSelectedAspectRatio(template.aspectRatio || '9:16');
-    }
   };
 
   const handleConfirm = async () => {
     if (!selectedTemplate) return;
-    
+
     setIsConfirming(true);
     try {
       if (applyToSettingsMode && onApplyToSettings) {
         const template = templates.find(t => t.id === selectedTemplate);
         if (template) {
-          await onApplyToSettings(template, selectedAspectRatio);
+          await onApplyToSettings(template);
         }
       } else if (onConfirm) {
-        await onConfirm(selectedTemplate, selectedAspectRatio, randomizeHashtags, randomizePictures, selectedHashtags);
+        await onConfirm(selectedTemplate, randomizeHashtags, randomizePictures, selectedHashtags);
       }
       onClose();
     } catch (error) {
@@ -295,7 +273,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
           <p className="text-sm text-muted-foreground mt-2">
             {applyToSettingsMode
               ? 'Select a template to populate your edit settings'
-              : 'Select a template and configure the aspect ratio to create your slideshow'
+              : 'Select a template to create your slideshow'
             }
           </p>
         </div>
@@ -430,140 +408,102 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                 </div>
               </div>
 
-              {/* Aspect Ratio Selection */}
-              {selectedTemplateData && (
-                <>
-                  <div>
-                    <h4 className="font-medium mb-3 flex items-center">
-                      <Settings className="w-4 h-4 mr-2" />
-                      Aspect Ratio
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                      {aspectRatioOptions.map(option => (
-                        <motion.div
-                          key={option.value}
-                          className={cn(
-                            "border rounded-lg p-2 cursor-pointer transition-all text-center",
-                            selectedAspectRatio === option.value
-                              ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                              : "border-border hover:border-primary/50"
+              {!applyToSettingsMode && (
+                <div>
+                  <h4 className="font-medium mb-3 flex items-center">
+                    <Shuffle className="w-4 h-4 mr-2" />
+                    Randomization Options
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-2 border rounded-lg">
+                      <div>
+                        <label htmlFor="randomize-pictures" className="font-medium text-sm">Randomize Pictures</label>
+                        <p className="text-xs text-muted-foreground">Shuffle the order of images for each slideshow.</p>
+                      </div>
+                      <Switch
+                        id="randomize-pictures"
+                        checked={randomizePictures}
+                        onCheckedChange={setRandomizePictures}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between p-2 border rounded-lg">
+                      <div>
+                        <label htmlFor="randomize-hashtags" className="font-medium text-sm">Randomize Hashtags</label>
+                        <p className="text-xs text-muted-foreground">Use a different set of hashtags for each slide.</p>
+                      </div>
+                      <Switch
+                        id="randomize-hashtags"
+                        checked={randomizeHashtags}
+                        onCheckedChange={setRandomizeHashtags}
+                      />
+                    </div>
+                    {randomizeHashtags && selectedTemplateData && selectedTemplateData.hashtags.length > 0 && (
+                      <div className="p-2 bg-muted/50 rounded-lg">
+                        <h6 className="font-medium text-sm mb-2 flex items-center">
+                          <Tags className="w-4 h-4 mr-2" />
+                          Hashtag Selection
+                        </h6>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {selectedTemplateData.hashtags.slice(0, 6).map(tag => (
+                            <span key={tag} className="bg-primary/10 text-primary px-2 py-1 rounded-full text-xs">
+                              #{tag}
+                            </span>
+                          ))}
+                          {selectedTemplateData.hashtags.length > 6 && (
+                            <span className="text-xs text-muted-foreground px-2 py-1">
+                              +{selectedTemplateData.hashtags.length - 6} more
+                            </span>
                           )}
-                          onClick={() => setSelectedAspectRatio(option.value)}
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
+                        </div>
+                        <Button
+                          onClick={openHashtagSelection}
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
                         >
-                          <div className="font-medium text-sm">{option.label}</div>
-                          <div className="text-xs text-muted-foreground mt-1">{option.description}</div>
-                          {selectedAspectRatio === option.value && (
-                            <CheckCircle className="w-3 h-3 text-primary mx-auto mt-1" />
-                          )}
-                        </motion.div>
-                      ))}
-                    </div>
+                          {selectedHashtags.length > 0
+                            ? `Selected ${selectedHashtags.length} hashtags`
+                            : 'Select Hashtags to Randomize'
+                          }
+                        </Button>
+                      </div>
+                    )}
                   </div>
-
-                  {!applyToSettingsMode && (
-                    <div>
-                      <h4 className="font-medium mb-3 flex items-center">
-                        <Shuffle className="w-4 h-4 mr-2" />
-                        Randomization Options
-                      </h4>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between p-2 border rounded-lg">
-                          <div>
-                            <label htmlFor="randomize-pictures" className="font-medium text-sm">Randomize Pictures</label>
-                            <p className="text-xs text-muted-foreground">Shuffle the order of images for each slideshow.</p>
-                          </div>
-                          <Switch
-                            id="randomize-pictures"
-                            checked={randomizePictures}
-                            onCheckedChange={setRandomizePictures}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between p-2 border rounded-lg">
-                          <div>
-                            <label htmlFor="randomize-hashtags" className="font-medium text-sm">Randomize Hashtags</label>
-                            <p className="text-xs text-muted-foreground">Use a different set of hashtags for each slide.</p>
-                          </div>
-                          <Switch
-                            id="randomize-hashtags"
-                            checked={randomizeHashtags}
-                            onCheckedChange={setRandomizeHashtags}
-                          />
-                        </div>
-                        {randomizeHashtags && selectedTemplateData && selectedTemplateData.hashtags.length > 0 && (
-                          <div className="p-2 bg-muted/50 rounded-lg">
-                            <h6 className="font-medium text-sm mb-2 flex items-center">
-                              <Tags className="w-4 h-4 mr-2" />
-                              Hashtag Selection
-                            </h6>
-                            <div className="flex flex-wrap gap-2 mb-3">
-                              {selectedTemplateData.hashtags.slice(0, 6).map(tag => (
-                                <span key={tag} className="bg-primary/10 text-primary px-2 py-1 rounded-full text-xs">
-                                  #{tag}
-                                </span>
-                              ))}
-                              {selectedTemplateData.hashtags.length > 6 && (
-                                <span className="text-xs text-muted-foreground px-2 py-1">
-                                  +{selectedTemplateData.hashtags.length - 6} more
-                                </span>
-                              )}
-                            </div>
-                            <Button
-                              onClick={openHashtagSelection}
-                              variant="outline"
-                              size="sm"
-                              className="w-full"
-                            >
-                              {selectedHashtags.length > 0
-                                ? `Selected ${selectedHashtags.length} hashtags`
-                                : 'Select Hashtags to Randomize'
-                              }
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Preview */}
-                  <div className="bg-muted/30 rounded-lg p-3">
-                    <h5 className="font-medium mb-2 text-sm">Configuration Preview</h5>
-                    <div className="grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <span className="text-muted-foreground">Template:</span>
-                        <div className="font-medium">{selectedTemplateData.name}</div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Aspect Ratio:</span>
-                        <div className="font-medium">{selectedAspectRatio}</div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Slides:</span>
-                        <div className="font-medium">{selectedTemplateData.slideCount} slides</div>
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">Content:</span>
-                        <div className="font-medium">
-                          {selectedTemplateData.title} + {selectedTemplateData.hashtags.length} hashtags
-                        </div>
-                      </div>
-                      {!applyToSettingsMode && (
-                        <>
-                          <div>
-                            <span className="text-muted-foreground">Randomize Pictures:</span>
-                            <div className="font-medium">{randomizePictures ? 'Enabled' : 'Disabled'}</div>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Randomize Hashtags:</span>
-                            <div className="font-medium">{randomizeHashtags ? 'Enabled' : 'Disabled'}</div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
+
+              {/* Preview */}
+              <div className="bg-muted/30 rounded-lg p-3">
+                <h5 className="font-medium mb-2 text-sm">Configuration Preview</h5>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-muted-foreground">Template:</span>
+                    <div className="font-medium">{selectedTemplateData?.name}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Slides:</span>
+                    <div className="font-medium">{selectedTemplateData?.slideCount} slides</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Content:</span>
+                    <div className="font-medium">
+                      {selectedTemplateData?.title} + {selectedTemplateData?.hashtags.length} hashtags
+                    </div>
+                  </div>
+                  {!applyToSettingsMode && (
+                    <>
+                      <div>
+                        <span className="text-muted-foreground">Randomize Pictures:</span>
+                        <div className="font-medium">{randomizePictures ? 'Enabled' : 'Disabled'}</div>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Randomize Hashtags:</span>
+                        <div className="font-medium">{randomizeHashtags ? 'Enabled' : 'Disabled'}</div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

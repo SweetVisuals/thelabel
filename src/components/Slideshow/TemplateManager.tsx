@@ -230,7 +230,7 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
 
   const handleApply = async () => {
     if (!selectedTemplate) return;
-    
+
     setIsApplying(true);
     try {
       const template = templates.find(t => t.id === selectedTemplate);
@@ -259,12 +259,8 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
     ? uploadedImages.filter(img => selectedImages.includes(img.id))
     : uploadedImages;
 
-  // Filter templates that can be applied based on image count
-  const applicableTemplates = templates.filter(template => {
-    return selectedImages.length > 0
-      ? selectedImages.length === template.slideCount
-      : uploadedImages.length >= template.slideCount;
-  });
+  // Show all templates - image count validation happens in applyTemplateToSettings
+  const applicableTemplates = templates;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -289,17 +285,6 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
               <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">No templates available</p>
               <p className="text-sm text-muted-foreground">Create a template first to use this feature</p>
-            </div>
-          ) : applicableTemplates.length === 0 ? (
-            <div className="text-center py-8">
-              <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-              <p className="text-muted-foreground">No templates match current image count</p>
-              <p className="text-sm text-muted-foreground">
-                {selectedImages.length > 0
-                  ? `Selected ${selectedImages.length} images - templates require exactly ${templates.map(t => t.slideCount).join(', ')} slides`
-                  : `Upload ${templates.map(t => t.slideCount).join(' or ')} images to apply a template`
-                }
-              </p>
             </div>
           ) : (
             <>
@@ -643,7 +628,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       
       if (result.success) {
         setNotification({
-          message: `Template applied to settings! Ready to create ${result.processedImages} slides.`,
+          message: `Template settings loaded! This template requires ${template.slideCount} images. Select images and create your slideshow.`,
           type: 'success'
         });
       } else {

@@ -1632,16 +1632,6 @@ async createOptimizedSlideshow(
         ? images.filter(img => selectedImageIds.includes(img.id))
         : images;
 
-      // Validate that image count matches template slide count
-      if (targetImages.length !== template.slideCount) {
-        return {
-          success: false,
-          error: `Template requires exactly ${template.slideCount} images, but ${targetImages.length} are selected`,
-          processedImages: targetImages.length,
-          totalImages: images.length
-        };
-      }
-
       // Apply template text overlays with new image IDs adapted for the new images
       const adaptedTextOverlays = template.textOverlays.map(overlay => ({
         ...overlay,

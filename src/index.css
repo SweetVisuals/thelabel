@@ -1,11 +1,24 @@
-/* TikTok Sans Font - Placeholder for correct font file */
+/* TikTok Sans Font */
 @font-face {
   font-family: 'TikTok Sans';
-  /*
-    TODO: Replace with the actual URL for TikTok Sans font.
-    For now, the system will fall back to Arial, sans-serif if TikTok Sans is not available.
-  */
+  src: url('https://lf16-tiktok-web.ttwstatic.com/obj/tiktok-web/tiktok/web/node/_next/static/fonts/TikTokDisplay-Regular.woff2') format('woff2');
   font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TikTok Sans';
+  src: url('https://lf16-tiktok-web.ttwstatic.com/obj/tiktok-web/tiktok/web/node/_next/static/fonts/TikTokDisplay-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'TikTok Sans';
+  src: url('https://lf16-tiktok-web.ttwstatic.com/obj/tiktok-web/tiktok/web/node/_next/static/fonts/TikTokDisplay-Bold.woff2') format('woff2');
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }

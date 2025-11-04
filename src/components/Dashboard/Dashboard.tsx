@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useParams } from 'react-router-dom';
 import { Header1 as Header } from './Header';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { FileBrowser } from '../FileBrowser/FileBrowser';
@@ -48,6 +49,12 @@ import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
 import { postizAPI } from '../../lib/postiz';
 import { PostizPoster } from '../Postiz/PostizPoster';
+import { TemplateSelectionDialog } from '../FileBrowser/TemplateSelectionDialog';
+
+interface FolderPathItem {
+  id: string;
+  name: string;
+}
 
 interface TextOverlay {
   id: string;
@@ -77,14 +84,15 @@ interface TextOverlay {
 
 export const Dashboard: React.FC = () => {
     const { user } = useAuth();
-      const [images, setImages] = useState<UploadedImage[]>([]);
-      const [folders, setFolders] = useState<Folder[]>([]);
-      const [selectedImages, setSelectedImages] = useState<string[]>([]);
-      // Track images in selection order
-      const [selectedImagesOrdered, setSelectedImagesOrdered] = useState<string[]>([]);
-      const [selectedSlideshows, setSelectedSlideshows] = useState<string[]>([]);
+    const { folderId } = useParams<{ folderId?: string }>(); // Get folderId from URL
+    const [images, setImages] = useState<UploadedImage[]>([]);
+    const [folders, setFolders] = useState<Folder[]>([]);
+    const [selectedImages, setSelectedImages] = useState<string[]>([]);
+    // Track images in selection order
+    const [selectedImagesOrdered, setSelectedImagesOrdered] = useState<string[]>([]);
+    const [selectedSlideshows, setSelectedSlideshows] = useState<string[]>([]);
     const [editingImage, setEditingImage] = useState<UploadedImage | null>(null);
-    const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+    const [currentFolderId, setCurrentFolderId] = useState<string | null>(folderId || null); // Initialize from URL
     const [currentSlide, setCurrentSlide] = useState(0); // Added currentSlide state
 
     const [sidebarExpanded, setSidebarExpanded] = useState({
@@ -112,11 +120,13 @@ export const Dashboard: React.FC = () => {
   const [cutLength, setCutLength] = useState<number>(5); // Store slideshow limit
   const [currentSlideshow, setCurrentSlideshow] = useState<SlideshowMetadata | null>(null);
   const [currentImages, setCurrentImages] = useState<UploadedImage[]>([]); // Track current folder images
+  const [aspectRatio, setAspectRatio] = useState<string>('9:16'); // Track aspect ratio
 
   // Template functionality
   const [textTemplates, setTextTemplates] = useState<any[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
   const [templateNameInput, setTemplateNameInput] = useState('');
+  const [showTemplateSelection, setShowTemplateSelection] = useState(false);
   const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | null }>({ message: '', type: null });
 
   // Postiz API key state
@@ -126,12 +136,12 @@ export const Dashboard: React.FC = () => {
   const [showPostizPoster, setShowPostizPoster] = useState(false);
   const [showUrlUploader, setShowUrlUploader] = useState(false);
 
-  // Handle images select for bulk operations
-  const handleImagesSelectForBulk = (selectedImages: UploadedImage[]) => {
-    // Update the selected images array
-    const imageIds = selectedImages.map(img => img.id);
-    setSelectedImages(imageIds);
-  };
+  
+
+  // Update currentFolderId when URL param changes
+  useEffect(() => {
+    setCurrentFolderId(folderId || null);
+  }, [folderId]);
 
   // Load saved hashtags and text templates on component mount
   useEffect(() => {
@@ -141,7 +151,7 @@ export const Dashboard: React.FC = () => {
       loadPostizApiKey();
       loadUserSlideshows();
     }
-  }, [user]);
+  }, [user, currentFolderId]); // Add currentFolderId to dependencies
 
   const loadUserSlideshows = async () => {
     if (!user) return;
@@ -303,7 +313,7 @@ export const Dashboard: React.FC = () => {
       outlinePosition: 'outer',
       bold: false,
       italic: false,
-      outline: false,
+      outline: true, // Enable outline by default for better visibility
       glow: false,
       glowColor: '#ffffff',
       glowIntensity: 5,
@@ -534,7 +544,7 @@ export const Dashboard: React.FC = () => {
         }
         break;
       case "Templates":
-        // templates
+        setShowTemplateSelection(true);
         break;
       case "Transitions":
         // transitions
@@ -547,14 +557,61 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const handleNavigateUpFromHeader = () => {
-    const parentId = folders.find((f: Folder) => f.id === currentFolderId)?.parent_id || null;
-    setCurrentFolderId(parentId);
+  // Handle template selection
+  const handleTemplateSelection = async (templateId: string, randomizeHashtags: boolean, randomizePictures: boolean, selectedHashtags?: string[]) => {
+    try {
+      const { slideshowService } = await import('../../lib/slideshowService');
+      const userTemplates = slideshowService.getSavedTemplates(user!.id);
+      const template = userTemplates.find(t => t.id === templateId);
+      
+      if (!template) {
+        setNotification({ message: 'Template not found', type: 'error' });
+        return;
+      }
+
+      // Apply template settings to editor
+      setTitle(template.title);
+      setPostTitle(template.postTitle || template.title);
+      setCaption(template.caption);
+      setHashtags(template.hashtags);
+      setTextOverlays(template.textOverlays || []);
+      setTransitionEffect(template.transitionEffect);
+      setMusicEnabled(template.musicEnabled);
+      setAspectRatio(template.aspectRatio);
+
+      // Clear any current slideshow to exit preview mode
+      setCurrentSlideshow(null);
+
+      // Auto-select appropriate images for the template
+      const currentImages = getCurrentImages();
+      const imagesToSelect = currentImages.slice(0, template.slideCount);
+      const imageIdsToSelect = imagesToSelect.map(img => img.id);
+
+      if (imageIdsToSelect.length > 0) {
+        setSelectedImages(imageIdsToSelect);
+        setSelectedImagesOrdered(imageIdsToSelect);
+      }
+
+      setNotification({ message: `Template "${template.name}" applied to editor!`, type: 'success' });
+    } catch (error) {
+      console.error('Failed to apply template:', error);
+      setNotification({ message: 'Failed to apply template. Please try again.', type: 'error' });
+    }
   };
 
-  const handleCurrentFolderIdChange = (folderId: string | null) => {
-    setCurrentFolderId(folderId);
-  };
+  // Function to construct the full breadcrumb path
+    const getFolderPath = (folderId: string | null, allFolders: Folder[]) => {
+      const path: { id: string; name: string }[] = [];
+      let current = allFolders.find(f => f.id === folderId);
+
+      while (current) {
+        path.unshift({ id: current.id, name: current.name });
+        current = current.parent_id ? allFolders.find(f => f.id === current.parent_id) : undefined;
+      }
+      return path;
+    };
+
+  const folderPath = useMemo(() => getFolderPath(currentFolderId, folders), [currentFolderId, folders]);
 
   const handleSlideshowLoad = (slideshow: SlideshowMetadata) => {
     // Only set as current slideshow if it has actual condensed slides (not a template-only slideshow)
@@ -754,9 +811,8 @@ export const Dashboard: React.FC = () => {
         {/* Main Content */}
         <SidebarInset className="flex-1 h-screen overflow-hidden">
           <Header
-            currentFolderId={currentFolderId}
-            folders={folders}
-            onNavigateUp={handleNavigateUpFromHeader}
+            path={folderPath}
+            onNavigateToFolder={handleCurrentFolderIdChangeWithPreservation}
           />
 
           <main className="flex h-full w-full overflow-hidden">
@@ -772,7 +828,6 @@ export const Dashboard: React.FC = () => {
                   onFoldersChange={setFolders}
                   currentFolderId={currentFolderId}
                   onCurrentFolderIdChange={handleCurrentFolderIdChangeWithPreservation}
-                  onNavigateUp={handleNavigateUpFromHeader}
                   onSlideshowLoad={handleSlideshowLoad}
                   onSlideshowUnload={handleSlideshowUnload}
                   selectedSlideshows={selectedSlideshows}
@@ -796,7 +851,7 @@ export const Dashboard: React.FC = () => {
                 hashtags={hashtags}
                 transitionEffect={transitionEffect}
                 musicEnabled={musicEnabled}
-                aspectRatio="9:16"
+                aspectRatio={aspectRatio}
                 cutLength={cutLength}
                 previewMode={!!currentSlideshow} // Enable preview mode when slideshow is loaded
                 onTextOverlaysChange={setTextOverlays}
@@ -806,6 +861,7 @@ export const Dashboard: React.FC = () => {
                 onHashtagsChange={setHashtags}
                 onTransitionEffectChange={setTransitionEffect}
                 onMusicEnabledChange={setMusicEnabled}
+                onAspectRatioChange={setAspectRatio}
                 onCurrentSlideChange={setCurrentSlide}
                 onImagesUpdate={(updatedImages) => {
                   // Handle image updates for both root and folder images
@@ -855,7 +911,7 @@ export const Dashboard: React.FC = () => {
                   postTitle={postTitle}
                   caption={caption}
                   hashtags={hashtags}
-                  aspectRatio="9:16" // TODO: Get from TikTokPreview
+                  aspectRatio={aspectRatio}
                   transitionEffect={transitionEffect}
                   musicEnabled={musicEnabled}
                   onTitleChange={setTitle}
@@ -863,10 +919,15 @@ export const Dashboard: React.FC = () => {
                   onCaptionChange={setCaption}
                   onHashtagsChange={setHashtags}
                   onTextOverlaysChange={setTextOverlays}
-                  onAspectRatioChange={() => {}} // TODO: Implement aspect ratio change
+                  onAspectRatioChange={(ratio) => {
+                    // Update both local state and TikTok preview with new aspect ratio
+                    setAspectRatio(ratio);
+                    window.dispatchEvent(new CustomEvent('tiktokAspectRatioChange', {
+                      detail: { aspectRatio: ratio }
+                    }));
+                  }}
                   onTransitionEffectChange={setTransitionEffect}
                   onMusicEnabledChange={setMusicEnabled}
-                  onImagesSelectForBulk={handleImagesSelectForBulk}
                   currentSlideshow={currentSlideshow}
                   onTemplateApplied={(result) => {
                     if (result.success && result.slideshow) {
@@ -900,8 +961,8 @@ export const Dashboard: React.FC = () => {
                   }}
                 />
 
-                {/* Text Edit Controls - Only show when not in preview mode */}
-                {!currentSlideshow && (
+                {/* Text Edit Controls - Always show for editing */}
+                {true && (
                   <div className="space-y-3">
                     <h4 className="font-medium text-muted-foreground">Text Editor</h4>
                     <Button
@@ -1115,6 +1176,16 @@ export const Dashboard: React.FC = () => {
                       {showTemplates ? 'Hide' : 'Show'} ({textTemplates.length})
                     </Button>
                   </div>
+                  
+                  {/* Browse Templates Button */}
+                  <Button
+                    onClick={() => setShowTemplateSelection(true)}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    size="sm"
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Browse Templates
+                  </Button>
 
                   {showTemplates && (
                     <div className="space-y-3">
@@ -1478,6 +1549,14 @@ export const Dashboard: React.FC = () => {
           setImages(updatedImages);
         }}
         currentFolderId={currentFolderId}
+      />
+
+      {/* Template Selection Dialog */}
+      <TemplateSelectionDialog
+        isOpen={showTemplateSelection}
+        onClose={() => setShowTemplateSelection(false)}
+        onConfirm={handleTemplateSelection}
+        applyToSettingsMode={true}
       />
       </SidebarProvider>
     </ThemeProvider>
