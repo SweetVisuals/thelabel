@@ -5,7 +5,7 @@ import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { useTheme } from "../../contexts/ThemeContext";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, MoveRight, X, LogOut, User, Folder, Home, ChevronRight, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from "@/lib/utils";
 
