@@ -1401,25 +1401,51 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
    * This method ensures slideshows can be posted without 413 errors
    */
 async createOptimizedSlideshow(
-    title: string,
-    postTitle: string,
-    caption: string,
-    hashtags: string[],
-    images: UploadedImage[],
-    textOverlays: TikTokTextOverlay[],
-    aspectRatio: string,
-    transitionEffect: 'fade' | 'slide' | 'zoom',
-    musicEnabled: boolean,
-    userId: string
-  ): Promise<SlideshowMetadata> {
-    try {
-      console.log('🚀 Starting optimized slideshow creation with immediate imgbb upload...');
+  title: string,
+  postTitle: string,
+  caption: string,
+  hashtags: string[],
+  images: UploadedImage[],
+  textOverlays: TikTokTextOverlay[],
+  aspectRatio: string,
+  transitionEffect: 'fade' | 'slide' | 'zoom',
+  musicEnabled: boolean,
+  userId: string
+): Promise<SlideshowMetadata> {
+  try {
+    console.log('🚀 Starting optimized slideshow creation with smart cropping...');
 
-      // Use the aspect ratio from the first image if available
-      const finalAspectRatio = images[0]?.aspectRatio || aspectRatio;
+    // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
+    let processedImages = images;
+    
+    if (aspectRatio !== 'free' && images.length > 0) {
+      try {
+        console.log('✂️ Pre-cropping images to target aspect ratio before slideshow creation...');
+        
+        // Get image IDs for cropping
+        const imageIds = images.map(img => img.id);
+        
+        // Use enhanced cropping service to crop images
+        const croppedImages = await ImageCroppingService.changeAspectRatio(
+          imageIds,
+          aspectRatio,
+          userId
+        );
+        
+        // Update images array with cropped versions
+        const imageMap = new Map(croppedImages.map(img => [img.id, img]));
+        processedImages = images.map(img => imageMap.get(img.id) || img);
+        
+        console.log(`✅ Pre-cropped ${croppedImages.length} images for slideshow creation`);
+        
+      } catch (cropError) {
+        console.warn('⚠️ Failed to pre-crop images, proceeding with original images:', cropError);
+        // Continue with original images if cropping fails
+      }
+    }
 
-      // Create condensed slides first
-      const condensedSlides = await this.createCondensedSlides(images, textOverlays, finalAspectRatio);
+    // Create condensed slides first with pre-cropped images
+    const condensedSlides = await this.createCondensedSlides(processedImages, textOverlays, aspectRatio);
 
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
@@ -1437,7 +1463,7 @@ async createOptimizedSlideshow(
         hashtags,
         condensedSlides: optimizedCondensedSlides, // These now have imgbb URLs instead of base64!
         textOverlays,
-        aspectRatio: finalAspectRatio,
+        aspectRatio: aspectRatio,
         transitionEffect,
         musicEnabled,
         created_at: new Date().toISOString(),
@@ -1759,6 +1785,7 @@ async createOptimizedSlideshow(
       title?: string;
       caption?: string;
       hashtags?: string[];
+      aspectRatio?: string; // Add aspect ratio override for template application
     }
   ): Promise<TemplateApplicationResult> {
     try {
@@ -1766,6 +1793,8 @@ async createOptimizedSlideshow(
       const finalTitle = customizations?.title || `${template.name} - ${new Date().toLocaleDateString()}`;
       const finalCaption = customizations?.caption || template.caption;
       const finalHashtags = customizations?.hashtags || template.hashtags;
+      // CRITICAL FIX: Use provided aspect ratio or fall back to template aspect ratio
+      const finalAspectRatio = customizations?.aspectRatio || template.aspectRatio || '9:16';
 
       // Determine how many images to use based on template
       const selectedImages = images.slice(0, template.slideCount);
@@ -1785,7 +1814,9 @@ async createOptimizedSlideshow(
         id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       }));
 
-      // Create the slideshow
+      console.log('🎯 Applying template with aspect ratio:', finalAspectRatio);
+
+      // Create the slideshow with the correct aspect ratio
       const slideshow = await this.saveSlideshow(
         finalTitle,
         template.postTitle || finalTitle,
@@ -1793,7 +1824,7 @@ async createOptimizedSlideshow(
         finalHashtags,
         selectedImages,
         adaptedTextOverlays,
-        template.aspectRatio,
+        finalAspectRatio, // Use the final aspect ratio
         template.transitionEffect,
         template.musicEnabled,
         userId
