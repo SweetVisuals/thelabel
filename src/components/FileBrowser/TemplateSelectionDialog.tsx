@@ -211,6 +211,8 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
 
   const handleTemplateSelect = (templateId: string) => {
     setSelectedTemplate(templateId);
+    // Reset aspect ratio override when selecting a different template
+    setAspectRatioOverride('');
   };
 
   const handleConfirm = async () => {
