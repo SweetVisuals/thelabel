@@ -171,14 +171,14 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
     onConfirm,
     onApplyToSettings,
     applyToSettingsMode = false,
-    defaultAspectRatio = '9:16'
+    defaultAspectRatio = ''
   }) => {
    const { user } = useAuth();
    const [templates, setTemplates] = useState<SlideshowTemplate[]>([]);
    const [selectedTemplate, setSelectedTemplate] = useState<string>('');
    const [randomizeHashtags, setRandomizeHashtags] = useState(false);
    const [randomizePictures, setRandomizePictures] = useState(false);
-   const [aspectRatioOverride, setAspectRatioOverride] = useState<string>(defaultAspectRatio);
+   const [aspectRatioOverride, setAspectRatioOverride] = useState<string>('');
    // Removed selectedHashtags and showHashtagSelection as hashtags are now automatically randomized
    const [isLoading, setIsLoading] = useState(true);
    const [isConfirming, setIsConfirming] = useState(false);
@@ -485,7 +485,7 @@ export const TemplateSelectionDialog: React.FC<TemplateSelectionDialogProps> = (
                     <AspectRatioSelector
                       selectedAspectRatio={aspectRatioOverride || selectedTemplateData?.aspectRatio || '9:16'}
                       onAspectRatioChange={(ratio) => {
-                        setAspectRatioOverride(ratio === selectedTemplateData?.aspectRatio ? '' : ratio);
+                        setAspectRatioOverride(ratio);
                       }}
                       className="w-full"
                       showPreview={true}
