@@ -412,7 +412,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     setCurrentPostIndex(0);
 
     try {
-      let completedCount = 0;
+      let successfulCount = 0;
       const postIds: string[] = [];
 
       for (let i = 0; i < postingSchedule.length; i++) {
@@ -447,6 +447,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
             } : item
           ));
           postIds.push(result.postId!);
+          successfulCount++;
         } else {
           // Update status to error
           setPostingSchedule(prev => prev.map((item, index) =>
@@ -461,23 +462,28 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           if (result.error && (result.error.toLowerCase().includes('rate limit') || result.error.toLowerCase().includes('too many requests'))) {
             setPostResult({
               success: false,
-              message: `Rate limit hit during posting. ${completedCount} posts completed.`,
-              completedPosts: completedCount,
+              message: `Rate limit hit during posting. ${successfulCount} posts completed.`,
+              completedPosts: successfulCount,
               totalPosts: slideshows.length
             });
             return;
           }
         }
+      }
 
-        completedCount++;
-
-        // Update overall progress
+      // Set final result only if all posts were attempted
+      if (successfulCount === postingSchedule.length) {
         setPostResult({
-          success: completedCount === slideshows.length,
-          message: completedCount === slideshows.length
-            ? `🎉 Successfully posted all ${completedCount} slideshow(s)!`
-            : `📤 Posted ${completedCount}/${slideshows.length} slideshow(s)...`,
-          completedPosts: completedCount,
+          success: true,
+          message: `🎉 Successfully posted all ${successfulCount} slideshow(s)!`,
+          completedPosts: successfulCount,
+          totalPosts: slideshows.length
+        });
+      } else if (successfulCount > 0) {
+        setPostResult({
+          success: false,
+          message: `📤 Posted ${successfulCount}/${postingSchedule.length} slideshow(s)...`,
+          completedPosts: successfulCount,
           totalPosts: slideshows.length
         });
       }
