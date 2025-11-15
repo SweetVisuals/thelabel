@@ -2,7 +2,7 @@ import { SlideshowMetadata, CondensedSlide, TikTokTextOverlay, UploadedImage, Po
 import { postizAPI } from './postiz';
 import { imageService, ImageCroppingService } from './imageService';
 import { postizUploadService } from './postizUploadService';
-import { uploadToImgbb } from './imgbb';
+import { uploadToFreeImage } from './freeimage';
 
 export class SlideshowService {
   private static instance: SlideshowService;
@@ -742,18 +742,18 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       try {
         console.log(`📤 Uploading slide ${i + 1}/${condensedSlides.length} to imgbb: ${slide.id}`);
         
-        // Upload the condensed image (base64) to imgbb
+        // Upload the condensed image (base64) to FreeImage.host
         const imageFile = await this.dataUrlToFile(slide.condensedImageUrl, `slideshow_slide_${i + 1}.jpg`);
-        const imgbbResponse = await uploadToImgbb(imageFile);
-        
-        // Create optimized slide with imgbb URL
+        const freeImageResponse = await uploadToFreeImage(imageFile);
+
+        // Create optimized slide with FreeImage.host URL
         const optimizedSlide: CondensedSlide = {
           ...slide,
-          condensedImageUrl: imgbbResponse.data.url, // Replace base64 with imgbb URL
+          condensedImageUrl: freeImageResponse.image.url, // Replace base64 with FreeImage.host URL
           originalImageUrl: slide.originalImageUrl // Keep original as backup
         };
-        
-        console.log(`✅ Successfully uploaded slide ${i + 1} to imgbb:`, imgbbResponse.data.url);
+
+        console.log(`✅ Successfully uploaded slide ${i + 1} to FreeImage.host:`, freeImageResponse.image.url);
         optimizedSlides.push(optimizedSlide);
         
       } catch (error) {

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Upload, X, Image as ImageIcon, CheckSquare, Square, Trash2, Play, Settings } from 'lucide-react';
 import { UploadedImage, SlideshowTemplate, TemplateApplicationResult } from '../../types';
-import { uploadToImgbb, getImageDimensions, deleteFromImgbb } from '../../lib/imgbb';
+import { uploadToFreeImage, getImageDimensions } from '../../lib/freeimage';
 import { slideshowService } from '../../lib/slideshowService';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
@@ -64,20 +64,20 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         // Get image dimensions
         const dimensions = await getImageDimensions(file);
 
-        // Upload to Imgbb
-        const imgbbResponse = await uploadToImgbb(file);
+        // Upload to FreeImage.host
+        const freeImageResponse = await uploadToFreeImage(file);
 
         // Save to database
         const { data: dbImage, error: dbError } = await supabase
           .from('images')
           .insert({
             user_id: user.id,
-            filename: imgbbResponse.data.image.filename,
-            file_path: imgbbResponse.data.url,
-            file_size: imgbbResponse.data.size,
-            mime_type: imgbbResponse.data.image.mime,
-            width: imgbbResponse.data.width,
-            height: imgbbResponse.data.height,
+            filename: freeImageResponse.image.name,
+            file_path: freeImageResponse.image.url,
+            file_size: freeImageResponse.image.filesize,
+            mime_type: freeImageResponse.image.mime,
+            width: freeImageResponse.image.width,
+            height: freeImageResponse.image.height,
           })
           .select()
           .single();
@@ -89,15 +89,15 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         return {
           id: dbImage.id,
           file,
-          url: imgbbResponse.data.url,
+          url: freeImageResponse.image.url,
           preview: URL.createObjectURL(file),
-          permanentUrl: imgbbResponse.data.url,
-          deleteUrl: imgbbResponse.data.delete_url,
-          filename: imgbbResponse.data.image.filename,
-          fileSize: imgbbResponse.data.size,
-          mimeType: imgbbResponse.data.image.mime,
-          width: imgbbResponse.data.width,
-          height: imgbbResponse.data.height,
+          permanentUrl: freeImageResponse.image.url,
+          deleteUrl: freeImageResponse.image.delete_url,
+          filename: freeImageResponse.image.name,
+          fileSize: freeImageResponse.image.filesize,
+          mimeType: freeImageResponse.image.mime,
+          width: freeImageResponse.image.width,
+          height: freeImageResponse.image.height,
         } as UploadedImage;
       });
 
@@ -116,10 +116,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     if (!imageToRemove) return;
 
     try {
-      // Delete from Imgbb if delete URL is available
-      if (imageToRemove.deleteUrl) {
-        await deleteFromImgbb(imageToRemove.deleteUrl);
-      }
+      // Note: FreeImage.host delete functionality not implemented yet
+      // Delete URL is available but we don't have a delete function
+      // if (imageToRemove.deleteUrl) {
+      //   await deleteFromFreeImage(imageToRemove.deleteUrl);
+      // }
 
       // Delete from database
       const { error: dbError } = await supabase
@@ -203,10 +204,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         const imageToRemove = images.find(img => img.id === imageId);
         if (!imageToRemove) return;
 
-        // Delete from Imgbb if delete URL is available
-        if (imageToRemove.deleteUrl) {
-          await deleteFromImgbb(imageToRemove.deleteUrl);
-        }
+        // Note: FreeImage.host delete functionality not implemented yet
+        // Delete URL is available but we don't have a delete function
+        // if (imageToRemove.deleteUrl) {
+        //   await deleteFromFreeImage(imageToRemove.deleteUrl);
+        // }
 
         // Delete from database
         const { error: dbError } = await supabase

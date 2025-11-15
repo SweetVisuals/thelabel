@@ -320,24 +320,24 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         if (blob) {
           const editedFile = new File([blob], image.file.name, { type: image.file.type });
 
-          // Upload edited image to imgbb
+          // Upload edited image to FreeImage.host
           try {
-            const { uploadToImgbb } = await import('@/lib/imgbb');
-            const imgbbResponse = await uploadToImgbb(editedFile);
+            const { uploadToFreeImage } = await import('@/lib/freeimage');
+            const freeImageResponse = await uploadToFreeImage(editedFile);
 
             const editedImage: UploadedImage = {
               ...image,
               file: editedFile,
-              url: imgbbResponse.data.url,
-              preview: imgbbResponse.data.url,
-              permanentUrl: imgbbResponse.data.url,
-              deleteUrl: imgbbResponse.data.delete_url,
+              url: freeImageResponse.image.url,
+              preview: freeImageResponse.image.url,
+              permanentUrl: freeImageResponse.image.url,
+              deleteUrl: freeImageResponse.image.delete_url,
               aspectRatio: editState.aspectRatio !== 'free' ? editState.aspectRatio : undefined,
             };
             onSave(editedImage);
           } catch (error) {
             console.error('Failed to upload edited image:', error);
-            // Fallback to local URL if imgbb upload fails
+            // Fallback to local URL if FreeImage.host upload fails
             const editedImage: UploadedImage = {
               ...image,
               file: editedFile,
