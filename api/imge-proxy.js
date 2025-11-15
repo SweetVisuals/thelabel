@@ -48,15 +48,14 @@ export async function POST(request) {
 
     // Create form data for IM.GE API
     const imgeFormData = new FormData();
+    imgeFormData.append('key', IMGE_API_KEY);
+    imgeFormData.append('action', 'upload');
     imgeFormData.append('source', imageFile);
     imgeFormData.append('format', 'json');
 
     // Upload to IM.GE
     const response = await fetch(IMGE_UPLOAD_URL, {
       method: 'POST',
-      headers: {
-        'X-API-Key': IMGE_API_KEY,
-      },
       body: imgeFormData,
     });
 
