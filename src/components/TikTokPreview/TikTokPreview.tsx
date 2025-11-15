@@ -355,6 +355,37 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
         objectPosition: 'center' as const,
       };
     };
+
+    // Calculate image container aspect ratio to show cropping effect
+    const getImageContainerStyle = () => {
+      if (currentAspectRatio === 'free') {
+        return {
+          position: 'relative' as const,
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden'
+        };
+      }
+
+      const ratio = parseAspectRatio(currentAspectRatio);
+      if (ratio > 0) {
+        // Use aspect-ratio CSS to show how the image would be cropped
+        return {
+          position: 'relative' as const,
+          width: '100%',
+          maxHeight: '100%',
+          aspectRatio: ratio.toString(),
+          overflow: 'hidden'
+        };
+      }
+
+      return {
+        position: 'relative' as const,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden'
+      };
+    };
     
     return (
       <div className={`w-full max-w-md mx-auto bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-purple-500/10 border border-purple-500/20 rounded-2xl overflow-hidden relative aspect-[9/16]`}>
@@ -378,18 +409,23 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
         <div ref={dragContainerRef} className="relative w-full h-full bg-black overflow-hidden">
           {slideshowImages.length > 0 ? (
             <div className="relative w-full h-full">
-              {/* Current slide display - cropped to aspect ratio */}
+              {/* Current slide display */}
               <div className="relative w-full h-full flex items-center justify-center bg-black">
-                <motion.img
-                  key={`${currentSlide}-${slideshowImages[currentSlide]?.id || 'empty'}-${currentAspectRatio}`}
-                  src={slideshowImages[currentSlide]?.url}
-                  alt={`Slide ${currentSlide + 1}`}
-                  className="max-w-full max-h-full"
-                  style={getAspectRatioStyle()}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5 }}
-                />
+                <div
+                  className="relative flex items-center justify-center overflow-hidden"
+                  style={getImageContainerStyle()}
+                >
+                  <motion.img
+                    key={`${currentSlide}-${slideshowImages[currentSlide]?.id || 'empty'}-${currentAspectRatio}`}
+                    src={slideshowImages[currentSlide]?.url}
+                    alt={`Slide ${currentSlide + 1}`}
+                    className="w-full h-full"
+                    style={getAspectRatioStyle()}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.5 }}
+                  />
+                </div>
               </div>
 
               {/* Snap lines - only show during active dragging */}

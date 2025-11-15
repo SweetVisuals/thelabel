@@ -3,6 +3,7 @@ import { postizAPI } from './postiz';
 import { imageService, ImageCroppingService } from './imageService';
 import { postizUploadService } from './postizUploadService';
 import { uploadWithFallback } from './imgbb';
+import { calculateCropArea } from './aspectRatio';
 
 export class SlideshowService {
   private static instance: SlideshowService;
@@ -97,10 +98,17 @@ export class SlideshowService {
             canvas.height = img.naturalHeight;
           }
 
-          // Draw the base image, maintaining aspect ratio
+          // Draw the base image, cropping to fit aspect ratio
           if (ratio > 0) {
-            // For fixed aspect ratios, scale the image to fit the canvas
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            // Calculate crop area to fit the aspect ratio
+            const cropArea = calculateCropArea(img.naturalWidth, img.naturalHeight, ratio, img);
+
+            // Draw the cropped portion scaled to canvas
+            ctx.drawImage(
+              img,
+              cropArea.x, cropArea.y, cropArea.width, cropArea.height,
+              0, 0, canvas.width, canvas.height
+            );
           } else {
             // For free aspect ratio, draw at natural size
             ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);

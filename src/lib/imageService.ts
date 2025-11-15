@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { uploadToFreeImage, getImageDimensions } from './freeimage';
+import { uploadToImgbb, getImageDimensions } from './imgbb';
 import { UploadedImage, Folder } from '@/types';
 import { cropImage, parseAspectRatio, batchCropImages } from './aspectRatio';
 
@@ -82,14 +82,14 @@ export class ImageCroppingService {
             type: image.mime_type.includes('png') ? 'image/png' : 'image/jpeg'
           });
 
-          // Upload to FreeImage.host
-          const freeImageResponse = await uploadToFreeImage(newFile);
+          // Upload to ImgBB
+          const imgbbResponse = await uploadToImgbb(newFile);
 
           // Update database with new dimensions and aspect ratio
           const { data: updatedImage, error: updateError } = await supabase
             .from('images')
             .update({
-              file_path: freeImageResponse.image.url,
+              file_path: imgbbResponse.data.url,
               width: cropResult.width,
               height: cropResult.height,
               file_size: cropResult.blob.size,
@@ -108,10 +108,10 @@ export class ImageCroppingService {
           const updatedImageData = {
             id: updatedImage.id,
             file: newFile,
-            url: freeImageResponse.image.url,
-            preview: freeImageResponse.image.url,
-            permanentUrl: freeImageResponse.image.url,
-            deleteUrl: freeImageResponse.image.delete_url,
+            url: imgbbResponse.data.url,
+            preview: imgbbResponse.data.url,
+            permanentUrl: imgbbResponse.data.url,
+            deleteUrl: imgbbResponse.data.delete_url,
             filename: image.filename,
             fileSize: cropResult.blob.size,
             mimeType: newFile.type,
@@ -211,7 +211,7 @@ export class ImageCroppingService {
 }
 
 export const imageService = {
-  // Upload image to FreeImage.host and save metadata to Supabase
+  // Upload image to ImgBB and save metadata to Supabase
   async uploadImage(file: File, folderId?: string): Promise<UploadedImage> {
     try {
       // Get current user
@@ -222,15 +222,15 @@ export const imageService = {
 
       const user = session.user;
 
-      // Upload to FreeImage.host
-      const freeImageResponse = await uploadToFreeImage(file);
+      // Upload to ImgBB
+      const imgbbResponse = await uploadToImgbb(file);
       const dimensions = await getImageDimensions(file);
 
       // Save to Supabase
       const imageData = {
         user_id: user.id,
         filename: file.name,
-        file_path: freeImageResponse.image.url,
+        file_path: imgbbResponse.data.url,
         file_size: file.size,
         mime_type: file.type,
         width: dimensions.width,
@@ -244,11 +244,11 @@ export const imageService = {
         .single();
 
       if (dbError) {
-        // If database save fails, try to delete from FreeImage.host
+        // If database save fails, try to delete from ImgBB
         try {
-          await fetch(freeImageResponse.image.delete_url, { method: 'DELETE' });
+          await fetch(imgbbResponse.data.delete_url, { method: 'DELETE' });
         } catch (deleteError) {
-          console.error('Failed to delete image from FreeImage.host:', deleteError);
+          console.error('Failed to delete image from ImgBB:', deleteError);
         }
         throw new Error(`Database error: ${dbError.message}`);
       }
@@ -273,10 +273,10 @@ export const imageService = {
       return {
         id: dbImage.id,
         file,
-        url: freeImageResponse.image.url, // Full quality image
-        preview: freeImageResponse.image.url, // Use full quality for preview
-        permanentUrl: freeImageResponse.image.url,
-        deleteUrl: freeImageResponse.image.delete_url,
+        url: imgbbResponse.data.url, // Full quality image
+        preview: imgbbResponse.data.url, // Use full quality for preview
+        permanentUrl: imgbbResponse.data.url,
+        deleteUrl: imgbbResponse.data.delete_url,
         filename: file.name,
         fileSize: file.size,
         mimeType: file.type,
