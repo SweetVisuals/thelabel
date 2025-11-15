@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { uploadToImgbb, getImageDimensions } from './imgbb';
+import { uploadWithFallback, getImageDimensions } from './imgbb';
 import { UploadedImage, Folder } from '@/types';
 import { cropImage, parseAspectRatio, batchCropImages } from './aspectRatio';
 
@@ -82,8 +82,8 @@ export class ImageCroppingService {
             type: image.mime_type.includes('png') ? 'image/png' : 'image/jpeg'
           });
 
-          // Upload to ImgBB
-          const imgbbResponse = await uploadToImgbb(newFile);
+          // Upload with multi-level fallback: IM.GE -> FreeImage -> ImgBB
+          const imgbbResponse = await uploadWithFallback(newFile);
 
           // Update database with new dimensions and aspect ratio
           const { data: updatedImage, error: updateError } = await supabase
@@ -222,8 +222,8 @@ export const imageService = {
 
       const user = session.user;
 
-      // Upload to ImgBB
-      const imgbbResponse = await uploadToImgbb(file);
+      // Upload with multi-level fallback: IM.GE -> FreeImage -> ImgBB
+      const imgbbResponse = await uploadWithFallback(file);
       const dimensions = await getImageDimensions(file);
 
       // Save to Supabase
