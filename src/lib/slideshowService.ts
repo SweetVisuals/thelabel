@@ -2,7 +2,7 @@ import { SlideshowMetadata, CondensedSlide, TikTokTextOverlay, UploadedImage, Po
 import { postizAPI } from './postiz';
 import { imageService, ImageCroppingService } from './imageService';
 import { postizUploadService } from './postizUploadService';
-import { uploadToFreeImage } from './freeimage';
+import { uploadWithFallback } from './imgbb';
 
 export class SlideshowService {
   private static instance: SlideshowService;
@@ -391,7 +391,7 @@ async saveSlideshow(
         // Don't fail the entire save operation if file export fails
       }
 
-      console.log('✅💾 Enhanced slideshow saved successfully:', slideshow.title, 'with', optimizedCondensedSlides.length, 'slides (smart cropped, imgbb URLs)');
+      console.log('✅💾 Enhanced slideshow saved successfully:', slideshow.title, 'with', optimizedCondensedSlides.length, 'slides (smart cropped, uploaded URLs)');
       console.log('🎯 Slideshow ready for posting with aspect ratio:', slideshow.aspectRatio);
 
       return slideshow;
@@ -742,18 +742,18 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       try {
         console.log(`📤 Uploading slide ${i + 1}/${condensedSlides.length} to imgbb: ${slide.id}`);
         
-        // Upload the condensed image (base64) to FreeImage.host
+        // Upload the condensed image (base64) to ImgBB with FreeImage fallback
         const imageFile = await this.dataUrlToFile(slide.condensedImageUrl, `slideshow_slide_${i + 1}.jpg`);
-        const freeImageResponse = await uploadToFreeImage(imageFile);
+        const imgbbResponse = await uploadWithFallback(imageFile);
 
-        // Create optimized slide with FreeImage.host URL
+        // Create optimized slide with ImgBB/FreeImage URL
         const optimizedSlide: CondensedSlide = {
           ...slide,
-          condensedImageUrl: freeImageResponse.image.url, // Replace base64 with FreeImage.host URL
+          condensedImageUrl: imgbbResponse.data.url, // Replace base64 with ImgBB/FreeImage URL
           originalImageUrl: slide.originalImageUrl // Keep original as backup
         };
 
-        console.log(`✅ Successfully uploaded slide ${i + 1} to FreeImage.host:`, freeImageResponse.image.url);
+        console.log(`✅ Successfully uploaded slide ${i + 1} to ImgBB/FreeImage:`, imgbbResponse.data.url);
         optimizedSlides.push(optimizedSlide);
         
       } catch (error) {
@@ -765,8 +765,8 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       }
     }
     
-    const successCount = optimizedSlides.filter(slide => slide.condensedImageUrl?.includes('i.ibb.co')).length;
-    console.log(`🎉 Completed imgbb upload: ${successCount}/${condensedSlides.length} slides optimized`);
+    const successCount = optimizedSlides.filter(slide => slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:')).length;
+    console.log(`🎉 Completed upload: ${successCount}/${condensedSlides.length} slides optimized (ImgBB/FreeImage)`);
     
     return optimizedSlides;
   }
@@ -1500,7 +1500,7 @@ async createOptimizedSlideshow(
 
       console.log('🖼️ Uploading condensed images to imgbb immediately...');
       
-      // IMMEDIATE OPTIMIZATION: Upload condensed images to imgbb and get URLs
+      // IMMEDIATE OPTIMIZATION: Upload condensed images to ImgBB/FreeImage and get URLs
       const optimizedCondensedSlides = await this.uploadCondensedSlidesToImgbb(condensedSlides);
 
       const slideshow: SlideshowMetadata = {
@@ -1524,7 +1524,7 @@ async createOptimizedSlideshow(
         id: slideshow.id,
         title: slideshow.title,
         condensedSlidesCount: slideshow.condensedSlides.length,
-        hasImgbbUrls: slideshow.condensedSlides.every(slide => slide.condensedImageUrl?.includes('i.ibb.co'))
+        hasImgbbUrls: slideshow.condensedSlides.every(slide => slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:'))
       });
 
       // Store in memory
@@ -1544,7 +1544,7 @@ async createOptimizedSlideshow(
         console.warn('Failed to auto-export slideshow file:', exportError);
       }
 
-      console.log(`✅ Created optimized slideshow: ${title} (${optimizedCondensedSlides.length} slides with imgbb URLs)`);
+      console.log(`✅ Created optimized slideshow: ${title} (${optimizedCondensedSlides.length} slides with uploaded URLs)`);
       return slideshow;
     } catch (error) {
       console.error('❌ Failed to create optimized slideshow:', error);

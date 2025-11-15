@@ -3,7 +3,8 @@ const IMGBB_API_KEYS = [
   '424cc4e82ae2d9d31f09dc79f1fe8276', // Primary key
   '52473df17c0bb10090ca74a0d50ad884', // Backup key
   'f87254710198f566746ed01f0115dbce', // Third key for enhanced resilience
-  '0d3ed300109c2db7fba6d3192190cbb3'  // Fourth key for maximum resilience
+  '0d3ed300109c2db7fba6d3192190cbb3', // Fourth key for maximum resilience
+  'd4983a1269fd78812a0405c475e065fe' // Fifth key for maximum resilience
 ];
 
 // Rate limiting tracking per API key
@@ -20,9 +21,9 @@ const IMGBB_UPLOAD_URL = 'https://api.imgbb.com/1/upload';
 
 // Rate limiting configuration
 const RATE_LIMIT = {
-  maxRequests: 10, // Max requests per time window
+  maxRequests: 20, // Max requests per time window
   timeWindow: 60000, // 1 minute in milliseconds
-  minDelayBetweenRequests: 1000 // 1 second minimum delay
+  minDelayBetweenRequests: 3000 // 3 second minimum delay
 };
 
 export interface ImgbbUploadResponse {
@@ -270,6 +271,71 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
 
 export const uploadToImgbb = async (file: File): Promise<ImgbbUploadResponse> => {
   return uploadToImgbbWithRetry(file);
+};
+
+// Upload with fallback to FreeImage when imgbb hits rate limit
+export const uploadWithFallback = async (file: File): Promise<ImgbbUploadResponse> => {
+  try {
+    // Try imgbb first
+    console.log('📤 Attempting upload to ImgBB first...');
+    return await uploadToImgbb(file);
+  } catch (error) {
+    // Check if it's a rate limit error
+    if (error instanceof Error && isRateLimitError(429, error.message)) {
+      console.log('🚦 ImgBB rate limited, falling back to FreeImage...');
+
+      // Import freeimage dynamically to avoid circular dependencies
+      const { uploadToFreeImage } = await import('./freeimage');
+
+      try {
+        // Convert FreeImage response to ImgBB format for compatibility
+        const freeImageResponse = await uploadToFreeImage(file);
+
+        // Convert FreeImage response to ImgBB format
+        const imgbbCompatibleResponse: ImgbbUploadResponse = {
+          data: {
+            id: freeImageResponse.image.id,
+            title: freeImageResponse.image.name,
+            url_viewer: freeImageResponse.image.page,
+            url: freeImageResponse.image.url,
+            display_url: freeImageResponse.image.url,
+            width: freeImageResponse.image.width,
+            height: freeImageResponse.image.height,
+            size: freeImageResponse.image.size,
+            time: new Date().toISOString(),
+            expiration: 'N/A', // FreeImage doesn't expire
+            image: {
+              filename: freeImageResponse.image.name,
+              name: freeImageResponse.image.name,
+              mime: freeImageResponse.image.mime,
+              extension: freeImageResponse.image.extension,
+              url: freeImageResponse.image.url,
+            },
+            thumb: {
+              filename: freeImageResponse.image.name,
+              name: freeImageResponse.image.name,
+              mime: freeImageResponse.image.mime,
+              extension: freeImageResponse.image.extension,
+              url: freeImageResponse.image.url, // FreeImage doesn't have separate thumb
+            },
+            delete_url: freeImageResponse.image.delete_url,
+          },
+          success: true,
+          status: 200,
+        };
+
+        console.log('✅ Successfully uploaded to FreeImage as fallback');
+        return imgbbCompatibleResponse;
+
+      } catch (freeImageError) {
+        console.error('❌ FreeImage fallback also failed:', freeImageError);
+        throw new Error(`Both ImgBB and FreeImage failed. ImgBB: ${error.message}, FreeImage: ${freeImageError instanceof Error ? freeImageError.message : 'Unknown error'}`);
+      }
+    }
+
+    // If not a rate limit error, throw the original error
+    throw error;
+  }
 };
 
 // Export rate limit info for monitoring
