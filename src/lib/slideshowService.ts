@@ -1210,11 +1210,6 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
 
           // Store in memory - IMPORTANT: Don't create separate image files for condensed slides
           this.slideshows.set(slideshow.id, slideshow);
-          
-          // Only log individual slideshows on initial load or major changes
-          if (currentCount !== newCount) {
-            console.log('📋 Loaded slideshow:', slideshow.title, 'with', slideshow.condensedSlides.length, 'slides');
-          }
         } catch (parseError) {
           console.error('Failed to parse slideshow metadata:', parseError);
         }
