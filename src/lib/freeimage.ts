@@ -1,6 +1,5 @@
 // FreeImage.host API integration
-const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
-const FREEIMAGE_UPLOAD_URL = 'https://freeimage.host/api/1/upload';
+const FREEIMAGE_UPLOAD_PROXY = '/api/freeimage-upload';
 
 export interface FreeImageUploadResponse {
   status_code: number;
@@ -31,7 +30,7 @@ const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(r
 const RATE_LIMIT = {
   maxRequests: 50, // 50 requests per minute
   timeWindow: 60000, // 1 minute
-  minDelayBetweenRequests: 200 // 200ms minimum delay between requests
+  minDelayBetweenRequests: 1000 // 200ms minimum delay between requests
 };
 
 let rateLimitTracker = {
@@ -97,15 +96,12 @@ const uploadToFreeImageWithRetry = async (file: File, maxRetries = 3): Promise<F
         console.warn(`Unexpected MIME type: ${file.type}, attempting upload anyway`);
       }
 
-      console.log(`📤 Uploading to FreeImage.host (attempt ${attempt}/${maxRetries}): ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
+      console.log(`📤 Uploading to FreeImage.host via proxy (attempt ${attempt}/${maxRetries}): ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
 
       const formData = new FormData();
-      formData.append('key', FREEIMAGE_API_KEY);
-      formData.append('action', 'upload');
       formData.append('source', file);
-      formData.append('format', 'json');
 
-      const response = await fetch(FREEIMAGE_UPLOAD_URL, {
+      const response = await fetch(FREEIMAGE_UPLOAD_PROXY, {
         method: 'POST',
         body: formData,
       });
@@ -113,63 +109,49 @@ const uploadToFreeImageWithRetry = async (file: File, maxRetries = 3): Promise<F
       console.log(`📊 FreeImage.host Response Status: ${response.status} ${response.statusText}`);
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ FreeImage.host Error Response (attempt ${attempt}): ${response.status} ${response.statusText}`);
-        console.error(`❌ Error Body: ${errorText}`);
-
-        let errorMessage = `FreeImage.host upload failed: ${response.status} ${response.statusText}`;
-        let isRateLimited = false;
-        let shouldRetry = false;
-
-        // Convert error text to lowercase for analysis
-        const errorLower = errorText.toLowerCase();
-
+        let errorData;
         try {
-          const errorData = JSON.parse(errorText);
-          if (errorData.error && errorData.error.message) {
-            errorMessage = `FreeImage.host Error: ${errorData.error.message}`;
-          } else if (errorData.error && typeof errorData.error === 'string') {
-            errorMessage = `FreeImage.host Error: ${errorData.error}`;
-          }
-        } catch (parseError) {
-          console.warn('Could not parse error response as JSON');
+          errorData = await response.json();
+        } catch {
+          const errorText = await response.text();
+          console.error(`❌ FreeImage proxy Error Response (attempt ${attempt}): ${response.status} ${response.statusText}`);
+          console.error(`❌ Error Body: ${errorText}`);
+          throw new Error(`FreeImage upload failed: ${response.status} ${response.statusText}`);
         }
 
-        // Enhanced rate limiting detection
-        isRateLimited = isRateLimitError(response.status, errorText);
+        console.error(`❌ FreeImage proxy Error Response (attempt ${attempt}): ${response.status} ${response.statusText}`);
+        console.error(`❌ Error Details:`, errorData);
 
-        if (isRateLimited) {
+        let errorMessage = errorData.error || `FreeImage upload failed: ${response.status} ${response.statusText}`;
+        let shouldRetry = false;
+
+        // Check for rate limiting
+        if (response.status === 429 || errorMessage.toLowerCase().includes('rate limit')) {
           shouldRetry = attempt < maxRetries;
-          errorMessage = `🚦 Rate Limited: FreeImage.host API rate limit exceeded. Attempt ${attempt}/${maxRetries}.`;
+          errorMessage = `🚦 Rate Limited: FreeImage API rate limit exceeded. Attempt ${attempt}/${maxRetries}.`;
         }
         // Check for other retryable errors (5xx server errors)
         else if (response.status >= 500 && response.status < 600) {
           shouldRetry = attempt < maxRetries;
-          errorMessage = `🔧 Server Error: FreeImage.host service issue (${response.status}). Attempt ${attempt}/${maxRetries}.`;
+          errorMessage = `🔧 Server Error: FreeImage service issue (${response.status}). Attempt ${attempt}/${maxRetries}.`;
         }
         // Provide specific error messages for non-retryable issues
         else if (response.status === 400) {
-          if (errorLower.includes('invalid api key') || errorLower.includes('unauthorized')) {
-            errorMessage = '❌ Invalid API Key: FreeImage.host API key is invalid or expired.';
-          } else if (errorLower.includes('image') && (errorLower.includes('corrupt') || errorLower.includes('invalid'))) {
-            errorMessage = '🖼️ Invalid Image: Image file is corrupted or in an unsupported format.';
-          } else if (errorLower.includes('file') && errorLower.includes('large')) {
-            errorMessage = '📏 File Too Large: Image exceeds FreeImage.host size limits.';
+          if (errorMessage.toLowerCase().includes('file too large')) {
+            errorMessage = '📏 File Too Large: Image exceeds FreeImage maximum size (25MB).';
+          } else if (errorMessage.toLowerCase().includes('unsupported file type')) {
+            errorMessage = '🖼️ Invalid Image: Image file is in an unsupported format.';
           } else {
-            errorMessage = `❌ Upload Rejected: ${errorText}`;
+            errorMessage = `❌ Upload Rejected: ${errorMessage}`;
           }
-        } else if (response.status === 413) {
-          errorMessage = '📏 File Too Large: Image exceeds FreeImage.host maximum size (25MB).';
-        } else if (response.status === 401) {
-          errorMessage = '🔐 Authentication Failed: Invalid FreeImage.host API key.';
         }
 
         // Log rate limiting for analytics/monitoring
-        if (isRateLimited) {
+        if (response.status === 429) {
           console.warn('🚦 Rate Limited Detected:', {
             timestamp: new Date().toISOString(),
             status: response.status,
-            error: errorText,
+            error: errorData,
             fileName: file.name,
             fileSize: file.size,
             attempt,
