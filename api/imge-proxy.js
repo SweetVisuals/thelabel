@@ -1,5 +1,5 @@
-// Freeimage.host upload proxy to handle CORS issues
-// This server-side function uploads images to Freeimage.host API
+// IM.GE upload proxy to handle CORS issues
+// This server-side function uploads images to IM.GE API
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -8,8 +8,8 @@ const CORS_HEADERS = {
   'Access-Control-Max-Age': '86400',
 };
 
-const FREEIMAGE_API_KEY = '6d207e02198a847aa98d0a2a901485a5';
-const FREEIMAGE_UPLOAD_URL = 'https://freeimage.host/api/1/upload';
+const IMGE_API_KEY = 'imge_5Vvy_4378238aa286a4d62a6d663f395e5c680798e12d2c48ebb25d3da539cfc8b4992c6a7eac72327980c8b7c01fa9f0535f386e1d299de575fdd81230ef710801ea';
+const IMGE_UPLOAD_URL = 'https://im.ge/api/1/upload';
 
 export async function OPTIONS(request) {
   return new Response(null, { status: 200, headers: CORS_HEADERS });
@@ -17,7 +17,7 @@ export async function OPTIONS(request) {
 
 export async function POST(request) {
   try {
-    console.log('📤 Freeimage.host proxy: Starting upload');
+    console.log('📤 IM.GE proxy: Starting upload');
 
     // Get the form data from the request
     const formData = await request.formData();
@@ -44,30 +44,31 @@ export async function POST(request) {
       console.warn(`⚠️ Unexpected MIME type: ${imageFile.type}, attempting upload anyway`);
     }
 
-    console.log(`📤 Freeimage.host proxy: Uploading ${imageFile.name} (${(imageFile.size / 1024 / 1024).toFixed(2)}MB, ${imageFile.type})`);
+    console.log(`📤 IM.GE proxy: Uploading ${imageFile.name} (${(imageFile.size / 1024 / 1024).toFixed(2)}MB, ${imageFile.type})`);
 
-    // Create form data for Freeimage.host API
-    const freeimageFormData = new FormData();
-    freeimageFormData.append('key', FREEIMAGE_API_KEY);
-    freeimageFormData.append('action', 'upload');
-    freeimageFormData.append('source', imageFile);
-    freeimageFormData.append('format', 'json');
+    // Create form data for IM.GE API
+    const imgeFormData = new FormData();
+    imgeFormData.append('source', imageFile);
+    imgeFormData.append('format', 'json');
 
-    // Upload to Freeimage.host
-    const response = await fetch(FREEIMAGE_UPLOAD_URL, {
+    // Upload to IM.GE
+    const response = await fetch(IMGE_UPLOAD_URL, {
       method: 'POST',
-      body: freeimageFormData,
+      headers: {
+        'X-API-Key': IMGE_API_KEY,
+      },
+      body: imgeFormData,
     });
 
-    console.log(`📊 Freeimage.host proxy: Response status ${response.status} ${response.statusText}`);
+    console.log(`📊 IM.GE proxy: Response status ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ Freeimage.host proxy: Error response: ${response.status} ${response.statusText}`);
+      console.error(`❌ IM.GE proxy: Error response: ${response.status} ${response.statusText}`);
       console.error(`❌ Error body: ${errorText}`);
 
       return new Response(JSON.stringify({
-        error: `Freeimage.host upload failed: ${response.status} ${response.statusText}`,
+        error: `IM.GE upload failed: ${response.status} ${response.statusText}`,
         details: errorText
       }), {
         status: response.status,
@@ -76,11 +77,11 @@ export async function POST(request) {
     }
 
     const data = await response.json();
-    console.log(`✅ Freeimage.host proxy: Upload success:`, data);
+    console.log(`✅ IM.GE proxy: Upload success:`, data);
 
     if (data.status_code !== 200 || !data.image) {
       return new Response(JSON.stringify({
-        error: 'Freeimage.host upload was not successful',
+        error: 'IM.GE upload was not successful',
         details: data
       }), {
         status: 400,
@@ -88,43 +89,43 @@ export async function POST(request) {
       });
     }
 
-    // Convert Freeimage.host response to ImgBB-compatible format for consistency
+    // Convert IM.GE response to ImgBB-compatible format for consistency
     const imgbbCompatibleResponse = {
       data: {
-        id: (data.image.id || data.image.name || 'unknown').toString(),
-        title: data.image.name || 'uploaded_image',
-        url_viewer: data.image.url_viewer || data.image.url,
+        id: data.image.id_encoded || data.image.name,
+        title: data.image.name,
+        url_viewer: data.image.url_viewer,
         url: data.image.url,
-        display_url: data.image.url,
-        width: data.image.width || 0,
-        height: data.image.height || 0,
-        size: imageFile.size,
-        time: data.image.date || new Date().toISOString(),
-        expiration: '0', // Freeimage.host images don't expire
+        display_url: data.image.display_url || data.image.url,
+        width: data.image.width,
+        height: data.image.height,
+        size: data.image.size,
+        time: data.image.date,
+        expiration: '0', // IM.GE images don't expire by default
         image: {
-          filename: data.image.name || 'image',
-          name: data.image.name || 'image',
-          mime: imageFile.type,
-          extension: data.image.extension || 'jpg',
+          filename: data.image.filename,
+          name: data.image.name,
+          mime: data.image.mime,
+          extension: data.image.extension,
           url: data.image.url,
         },
         thumb: data.image.thumb ? {
-          filename: data.image.thumb.filename || 'thumb',
-          name: data.image.thumb.name || 'thumb',
-          mime: 'image/jpeg',
-          extension: 'jpg',
+          filename: data.image.thumb.filename,
+          name: data.image.thumb.name,
+          mime: data.image.thumb.mime,
+          extension: data.image.thumb.extension,
           url: data.image.thumb.url,
         } : {
-          filename: 'thumb.jpg',
-          name: 'thumb',
+          filename: '',
+          name: '',
           mime: 'image/jpeg',
           extension: 'jpg',
           url: data.image.url, // Fallback to main image
         },
-        delete_url: '', // Freeimage.host doesn't provide delete URLs
+        delete_url: '', // IM.GE doesn't provide delete URLs in basic response
       },
       success: true,
-      status: 200,
+      status: data.status_code,
     };
 
     return new Response(JSON.stringify(imgbbCompatibleResponse), {
@@ -136,9 +137,9 @@ export async function POST(request) {
     });
 
   } catch (error) {
-    console.error('❌ Freeimage.host proxy error:', error);
+    console.error('❌ IM.GE proxy error:', error);
     return new Response(JSON.stringify({
-      error: 'Freeimage.host proxy failed',
+      error: 'IM.GE proxy failed',
       details: error.message
     }), {
       status: 500,
