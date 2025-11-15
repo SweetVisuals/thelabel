@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { uploadToImgbb, getImageDimensions } from './imgbb';
+import { uploadToFreeImage, getImageDimensions } from './freeimage';
 import { UploadedImage, Folder } from '@/types';
 import { cropImage, parseAspectRatio, batchCropImages } from './aspectRatio';
 
@@ -82,14 +82,14 @@ export class ImageCroppingService {
             type: image.mime_type.includes('png') ? 'image/png' : 'image/jpeg'
           });
 
-          // Upload to imgbb
-          const imgbbResponse = await uploadToImgbb(newFile);
+          // Upload to FreeImage.host
+          const freeImageResponse = await uploadToFreeImage(newFile);
 
           // Update database with new dimensions and aspect ratio
           const { data: updatedImage, error: updateError } = await supabase
             .from('images')
             .update({
-              file_path: imgbbResponse.data.url,
+              file_path: freeImageResponse.image.url,
               width: cropResult.width,
               height: cropResult.height,
               file_size: cropResult.blob.size,
@@ -108,10 +108,10 @@ export class ImageCroppingService {
           const updatedImageData = {
             id: updatedImage.id,
             file: newFile,
-            url: imgbbResponse.data.url,
-            preview: imgbbResponse.data.url,
-            permanentUrl: imgbbResponse.data.url,
-            deleteUrl: imgbbResponse.data.delete_url,
+            url: freeImageResponse.image.url,
+            preview: freeImageResponse.image.url,
+            permanentUrl: freeImageResponse.image.url,
+            deleteUrl: freeImageResponse.image.delete_url,
             filename: image.filename,
             fileSize: cropResult.blob.size,
             mimeType: newFile.type,
@@ -211,7 +211,7 @@ export class ImageCroppingService {
 }
 
 export const imageService = {
-  // Upload image to imgbb and save metadata to Supabase
+  // Upload image to FreeImage.host and save metadata to Supabase
   async uploadImage(file: File, folderId?: string): Promise<UploadedImage> {
     try {
       // Get current user
@@ -222,15 +222,15 @@ export const imageService = {
 
       const user = session.user;
 
-      // Upload to imgbb
-      const imgbbResponse = await uploadToImgbb(file);
+      // Upload to FreeImage.host
+      const freeImageResponse = await uploadToFreeImage(file);
       const dimensions = await getImageDimensions(file);
 
       // Save to Supabase
       const imageData = {
         user_id: user.id,
         filename: file.name,
-        file_path: imgbbResponse.data.url,
+        file_path: freeImageResponse.image.url,
         file_size: file.size,
         mime_type: file.type,
         width: dimensions.width,
@@ -244,11 +244,11 @@ export const imageService = {
         .single();
 
       if (dbError) {
-        // If database save fails, try to delete from imgbb
+        // If database save fails, try to delete from FreeImage.host
         try {
-          await fetch(imgbbResponse.data.delete_url, { method: 'DELETE' });
+          await fetch(freeImageResponse.image.delete_url, { method: 'DELETE' });
         } catch (deleteError) {
-          console.error('Failed to delete image from imgbb:', deleteError);
+          console.error('Failed to delete image from FreeImage.host:', deleteError);
         }
         throw new Error(`Database error: ${dbError.message}`);
       }
@@ -273,10 +273,10 @@ export const imageService = {
       return {
         id: dbImage.id,
         file,
-        url: imgbbResponse.data.url, // Full quality image
-        preview: imgbbResponse.data.url, // Use full quality for preview
-        permanentUrl: imgbbResponse.data.url,
-        deleteUrl: imgbbResponse.data.delete_url,
+        url: freeImageResponse.image.url, // Full quality image
+        preview: freeImageResponse.image.url, // Use full quality for preview
+        permanentUrl: freeImageResponse.image.url,
+        deleteUrl: freeImageResponse.image.delete_url,
         filename: file.name,
         fileSize: file.size,
         mimeType: file.type,
@@ -590,7 +590,7 @@ export const imageService = {
         throw new Error(`Failed to delete image from database: ${deleteError.message}`);
       }
 
-      // Note: imgbb URLs don't have delete URLs in the stored data
+      // Note: FreeImage.host URLs don't have delete URLs in the stored data
       // In a production app, you'd want to store the delete URL separately
     } catch (error) {
       console.error('Failed to delete image:', error);
