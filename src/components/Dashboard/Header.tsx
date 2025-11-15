@@ -24,6 +24,7 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
     const { theme } = useTheme();
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [rateLimitCountdown, setRateLimitCountdown] = useState<string>('');
+    const [uploadError, setUploadError] = useState<string>('');
 
     const handleSignOut = async () => {
         await signOut();
@@ -57,10 +58,19 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
             setRateLimitCountdown(countdown);
         };
 
+        const handleUploadError = (event: CustomEvent) => {
+            const { error } = event.detail;
+            setUploadError(error);
+            // Clear error after 10 seconds
+            setTimeout(() => setUploadError(''), 10000);
+        };
+
         window.addEventListener('rateLimitUpdate', handleRateLimitUpdate as EventListener);
+        window.addEventListener('uploadError', handleUploadError as EventListener);
 
         return () => {
             window.removeEventListener('rateLimitUpdate', handleRateLimitUpdate as EventListener);
+            window.removeEventListener('uploadError', handleUploadError as EventListener);
         };
     }, [user?.id]);
 
@@ -318,7 +328,12 @@ function Header1({ path, onNavigateToFolder }: HeaderProps) {
                                 <span>Connected</span>
                             </span>
                             <span>•</span>
-                            {rateLimitCountdown ? (
+                            {uploadError ? (
+                                <span className="flex items-center space-x-1 text-red-500">
+                                    <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                                    <span>{uploadError}</span>
+                                </span>
+                            ) : rateLimitCountdown ? (
                                 <span className="flex items-center space-x-1 text-yellow-500">
                                     <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
                                     <span>Rate limit: {rateLimitCountdown}</span>
