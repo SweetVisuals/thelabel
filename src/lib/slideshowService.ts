@@ -4,6 +4,7 @@ import { imageService, ImageCroppingService } from './imageService';
 import { postizUploadService } from './postizUploadService';
 import { uploadWithFallback } from './imgbb';
 import { calculateCropArea } from './aspectRatio';
+import { ensureTikTokFontsLoaded, fontLoader } from './fontUtils';
 
 export class SlideshowService {
   private static instance: SlideshowService;
@@ -49,7 +50,7 @@ export class SlideshowService {
   /**
    * Create a single condensed slide by overlaying text on the image
    */
-  private async createCondensedSlide(
+  private createCondensedSlide(
     image: UploadedImage,
     textOverlays: TikTokTextOverlay[],
     aspectRatio: string
@@ -143,13 +144,16 @@ export class SlideshowService {
   /**
    * Draw text overlay on canvas
    */
-  private drawTextOverlay(
+  private async drawTextOverlay(
     ctx: CanvasRenderingContext2D,
     overlay: TikTokTextOverlay,
     canvasWidth: number,
     canvasHeight: number
-  ): void {
+  ): Promise<void> {
     const { text, x, y, fontSize, color, fontFamily, fontWeight, alignment, bold, italic, outline, outlineColor, outlineWidth, outlinePosition, glow, glowColor, glowIntensity } = overlay;
+
+    // Ensure TikTok fonts are loaded before rendering
+    await ensureTikTokFontsLoaded();
 
     // Calculate position as percentage of canvas
     const posX = (x / 100) * canvasWidth;
@@ -169,11 +173,14 @@ export class SlideshowService {
     const scaledOutlineWidth = outlineWidth * strokeScaleFactor;
     const scaledGlowIntensity = Math.max(2, glowIntensity * tiktokScaleFactor);
 
-    // Set font properties with fallback fonts to ensure text is always rendered
+    // Get the proper canvas font family with loaded TikTok fonts
+    const canvasFontFamily = fontLoader.getCanvasFontFamily(fontFamily, fontWeight);
+
+    // Set font properties with loaded TikTok fonts and fallbacks
     let fontStyle = '';
     if (italic) fontStyle += 'italic ';
     if (bold) fontStyle += 'bold ';
-    fontStyle += `${scaledFontSize}px "${fontFamily}", "Arial", "Helvetica", sans-serif`;
+    fontStyle += `${scaledFontSize}px ${canvasFontFamily}`;
 
     ctx.font = fontStyle;
     ctx.fillStyle = color;
@@ -1662,9 +1669,9 @@ async createOptimizedSlideshow(
           }
 
           // Overlay text elements
-          textOverlays.forEach(overlay => {
-            this.drawTextOverlay(ctx, overlay, canvas.width, canvas.height);
-          });
+          for (const overlay of textOverlays) {
+            await this.drawTextOverlay(ctx, overlay, canvas.width, canvas.height);
+          }
 
           // Convert to compressed image
           canvas.toBlob(
