@@ -470,6 +470,7 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
   const [customCaption, setCustomCaption] = useState('');
   const [customHashtags, setCustomHashtags] = useState('');
   const [randomizeImages, setRandomizeImages] = useState(false);
+  const [slidesPerSlideshow, setSlidesPerSlideshow] = useState<number>(3); // Default to 3 slides per slideshow
   const [isCreating, setIsCreating] = useState(false);
   const [preview, setPreview] = useState<BulkTemplatePreview | null>(null);
 
@@ -481,19 +482,20 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
 
   const selectedTemplateData = templates.find(t => t.id === selectedTemplate);
   
-  // Update preview when template, images, or randomize setting changes
+  // Update preview when template, images, randomize setting, or slides per slideshow changes
   useEffect(() => {
     if (selectedTemplateData && uploadedImages.length > 0) {
       const newPreview = slideshowService.previewBulkTemplateCreation(
         uploadedImages,
         selectedTemplateData,
-        randomizeImages
+        randomizeImages,
+        slidesPerSlideshow
       );
       setPreview(newPreview);
     } else {
       setPreview(null);
     }
-  }, [selectedTemplateData, uploadedImages, randomizeImages]);
+  }, [selectedTemplateData, uploadedImages, randomizeImages, slidesPerSlideshow]);
 
   const handleCreate = async () => {
     if (!selectedTemplate) return;
@@ -508,6 +510,7 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
 
       const options: BulkTemplateOptions = {
         randomizeImages,
+        slidesPerSlideshow,
         customizations
       };
 
@@ -581,7 +584,7 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
               <div>
                 <label className="text-sm font-medium block mb-3">Choose Template</label>
                 <div className="grid gap-3">
-                  {templates.filter(template => template.slideCount <= uploadedImages.length).map(template => (
+                  {templates.map(template => (
                     <div
                       key={template.id}
                       className={cn(
@@ -601,7 +604,7 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
                           <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <ImageIcon className="w-3 h-3" />
-                              {template.slideCount} slides each
+                              Template: {template.slideCount} slides
                             </span>
                             <span className="flex items-center gap-1">
                               <Hash className="w-3 h-3" />
@@ -624,6 +627,21 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
 
               {/* Options */}
               <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium block mb-2">Slides per Slideshow</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={slidesPerSlideshow}
+                    onChange={(e) => setSlidesPerSlideshow(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    How many images per slideshow (cut length). Template text will be applied to each slide.
+                  </p>
+                </div>
+
                 <div className="flex items-center justify-between p-3 border rounded-lg">
                   <div>
                     <label htmlFor="randomize-images" className="font-medium">Randomize Images</label>
@@ -706,6 +724,11 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
                   <div className="text-xs text-muted-foreground">
                     Each slideshow will contain the template settings (text overlays, aspect ratio, etc.)
                     applied to a different set of {preview.slidesPerSlideshow} images.
+                    {selectedTemplateData && slidesPerSlideshow !== selectedTemplateData.slideCount && (
+                      <div className="mt-1 text-blue-600">
+                        Note: Using custom slide count ({slidesPerSlideshow}) instead of template's {selectedTemplateData.slideCount}.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

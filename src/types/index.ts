@@ -243,6 +243,7 @@ export interface BulkUploadWithTemplate {
 // Bulk Template Creation Options
 export interface BulkTemplateOptions {
   randomizeImages?: boolean;
+  slidesPerSlideshow?: number; // Number of slides per slideshow (cut length)
   customizations?: {
     title?: string;
     caption?: string;

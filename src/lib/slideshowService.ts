@@ -1809,10 +1809,22 @@ async createOptimizedSlideshow(
         : images;
 
       // Apply template text overlays with new image IDs adapted for the new images
-      const adaptedTextOverlays = template.textOverlays.map(overlay => ({
+      let adaptedTextOverlays = template.textOverlays.map(overlay => ({
         ...overlay,
         id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       }));
+
+      // Remap text overlay indices to fit within the selected images
+      const selectedImagesCount = selectedImageIds.length;
+      adaptedTextOverlays = adaptedTextOverlays.map(overlay => {
+        // If overlay slide index exceeds available slides, map it using modulo
+        if (overlay.slideIndex >= selectedImagesCount) {
+          const mappedIndex = overlay.slideIndex % selectedImagesCount;
+          console.log(`🔄 Mapping template overlay slide ${overlay.slideIndex} to slide ${mappedIndex} for settings`);
+          return { ...overlay, slideIndex: mappedIndex };
+        }
+        return overlay;
+      });
 
       // Create a temporary slideshow for validation (not saved)
       const tempSlideshow: SlideshowMetadata = {
@@ -1883,11 +1895,22 @@ async createOptimizedSlideshow(
         };
       }
 
-      // Apply template text overlays with new image IDs
-      const adaptedTextOverlays = template.textOverlays.map(overlay => ({
+      // Apply template text overlays with new image IDs and remap slide indices
+      let adaptedTextOverlays = template.textOverlays.map(overlay => ({
         ...overlay,
         id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       }));
+
+      // Remap text overlay indices to fit within the selected images
+      adaptedTextOverlays = adaptedTextOverlays.map(overlay => {
+        // If overlay slide index exceeds available slides, map it using modulo
+        if (overlay.slideIndex >= selectedImages.length) {
+          const mappedIndex = overlay.slideIndex % selectedImages.length;
+          console.log(`🔄 Mapping template overlay slide ${overlay.slideIndex} to slide ${mappedIndex}`);
+          return { ...overlay, slideIndex: mappedIndex };
+        }
+        return overlay;
+      });
 
       console.log('🎯 Applying template with aspect ratio:', finalAspectRatio);
 
@@ -1965,6 +1988,7 @@ async createOptimizedSlideshow(
     userId: string,
     options: {
       randomizeImages?: boolean;
+      slidesPerSlideshow?: number; // Number of slides per slideshow (cut length)
       customizations?: {
         title?: string;
         caption?: string;
@@ -1980,8 +2004,8 @@ async createOptimizedSlideshow(
     slideshowCount: number;
   }> {
     try {
-      const { randomizeImages = false, customizations = {}, slideshowTitles = [] } = options;
-      
+      const { randomizeImages = false, slidesPerSlideshow, customizations = {}, slideshowTitles = [] } = options;
+
       if (images.length === 0) {
         return {
           success: false,
@@ -1992,24 +2016,26 @@ async createOptimizedSlideshow(
         };
       }
 
+      // Use provided slidesPerSlideshow or default to template's slideCount
+      const slidesPerSlideshowFinal = slidesPerSlideshow || template.slideCount;
+
       // Determine number of slideshows to create
-      const slideCount = template.slideCount;
-      const slideshowCount = Math.ceil(images.length / slideCount);
+      const slideshowCount = Math.ceil(images.length / slidesPerSlideshowFinal);
       
       if (slideshowCount === 0) {
         return {
           success: false,
           slideshows: [],
-          error: `Template requires ${slideCount} images but none provided`,
+          error: `Need at least ${slidesPerSlideshowFinal} images but none provided`,
           totalImages: images.length,
           slideshowCount: 0
         };
       }
 
-      console.log(`🎬 Creating ${slideshowCount} slideshows from ${images.length} images with template: ${template.name}`);
+      console.log(`🎬 Creating ${slideshowCount} slideshows from ${images.length} images with template: ${template.name} (${slidesPerSlideshowFinal} slides each)`);
 
       // Group images into sets for each slideshow
-      const imageGroups = this.groupImagesForSlideshows(images, slideCount, randomizeImages);
+      const imageGroups = this.groupImagesForSlideshows(images, slidesPerSlideshowFinal, randomizeImages);
       
       const createdSlideshows: SlideshowMetadata[] = [];
       const finalTitle = customizations.title || template.title;
@@ -2029,23 +2055,23 @@ async createOptimizedSlideshow(
           });
           
           // Apply template text overlays with new image IDs adapted for this group
-          // CRITICAL FIX: For partial groups, map text overlays to available slides
+          // CRITICAL FIX: Always map text overlays to fit within available slides
           let adaptedTextOverlays = template.textOverlays.map(overlay => ({
             ...overlay,
             id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           }));
 
-          // If this group has fewer images than template, remap text overlay indices
-          if (imageGroup.length < template.slideCount) {
-            adaptedTextOverlays = adaptedTextOverlays.map(overlay => {
-              // If overlay slide index exceeds available slides, map to last available slide
-              if (overlay.slideIndex >= imageGroup.length) {
-                console.log(`🔄 Mapping overlay slide ${overlay.slideIndex} to slide ${imageGroup.length - 1} for partial group`);
-                return { ...overlay, slideIndex: imageGroup.length - 1 };
-              }
-              return overlay;
-            });
-          }
+          // Always remap text overlay indices to fit within the available slides
+          // This ensures text overlays work even when template has more slides than current group
+          adaptedTextOverlays = adaptedTextOverlays.map(overlay => {
+            // If overlay slide index exceeds available slides, map it to a valid slide
+            if (overlay.slideIndex >= imageGroup.length) {
+              const mappedIndex = overlay.slideIndex % imageGroup.length;
+              console.log(`🔄 Mapping overlay slide ${overlay.slideIndex} to slide ${mappedIndex} (modulo mapping)`);
+              return { ...overlay, slideIndex: mappedIndex };
+            }
+            return overlay;
+          });
 
           console.log(`📝 Text overlays for slideshow ${i + 1}:`, {
             templateOverlays: template.textOverlays.length,
@@ -2155,7 +2181,8 @@ async createOptimizedSlideshow(
   previewBulkTemplateCreation(
     images: UploadedImage[],
     template: SlideshowTemplate,
-    randomizeImages: boolean = false
+    randomizeImages: boolean = false,
+    slidesPerSlideshow?: number
   ): {
     totalImages: number;
     slideshowCount: number;
@@ -2163,15 +2190,16 @@ async createOptimizedSlideshow(
     groups: UploadedImage[][];
     willCreatePartialSlideshow: boolean;
   } {
-    const groups = this.groupImagesForSlideshows(images, template.slideCount, randomizeImages);
+    const slidesPerSlideshowFinal = slidesPerSlideshow || template.slideCount;
+    const groups = this.groupImagesForSlideshows(images, slidesPerSlideshowFinal, randomizeImages);
     const lastGroupSize = groups[groups.length - 1]?.length || 0;
-    
+
     return {
       totalImages: images.length,
       slideshowCount: groups.length,
-      slidesPerSlideshow: template.slideCount,
+      slidesPerSlideshow: slidesPerSlideshowFinal,
       groups,
-      willCreatePartialSlideshow: lastGroupSize > 0 && lastGroupSize < template.slideCount
+      willCreatePartialSlideshow: lastGroupSize > 0 && lastGroupSize < slidesPerSlideshowFinal
     };
   }
 
