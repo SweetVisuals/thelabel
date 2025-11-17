@@ -523,17 +523,38 @@ async saveSlideshow(
    * Delete slideshow
    */
   async deleteSlideshow(slideshowId: string): Promise<void> {
+    let databaseDeletionFailed = false;
+
+    // Delete from memory first
     this.slideshows.delete(slideshowId);
+
+    // Save to localStorage immediately
     this.saveToLocalStorage();
-    await this.deleteFromDatabase(slideshowId);
+
+    // Delete from database
+    try {
+      await this.deleteFromDatabase(slideshowId);
+      console.log('Successfully deleted slideshow from database');
+    } catch (error) {
+      console.error('Failed to delete slideshow from database:', error);
+      databaseDeletionFailed = true;
+      // Continue with local deletion even if database deletion fails
+    }
+
+    // Delete from file system (placeholder)
     await this.deleteFromFileSystem(slideshowId);
-    
+
     // Clean up file data for file browser integration
     const fileKey = `slideshow_file_${slideshowId}`;
     localStorage.removeItem(fileKey);
 
     // Dispatch custom event to update file browser immediately
     window.dispatchEvent(new CustomEvent('slideshowUpdated'));
+
+    if (databaseDeletionFailed) {
+      console.warn('Slideshow deleted locally but database deletion failed. Slideshow may reappear on reload.');
+      throw new Error('Slideshow deleted locally but database deletion failed. Please check your connection and try again.');
+    }
 
     console.log('Slideshow deleted successfully:', slideshowId);
   }
@@ -1243,6 +1264,12 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   private async deleteFromDatabase(slideshowId: string): Promise<void> {
     try {
       const { supabase } = await import('./supabase');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+      if (sessionError || !session?.user) {
+        throw new Error('User not authenticated for database deletion');
+      }
+
       // Extract the actual UUID from slideshow ID (remove "slideshow_" prefix if present)
       const actualDatabaseId = slideshowId.startsWith('slideshow_')
         ? slideshowId.replace('slideshow_', '')
@@ -1251,13 +1278,18 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       const { error } = await supabase
         .from('slideshows')
         .delete()
-        .eq('id', actualDatabaseId); // Use clean UUID for database
+        .eq('id', actualDatabaseId)
+        .eq('user_id', session.user.id); // Ensure we only delete user's own slideshows
 
       if (error) {
         console.error('Failed to delete slideshow from database:', error);
+        throw new Error(`Database deletion failed: ${error.message}`);
       }
+
+      console.log('Successfully deleted slideshow from database:', actualDatabaseId);
     } catch (error) {
       console.error('Failed to delete slideshow from database:', error);
+      throw error; // Re-throw to make deletion fail if database deletion fails
     }
   }
 
