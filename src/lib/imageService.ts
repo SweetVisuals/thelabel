@@ -211,6 +211,66 @@ export class ImageCroppingService {
 }
 
 export const imageService = {
+  // Test database connection and table existence
+  async testDatabaseConnection(): Promise<{ success: boolean; message: string; tables?: string[] }> {
+    try {
+      console.log('🧪 Testing database connection...');
+
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        return { success: false, message: 'User not authenticated' };
+      }
+
+      console.log('👤 User authenticated:', session.user.id);
+
+      // Test if tables exist by trying to query them
+      const tables = ['users', 'images', 'folders', 'folder_images', 'slideshows', 'slideshow_images'];
+      const existingTables: string[] = [];
+
+      for (const table of tables) {
+        try {
+          const { error } = await supabase.from(table).select('count').limit(1);
+          if (!error) {
+            existingTables.push(table);
+          }
+        } catch (error) {
+          // Table doesn't exist or other error
+        }
+      }
+
+      console.log('📊 Existing tables:', existingTables);
+
+      if (existingTables.length === 0) {
+        return {
+          success: false,
+          message: 'No database tables found. Please run the setup-new-database.sql script in your Supabase dashboard.',
+          tables: []
+        };
+      }
+
+      if (existingTables.length < tables.length) {
+        const missingTables = tables.filter(t => !existingTables.includes(t));
+        return {
+          success: false,
+          message: `Some tables are missing: ${missingTables.join(', ')}. Please run the setup-new-database.sql script.`,
+          tables: existingTables
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Database connection successful and all tables exist.',
+        tables: existingTables
+      };
+    } catch (error) {
+      console.error('❌ Database connection test failed:', error);
+      return {
+        success: false,
+        message: `Database connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      };
+    }
+  },
+
   // Upload image to ImgBB and save metadata to Supabase
   async uploadImage(file: File, folderId?: string): Promise<UploadedImage> {
     try {
@@ -349,12 +409,16 @@ export const imageService = {
   // Create folder
   async createFolder(name: string, parentId?: string): Promise<Folder> {
     try {
+      console.log('📁 createFolder called:', { name, parentId });
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session?.user) {
+        console.error('❌ User not authenticated:', sessionError);
         throw new Error('User not authenticated');
       }
 
       const user = session.user;
+      console.log('👤 User authenticated:', user.id);
 
       // Ensure user exists in public.users table
       const { data: userRecord, error: selectError } = await supabase
@@ -363,7 +427,10 @@ export const imageService = {
         .eq('id', user.id)
         .single();
 
+      console.log('👤 User record check:', { exists: !!userRecord, error: selectError?.message });
+
       if (selectError && selectError.code === 'PGRST116') { // No rows returned
+        console.log('👤 Creating user record...');
         // Create user record if it doesn't exist
         const { error: insertError } = await supabase
           .from('users')
@@ -372,9 +439,10 @@ export const imageService = {
             email: user.email,
           });
         if (insertError) {
-          console.error('Failed to create user record:', insertError);
+          console.error('❌ Failed to create user record:', insertError);
           throw new Error('Failed to create user record');
         }
+        console.log('✅ User record created');
       }
 
       const folderData = {
@@ -383,6 +451,8 @@ export const imageService = {
         parent_id: parentId || null,
       };
 
+      console.log('📁 Inserting folder data:', folderData);
+
       const { data: folder, error } = await supabase
         .from('folders')
         .insert(folderData)
@@ -390,8 +460,11 @@ export const imageService = {
         .single();
 
       if (error) {
+        console.error('❌ Failed to create folder in database:', error);
         throw new Error(`Failed to create folder: ${error.message}`);
       }
+
+      console.log('✅ Folder created successfully:', folder);
 
       return {
         id: folder.id,
@@ -401,7 +474,7 @@ export const imageService = {
         images: [], // Will be populated when loading
       };
     } catch (error) {
-      console.error('Failed to create folder:', error);
+      console.error('❌ Failed to create folder:', error);
       throw error;
     }
   },
@@ -409,12 +482,16 @@ export const imageService = {
   // Load all folders for current user
   async loadFolders(): Promise<Folder[]> {
     try {
+      console.log('📁 loadFolders called');
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session?.user) {
+        console.log('❌ User not authenticated for loadFolders');
         return [];
       }
 
       const user = session.user;
+      console.log('👤 Loading folders for user:', user.id);
 
       // First load folders - handle if table doesn't exist
       const { data: folders, error: foldersError } = await supabase
@@ -424,17 +501,21 @@ export const imageService = {
         .order('created_at', { ascending: false });
 
       if (foldersError) {
-        console.error('Failed to load folders:', foldersError);
+        console.error('❌ Failed to load folders:', foldersError);
         // If table doesn't exist, return empty array
         if (foldersError.code === 'PGRST205') {
-          console.log('Folders table does not exist yet');
+          console.log('📁 Folders table does not exist yet');
           return [];
         }
         return [];
       }
 
+      console.log('📁 Raw folders data from database:', folders);
+
       // Load images for each folder
       const foldersWithImages = await Promise.all(folders.map(async (folder) => {
+        console.log('📁 Loading images for folder:', folder.name, folder.id);
+
         // Get images for this folder
         const { data: folderImages, error: folderImagesError } = await supabase
           .from('folder_images')
@@ -453,7 +534,7 @@ export const imageService = {
           .eq('folder_id', folder.id);
 
         if (folderImagesError) {
-          console.error('Failed to load folder images:', folderImagesError);
+          console.error('❌ Failed to load folder images:', folderImagesError);
           return {
             id: folder.id,
             name: folder.name,
@@ -462,6 +543,8 @@ export const imageService = {
             images: [],
           };
         }
+
+        console.log('🖼️ Folder images data:', folderImages);
 
         // Convert to UploadedImage format
         const folderImageList = folderImages
@@ -483,6 +566,12 @@ export const imageService = {
             };
           });
 
+        console.log('📁 Folder processed:', {
+          id: folder.id,
+          name: folder.name,
+          imageCount: folderImageList.length
+        });
+
         return {
           id: folder.id,
           name: folder.name,
@@ -492,9 +581,15 @@ export const imageService = {
         };
       }));
 
+      console.log('✅ Final folders with images:', foldersWithImages.map(f => ({
+        id: f.id,
+        name: f.name,
+        imageCount: f.images.length
+      })));
+
       return foldersWithImages;
     } catch (error) {
-      console.error('Failed to load folders:', error);
+      console.error('❌ Failed to load folders:', error);
       return [];
     }
   },
@@ -601,32 +696,43 @@ export const imageService = {
   // Delete folder and all its contents
   async deleteFolder(folderId: string): Promise<void> {
     try {
+      console.log('🗑️ deleteFolder called:', folderId);
+
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session?.user) {
+        console.error('❌ User not authenticated for deleteFolder');
         throw new Error('User not authenticated');
       }
 
       const user = session.user;
+      console.log('👤 Deleting folder for user:', user.id);
 
       // First, delete all folder_images associations for this folder
+      console.log('🗑️ Deleting folder_images associations...');
       const { error: folderImagesError } = await supabase
         .from('folder_images')
         .delete()
         .eq('folder_id', folderId);
 
       if (folderImagesError) {
+        console.error('❌ Failed to delete folder images:', folderImagesError);
         throw new Error(`Failed to delete folder images: ${folderImagesError.message}`);
       }
+      console.log('✅ Folder images associations deleted');
 
       // Get all subfolders recursively
+      console.log('🔍 Getting subfolders...');
       const subfolders = await this.getAllSubfolders(folderId, user.id);
+      console.log('📁 Found subfolders:', subfolders);
 
       // Delete all subfolders and their contents
       for (const subfolderId of subfolders) {
+        console.log('🗑️ Deleting subfolder:', subfolderId);
         await this.deleteFolderRecursive(subfolderId);
       }
 
       // Finally, delete the folder itself
+      console.log('🗑️ Deleting main folder...');
       const { error: folderError } = await supabase
         .from('folders')
         .delete()
@@ -634,10 +740,13 @@ export const imageService = {
         .eq('user_id', user.id);
 
       if (folderError) {
+        console.error('❌ Failed to delete folder:', folderError);
         throw new Error(`Failed to delete folder: ${folderError.message}`);
       }
+
+      console.log('✅ Folder deleted successfully:', folderId);
     } catch (error) {
-      console.error('Failed to delete folder:', error);
+      console.error('❌ Failed to delete folder:', error);
       throw error;
     }
   },

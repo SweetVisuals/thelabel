@@ -278,7 +278,7 @@ export const uploadToImgbb = async (file: File): Promise<ImgbbUploadResponse> =>
   return uploadToImgbbWithRetry(file);
 };
 
-// Upload to IM.GE API (primary service)
+// Upload to IM.GE API via proxy (primary service)
 export const uploadToImge = async (file: File): Promise<ImgbbUploadResponse> => {
   try {
     // Validate file before upload
@@ -295,34 +295,30 @@ export const uploadToImge = async (file: File): Promise<ImgbbUploadResponse> => 
       console.warn(`Unexpected MIME type: ${file.type}, attempting upload anyway`);
     }
 
-    console.log(`📤 Uploading to IM.GE: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
+    console.log(`📤 Uploading to IM.GE via proxy: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
 
-    // Create form data for IM.GE API
+    // Create form data for IM.GE proxy
     const formData = new FormData();
     formData.append('source', file);
-    formData.append('format', 'json');
 
-    // Upload to IM.GE
-    const response = await fetch(IMGE_UPLOAD_URL, {
+    // Upload to IM.GE via proxy
+    const response = await fetch('/api/imge-proxy', {
       method: 'POST',
-      headers: {
-        'X-API-Key': IMGE_API_KEY,
-      },
       body: formData,
     });
 
-    console.log(`📊 IM.GE response status: ${response.status} ${response.statusText}`);
+    console.log(`📊 IM.GE proxy response status: ${response.status} ${response.statusText}`);
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ IM.GE error: ${response.status} ${response.statusText}`);
+      console.error(`❌ IM.GE proxy error: ${response.status} ${response.statusText}`);
       console.error(`❌ Error body: ${errorText}`);
 
       let errorMessage = `IM.GE upload failed: ${response.status} ${response.statusText}`;
       try {
         const errorData = JSON.parse(errorText);
-        if (errorData.error || errorData.status_txt) {
-          errorMessage = `IM.GE Error: ${errorData.error || errorData.status_txt}`;
+        if (errorData.error) {
+          errorMessage = `IM.GE Error: ${errorData.error}`;
         }
       } catch (parseError) {
         console.warn('Could not parse error response as JSON');
@@ -332,52 +328,13 @@ export const uploadToImge = async (file: File): Promise<ImgbbUploadResponse> => 
     }
 
     const data = await response.json();
-    console.log(`✅ IM.GE upload success:`, data);
+    console.log(`✅ IM.GE proxy upload success:`, data);
 
-    if (data.status_code !== 200 || !data.image) {
+    if (!data.success || !data.data || !data.data.url) {
       throw new Error('IM.GE upload incomplete - missing image data');
     }
 
-    // Convert IM.GE response to ImgBB-compatible format for consistency
-    const imgbbCompatibleResponse: ImgbbUploadResponse = {
-      data: {
-        id: data.image.id_encoded || data.image.name,
-        title: data.image.name,
-        url_viewer: data.image.url_viewer,
-        url: data.image.url,
-        display_url: data.image.display_url || data.image.url,
-        width: data.image.width,
-        height: data.image.height,
-        size: data.image.size,
-        time: data.image.date,
-        expiration: '0', // IM.GE images don't expire by default
-        image: {
-          filename: data.image.filename,
-          name: data.image.name,
-          mime: data.image.mime,
-          extension: data.image.extension,
-          url: data.image.url,
-        },
-        thumb: data.image.thumb ? {
-          filename: data.image.thumb.filename,
-          name: data.image.thumb.name,
-          mime: data.image.thumb.mime,
-          extension: data.image.thumb.extension,
-          url: data.image.thumb.url,
-        } : {
-          filename: '',
-          name: '',
-          mime: 'image/jpeg',
-          extension: 'jpg',
-          url: data.image.url, // Fallback to main image
-        },
-        delete_url: '', // IM.GE doesn't provide delete URLs in basic response
-      },
-      success: true,
-      status: data.status_code,
-    };
-
-    return imgbbCompatibleResponse;
+    return data;
 
   } catch (error) {
     console.error('❌ IM.GE upload failed:', error);
@@ -449,29 +406,19 @@ export const uploadToFreeImage = async (file: File): Promise<ImgbbUploadResponse
   }
 };
 
-// Upload with multi-level fallback: IM.GE -> FreeImage -> ImgBB
+// Upload with multi-level fallback: FreeImage -> ImgBB (skip IM.GE due to CORS issues)
 export const uploadWithFallback = async (file: File): Promise<ImgbbUploadResponse> => {
-  // Try IM.GE first (primary service)
+  // Try FreeImage first (primary service)
   try {
-    console.log('🖼️ Trying IM.GE upload first...');
-    const imgeResponse = await uploadToImge(file);
-    console.log('✅ IM.GE upload successful');
-    return imgeResponse;
-  } catch (imgeError) {
-    console.warn('⚠️ IM.GE upload failed, trying FreeImage:', imgeError);
+    console.log('🆓 Trying FreeImage upload first...');
+    const freeImageResponse = await uploadToFreeImage(file);
+    console.log('✅ FreeImage upload successful');
+    return freeImageResponse;
+  } catch (freeImageError) {
+    console.warn('⚠️ FreeImage upload failed, falling back to ImgBB:', freeImageError);
 
-    // Try FreeImage as secondary fallback
-    try {
-      console.log('🆓 Trying FreeImage upload...');
-      const freeImageResponse = await uploadToFreeImage(file);
-      console.log('✅ FreeImage upload successful');
-      return freeImageResponse;
-    } catch (freeImageError) {
-      console.warn('⚠️ FreeImage upload failed, falling back to ImgBB:', freeImageError);
-
-      // Final fallback to ImgBB
-      return await uploadToImgbb(file);
-    }
+    // Final fallback to ImgBB
+    return await uploadToImgbb(file);
   }
 };
 

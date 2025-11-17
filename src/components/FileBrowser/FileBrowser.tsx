@@ -748,48 +748,72 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
     const deletePromise = new Promise<void>(async (resolve, reject) => {
       try {
-        const deletePromises = [];
+        const successfullyDeletedImages: string[] = [];
+        const successfullyDeletedSlideshows: string[] = [];
         const errors: string[] = [];
 
-        // Delete images
+        // Delete images individually and track successes
         if (imageCount > 0) {
-          const imageDeletePromises = selectedImages.map(async (id) => {
+          for (const imageId of selectedImages) {
             try {
-              await imageService.deleteImage(id);
+              await imageService.deleteImage(imageId);
+              successfullyDeletedImages.push(imageId);
+              console.log('✅ Successfully deleted image:', imageId);
             } catch (error) {
-              errors.push(`Failed to delete image: ${error}`);
-              console.error('Failed to delete image:', id, error);
+              errors.push(`Failed to delete image ${imageId}: ${error}`);
+              console.error('Failed to delete image:', imageId, error);
             }
-          });
-          deletePromises.push(...imageDeletePromises);
+          }
         }
 
-        // Delete slideshows
+        // Delete slideshows individually and track successes
         if (slideshowCount > 0) {
-          const slideshowDeletePromises = selectedSlideshows.map(async (id) => {
+          for (const slideshowId of selectedSlideshows) {
             try {
-              await slideshowService.deleteSlideshow(id);
+              await slideshowService.deleteSlideshow(slideshowId);
+              successfullyDeletedSlideshows.push(slideshowId);
+              console.log('✅ Successfully deleted slideshow:', slideshowId);
             } catch (error) {
-              errors.push(`Failed to delete slideshow: ${error}`);
-              console.error('Failed to delete slideshow:', id, error);
+              errors.push(`Failed to delete slideshow ${slideshowId}: ${error}`);
+              console.error('Failed to delete slideshow:', slideshowId, error);
             }
-          });
-          deletePromises.push(...slideshowDeletePromises);
+          }
         }
 
-        await Promise.all(deletePromises);
-
-        // Update UI after successful deletion
-        if (imageCount > 0) {
-          onImagesUploaded(images.filter(img => !selectedImages.includes(img.id)));
+        // Update UI only for successfully deleted items
+        if (successfullyDeletedImages.length > 0) {
+          const updatedImages = images.filter(img => !successfullyDeletedImages.includes(img.id));
+          onImagesUploaded(updatedImages);
+          console.log(`🖼️ Updated UI: removed ${successfullyDeletedImages.length} images`);
         }
-        if (slideshowCount > 0) {
+
+        if (successfullyDeletedSlideshows.length > 0) {
           onSlideshowSelectionChange?.([]);
+          console.log(`🎬 Updated UI: removed ${successfullyDeletedSlideshows.length} slideshows`);
         }
-        onSelectionChange([]);
+
+        // Clear selection of successfully deleted items
+        const remainingImageSelections = selectedImages.filter(id => !successfullyDeletedImages.includes(id));
+        const remainingSlideshowSelections = selectedSlideshows.filter(id => !successfullyDeletedSlideshows.includes(id));
+        onSelectionChange(remainingImageSelections);
 
         // Trigger re-render to update the file list
         triggerReRender();
+
+        // Show detailed results
+        const successCount = successfullyDeletedImages.length + successfullyDeletedSlideshows.length;
+        const errorCount = errors.length;
+
+        if (errorCount > 0) {
+          console.warn(`⚠️ Delete operation completed with ${errorCount} error(s):`, errors);
+          if (successCount > 0) {
+            toast.warning(`Deleted ${successCount} item(s) but ${errorCount} failed. Check console for details.`);
+          } else {
+            toast.error(`Failed to delete any items. Check console for details.`);
+            reject(new Error('All delete operations failed'));
+            return;
+          }
+        }
 
         resolve();
       } catch (error) {
@@ -803,20 +827,39 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
     toast.promise(deletePromise, {
       loading: loadingMessage,
       success: successMessage,
-      error: 'Delete failed. Please try again.',
+      error: 'Delete operation failed. Please try again.',
     });
   };
 
   const handleCreateFolderSubmit = async () => {
     if (newFolderName.trim()) {
-      const createPromise = imageService.createFolder(newFolderName.trim(), currentFolderId || undefined);
+      const createPromise = new Promise<Folder>(async (resolve, reject) => {
+        try {
+          const newFolder = await imageService.createFolder(newFolderName.trim(), currentFolderId || undefined);
+
+          // Update UI immediately
+          onFoldersChange?.([...folders, newFolder]);
+
+          // Trigger folder data refresh to ensure consistency
+          const refreshEvent = new CustomEvent('folderDataRefresh', {
+            detail: { folderId: newFolder.id }
+          });
+          window.dispatchEvent(refreshEvent);
+
+          console.log('✅ Folder created and UI updated:', newFolder.name);
+          resolve(newFolder);
+        } catch (error) {
+          console.error('❌ Failed to create folder:', error);
+          reject(error);
+        }
+      });
+
       toast.promise(createPromise, {
         loading: 'Creating folder...',
         success: (newFolder) => {
-          onFoldersChange?.([...folders, newFolder]);
           setNewFolderName('');
           setShowCreateFolderDialog(false);
-          return 'Folder created successfully!';
+          return `Folder "${newFolder.name}" created successfully!`;
         },
         error: 'Failed to create folder. Please try again.',
       });

@@ -27,31 +27,12 @@ export class SlideshowService {
   ): Promise<CondensedSlide[]> {
     const condensedSlides: CondensedSlide[] = [];
 
-    console.log(`🎬 Creating condensed slides:`, {
-      imageCount: images.length,
-      textOverlayCount: textOverlays.length,
-      textOverlays: textOverlays.map(overlay => ({
-        text: overlay.text?.substring(0, 20) + '...',
-        slideIndex: overlay.slideIndex
-      }))
-    });
+    // Creating condensed slides with text overlays
 
     for (let i = 0; i < images.length; i++) {
       const image = images[i];
       const slideTextOverlays = textOverlays.filter(overlay => overlay.slideIndex === i);
 
-      console.log(`🖼️ Slide ${i + 1}/${images.length}:`, {
-        imageId: image.id,
-        textOverlaysForSlide: slideTextOverlays.length,
-        allTextOverlays: textOverlays.map(overlay => ({
-          text: overlay.text?.substring(0, 20) + '...',
-          slideIndex: overlay.slideIndex
-        })),
-        filteredTextOverlays: slideTextOverlays.map(overlay => ({
-          text: overlay.text?.substring(0, 20) + '...',
-          slideIndex: overlay.slideIndex
-        }))
-      });
 
       try {
         const condensedSlide = await this.createCondensedSlide(image, slideTextOverlays, aspectRatio);
@@ -273,15 +254,7 @@ async saveSlideshow(
     userId: string
   ): Promise<SlideshowMetadata> {
     try {
-      console.log('🚀 Starting enhanced slideshow save with smart cropping...');
-      console.log('📝 TEXT OVERLAYS DEBUG - saveSlideshow called with:', {
-        title,
-        textOverlaysCount: textOverlays.length,
-        textOverlays: textOverlays.map(overlay => ({
-          text: overlay.text?.substring(0, 20) + '...',
-          slideIndex: overlay.slideIndex
-        }))
-      });
+      // Starting enhanced slideshow save with smart cropping
 
       // CRITICAL FIX: Validate and ensure aspect ratio is properly determined
       const finalAspectRatio = aspectRatio || images[0]?.aspectRatio || '9:16';
@@ -289,17 +262,8 @@ async saveSlideshow(
       // Validate the final aspect ratio
       const validatedAspectRatio = this.validateAspectRatio(finalAspectRatio) ? finalAspectRatio : '9:16';
       
-      console.log('🎯 Final aspect ratio for slideshow:', {
-        original: aspectRatio,
-        fallback: images[0]?.aspectRatio,
-        final: finalAspectRatio,
-        validated: validatedAspectRatio
-      });
-      
       // Use the validated aspect ratio
       const finalAR = validatedAspectRatio;
-      
-      console.log('🎯 Final aspect ratio for slideshow:', finalAR);
 
       // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
       let processedImages = images;
@@ -330,10 +294,6 @@ async saveSlideshow(
         }
       }
 
-      console.log('📝 TEXT OVERLAYS DEBUG - Calling createCondensedSlides with:', {
-        processedImagesCount: processedImages.length,
-        textOverlaysCount: textOverlays.length
-      });
 
       // Create condensed slides (text consolidated into images) for slideshow display
       const condensedSlides = await this.createCondensedSlides(processedImages, textOverlays, finalAR);
@@ -341,7 +301,6 @@ async saveSlideshow(
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
 
-      console.log('🖼️ Uploading condensed images to imgbb for slideshow display...');
       
       // Upload condensed images to imgbb for slideshow creation and display
       const optimizedCondensedSlides = await this.uploadCondensedSlidesToImgbb(condensedSlides);
@@ -905,15 +864,66 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   }
 
   /**
-   * Save to localStorage
+   * Save to localStorage with quota management
    */
   private saveToLocalStorage(): void {
     try {
       const data = Array.from(this.slideshows.entries());
-      localStorage.setItem('savedSlideshows', JSON.stringify(data));
+      const jsonData = JSON.stringify(data);
+
+      // Check if data is too large (rough estimate: 4MB limit)
+      if (jsonData.length > 4 * 1024 * 1024) {
+        console.warn('⚠️ Slideshow data too large for localStorage, cleaning up old slideshows...');
+
+        // Keep only the 10 most recent slideshows
+        const sortedSlideshows = Array.from(this.slideshows.values())
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          .slice(0, 10);
+
+        this.slideshows.clear();
+        sortedSlideshows.forEach(slideshow => {
+          this.slideshows.set(slideshow.id, slideshow);
+        });
+
+        // Retry with reduced data
+        const reducedData = Array.from(this.slideshows.entries());
+        localStorage.setItem('savedSlideshows', JSON.stringify(reducedData));
+        console.log('💾 Saved reduced slideshows to localStorage:', reducedData.length);
+        return;
+      }
+
+      localStorage.setItem('savedSlideshows', jsonData);
       console.log('💾 Saved slideshows to localStorage:', data.length);
     } catch (error) {
-      console.error('Failed to save to localStorage:', error);
+      if (error instanceof Error && error.name === 'QuotaExceededError') {
+        console.warn('⚠️ localStorage quota exceeded, clearing old data...');
+
+        try {
+          // Clear all slideshow data and keep only essential info
+          const essentialData = Array.from(this.slideshows.values()).map(slideshow => ({
+            id: slideshow.id,
+            title: slideshow.title,
+            created_at: slideshow.created_at,
+            updated_at: slideshow.updated_at,
+            user_id: slideshow.user_id,
+            folder_id: slideshow.folder_id
+          }));
+
+          localStorage.setItem('savedSlideshows', JSON.stringify(essentialData));
+          console.log('💾 Saved essential slideshow data to localStorage');
+        } catch (fallbackError) {
+          console.error('❌ Failed to save even essential data to localStorage:', fallbackError);
+          // Clear localStorage completely as last resort
+          try {
+            localStorage.removeItem('savedSlideshows');
+            console.log('🗑️ Cleared localStorage to prevent quota errors');
+          } catch (clearError) {
+            console.error('❌ Failed to clear localStorage:', clearError);
+          }
+        }
+      } else {
+        console.error('Failed to save to localStorage:', error);
+      }
     }
   }
 
@@ -1471,7 +1481,6 @@ async createOptimizedSlideshow(
     
     if (aspectRatio !== 'free' && images.length > 0) {
       try {
-        console.log('✂️ Pre-cropping images to target aspect ratio before slideshow creation...');
         
         // Get image IDs for cropping
         const imageIds = images.map(img => img.id);
@@ -1487,7 +1496,6 @@ async createOptimizedSlideshow(
         const imageMap = new Map(croppedImages.map(img => [img.id, img]));
         processedImages = images.map(img => imageMap.get(img.id) || img);
         
-        console.log(`✅ Pre-cropped ${croppedImages.length} images for slideshow creation`);
         
       } catch (cropError) {
         console.warn('⚠️ Failed to pre-crop images, proceeding with original images:', cropError);
