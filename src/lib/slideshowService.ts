@@ -6,7 +6,7 @@ import { uploadWithFallback } from './imgbb';
 import { calculateCropArea } from './aspectRatio';
 import { ensureTikTokFontsLoaded, fontLoader } from './fontUtils';
 
-export class SlideshowService {
+import { supabaseStorage } from './supabaseStorage';export class SlideshowService {
   private static instance: SlideshowService;
   private slideshows: Map<string, SlideshowMetadata> = new Map();
   private templates: Map<string, SlideshowTemplate> = new Map();
@@ -310,7 +310,7 @@ async saveSlideshow(
 
       
       // Upload condensed images to imgbb for slideshow creation and display
-      const optimizedCondensedSlides = await this.uploadCondensedSlidesToImgbb(condensedSlides);
+      const optimizedCondensedSlides = await this.uploadCondensedSlidesToSupabaseStorage(condensedSlides, userId);
 
       const slideshow: SlideshowMetadata = {
         id: slideshowId, // Use prefixed ID consistently throughout
@@ -728,44 +728,48 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   /**
    * Upload condensed slides to imgbb and return optimized slides with imgbb URLs
    */
-  private async uploadCondensedSlidesToImgbb(condensedSlides: CondensedSlide[]): Promise<CondensedSlide[]> {
+  /**
+   * Upload condensed slides to Supabase storage and return optimized slides with Supabase URLs
+   */
+  private async uploadCondensedSlidesToSupabaseStorage(condensedSlides: CondensedSlide[], userId: string): Promise<CondensedSlide[]> {
     const optimizedSlides: CondensedSlide[] = [];
     
     for (let i = 0; i < condensedSlides.length; i++) {
       const slide = condensedSlides[i];
       
       try {
-        console.log(`📤 Uploading slide ${i + 1}/${condensedSlides.length} to imgbb: ${slide.id}`);
+        console.log(`📤 Uploading slide ${i + 1}/${condensedSlides.length} to Supabase storage: ${slide.id}`);
         
-        // Upload the condensed image (base64) to ImgBB with FreeImage fallback
+        // Convert base64 data URL to File object
         const imageFile = await this.dataUrlToFile(slide.condensedImageUrl, `slideshow_slide_${i + 1}.jpg`);
-        const imgbbResponse = await uploadWithFallback(imageFile);
-
-        // Create optimized slide with ImgBB/FreeImage URL
+        
+        // Upload to Supabase storage
+        const uploadResult = await supabaseStorage.uploadFile(imageFile, userId, 'consolidated');
+        
+        // Create optimized slide with Supabase storage URL
         const optimizedSlide: CondensedSlide = {
           ...slide,
-          condensedImageUrl: imgbbResponse.data.url, // Replace base64 with ImgBB/FreeImage URL
+          condensedImageUrl: uploadResult.url, // Replace base64 with Supabase storage URL
           originalImageUrl: slide.originalImageUrl // Keep original as backup
         };
-
-        console.log(`✅ Successfully uploaded slide ${i + 1} to ImgBB/FreeImage:`, imgbbResponse.data.url);
+        
+        console.log(`✅ Successfully uploaded slide ${i + 1} to Supabase storage:`, uploadResult.url);
         optimizedSlides.push(optimizedSlide);
         
       } catch (error) {
-        console.error(`❌ Failed to upload slide ${i + 1} to imgbb:`, error);
+        console.error(`❌ Failed to upload slide ${i + 1} to Supabase storage:`, error);
         
-        // Fallback: keep the base64 data if imgbb upload fails
+        // Fallback: keep the base64 data if Supabase upload fails
         console.warn(`⚠️ Keeping base64 data for slide ${i + 1} as fallback`);
         optimizedSlides.push(slide);
       }
     }
     
     const successCount = optimizedSlides.filter(slide => slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:')).length;
-    console.log(`🎉 Completed upload: ${successCount}/${condensedSlides.length} slides optimized (ImgBB/FreeImage)`);
+    console.log(`🎉 Completed upload: ${successCount}/${condensedSlides.length} slides optimized (Supabase storage)`);
     
     return optimizedSlides;
   }
-
   /**
    * Convert data URL to File object
    */
@@ -1551,7 +1555,7 @@ async createOptimizedSlideshow(
       console.log('🖼️ Uploading condensed images to imgbb immediately...');
       
       // IMMEDIATE OPTIMIZATION: Upload condensed images to ImgBB/FreeImage and get URLs
-      const optimizedCondensedSlides = await this.uploadCondensedSlidesToImgbb(condensedSlides);
+      const optimizedCondensedSlides = await this.uploadCondensedSlidesToSupabaseStorage(condensedSlides, userId);
 
       const slideshow: SlideshowMetadata = {
         id: slideshowId,
