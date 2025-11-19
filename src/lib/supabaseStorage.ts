@@ -177,6 +177,9 @@ export class SupabaseStorageService {
     } catch (error) {
       console.error('❌ Failed to get file metadata:', error);
       throw error;
+    }
+  }
+
   /**
    * Run automatic cleanup of old consolidated images
    * This can be called periodically as a fallback when pg_cron is not available
