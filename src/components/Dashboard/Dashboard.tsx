@@ -152,6 +152,8 @@ export const Dashboard: React.FC = () => {
       loadPostizApiKey();
       loadUserSlideshows();
     }
+  }, [user]); // Remove currentFolderId dependency as the functions don't use it
+
   // Periodic cleanup of old consolidated images
   useEffect(() => {
     if (!user) return;
@@ -176,7 +178,6 @@ export const Dashboard: React.FC = () => {
 
     return () => clearInterval(cleanupInterval);
   }, [user]);
-  }, [user]); // Remove currentFolderId dependency as the functions don't use it
 
   const loadUserSlideshows = async () => {
     if (!user) return;
