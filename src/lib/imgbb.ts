@@ -1,7 +1,6 @@
 import { supabase } from './supabase';
 
 // IM.GE API Key (primary service)
-// IM.GE API Key (primary service)
 const IMGE_API_KEY = 'imge_5Vvy_4378238aa286a4d62a6d663f395e5c680798e12d2c48ebb25d3da539cfc8b4992c6a7eac72327980c8b7c01fa9f0535f386e1d299de575fdd81230ef710801ea';
 const IMGE_UPLOAD_URL = 'https://im.ge/api/1/upload';
 
@@ -67,29 +66,42 @@ export interface ImgbbUploadResponse {
 
 const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
 
+export const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      resolve({ width: img.width, height: img.height });
+    };
+    img.onerror = () => {
+      reject(new Error('Failed to get image dimensions'));
+    };
+    img.src = URL.createObjectURL(file);
+  });
+};
+
 const checkRateLimit = () => {
   const now = Date.now();
   const currentKeyStats = rateLimitTracker.keyUsageStats[rateLimitTracker.currentKeyIndex];
-  
+
   // Reset counter if time window has passed
   if (now - currentKeyStats.lastResetTime > RATE_LIMIT.timeWindow) {
     currentKeyStats.requestCount = 0;
     currentKeyStats.lastResetTime = now;
   }
-  
+
   // Check if we're within rate limits
   if (currentKeyStats.requestCount >= RATE_LIMIT.maxRequests) {
     const waitTime = RATE_LIMIT.timeWindow - (now - currentKeyStats.lastResetTime);
     throw new Error(`🚦 Rate Limited: Too many requests. Please wait ${Math.ceil(waitTime / 1000)} seconds.`);
   }
-  
+
   // Check minimum delay between requests
   const timeSinceLastRequest = now - currentKeyStats.lastRequestTime;
   if (timeSinceLastRequest < RATE_LIMIT.minDelayBetweenRequests) {
     const waitTime = RATE_LIMIT.minDelayBetweenRequests - timeSinceLastRequest;
     return delay(waitTime);
   }
-  
+
   // Update tracker
   currentKeyStats.requestCount++;
   currentKeyStats.lastRequestTime = now;
@@ -98,14 +110,14 @@ const checkRateLimit = () => {
 const switchToNextApiKey = (): number => {
   const currentIndex = rateLimitTracker.currentKeyIndex;
   const nextIndex = (currentIndex + 1) % IMGBB_API_KEYS.length;
-  
+
   // Only switch if we have multiple keys and haven't tried all of them recently
   if (IMGBB_API_KEYS.length > 1 && nextIndex !== currentIndex) {
     rateLimitTracker.currentKeyIndex = nextIndex;
     console.log(`🔄 Switching to backup API key ${nextIndex + 1}/${IMGBB_API_KEYS.length}`);
     return nextIndex;
   }
-  
+
   return currentIndex;
 };
 
@@ -119,7 +131,7 @@ const isRateLimitError = (status: number, errorText: string): boolean => {
     'rate limit', 'rate limit exceeded', 'too many requests', 'quota exceeded',
     'api limit', 'request limit', 'too many', 'limit reached', 'exceeded quota'
   ];
-  
+
   return status === 429 || rateLimitKeywords.some(keyword => errorLower.includes(keyword));
 };
 
@@ -129,7 +141,7 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
     try {
       // Check rate limiting before each attempt
       await checkRateLimit();
-      
+
       // Validate file before upload
       if (file.size === 0) {
         throw new Error('File is empty');
@@ -162,14 +174,14 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
         const errorText = await response.text();
         console.error(`❌ ImgBB Error Response (attempt ${attempt}): ${response.status} ${response.statusText}`);
         console.error(`❌ Error Body: ${errorText}`);
-        
+
         let errorMessage = `ImgBB upload failed: ${response.status} ${response.statusText}`;
         let isRateLimited = false;
         let shouldRetry = false;
-        
+
         // Convert error text to lowercase for analysis
         const errorLower = errorText.toLowerCase();
-        
+
         try {
           const errorData = JSON.parse(errorText);
           if (errorData.error && errorData.error.message) {
@@ -186,7 +198,7 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
 
         if (isRateLimited) {
           shouldRetry = attempt < maxRetries;
-          
+
           // Try switching to backup API key if we haven't exhausted all keys
           if (attempt === 1 && IMGBB_API_KEYS.length > 1) {
             const nextKeyIndex = switchToNextApiKey();
@@ -216,7 +228,7 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
         } else if (response.status === 401) {
           errorMessage = '🔐 Authentication Failed: Invalid ImgBB API key.';
         }
-        
+
         // Log rate limiting for analytics/monitoring
         if (isRateLimited) {
           console.warn('🚦 Rate Limited Detected:', {
@@ -238,7 +250,7 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
           await delay(backoffTime);
           continue; // Skip to next attempt
         }
-        
+
         throw new Error(errorMessage);
       }
 
@@ -254,7 +266,7 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
       }
 
       return data;
-      
+
     } catch (error) {
       // If this is the last attempt, throw the error
       if (attempt === maxRetries) {
@@ -266,7 +278,7 @@ const uploadToImgbbWithRetry = async (file: File, maxRetries = 3): Promise<Imgbb
           throw new Error('ImgBB upload failed with unknown error after all retries');
         }
       }
-      
+
       // For network errors or other issues, wait before retrying
       const backoffTime = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
       console.log(`⏳ Network error, retrying in ${backoffTime}ms... (attempt ${attempt}/${maxRetries})`);
@@ -408,6 +420,7 @@ export const uploadToFreeImage = async (file: File): Promise<ImgbbUploadResponse
     throw error;
   }
 };
+
 // Upload to Supabase Storage
 export const uploadToSupabaseStorage = async (file: File): Promise<ImgbbUploadResponse> => {
   try {
@@ -504,9 +517,6 @@ export const uploadToSupabaseStorage = async (file: File): Promise<ImgbbUploadRe
   }
 };
 
-// Upload to ImgBB as the default image uploader
-
-// Upload to ImgBB as the default image uploader
 // Upload with Supabase Storage as primary, ImgBB as fallback
 export const uploadWithFallback = async (file: File): Promise<ImgbbUploadResponse> => {
   // Try Supabase Storage first
@@ -521,18 +531,13 @@ export const uploadWithFallback = async (file: File): Promise<ImgbbUploadRespons
     return await uploadToImgbb(file);
   }
 };
-export const uploadWithFallback = async (file: File): Promise<ImgbbUploadResponse> => {
-  // Use ImgBB as the primary and only image upload service
-  console.log('🖼️ Uploading to ImgBB...');
-  return await uploadToImgbb(file);
-};
 
 // Export rate limit info for monitoring
 export const getRateLimitStatus = () => {
   const now = Date.now();
   const currentKeyStats = rateLimitTracker.keyUsageStats[rateLimitTracker.currentKeyIndex];
   const timeUntilReset = Math.max(0, RATE_LIMIT.timeWindow - (now - currentKeyStats.lastResetTime));
-  
+
   return {
     currentRequests: currentKeyStats.requestCount,
     maxRequests: RATE_LIMIT.maxRequests,
@@ -565,7 +570,7 @@ export const testApiKey = async (keyIndex: number = 0): Promise<{ success: boole
   }
 
   const apiKey = IMGBB_API_KEYS[keyIndex];
-  
+
   // Create a minimal 1x1 pixel PNG test image
   const testImageData = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   const testImageBlob = new Blob([Uint8Array.from(atob(testImageData), c => c.charCodeAt(0))], { type: 'image/png' });
@@ -631,7 +636,7 @@ export const testApiKey = async (keyIndex: number = 0): Promise<{ success: boole
 // Test all API keys and return results
 export const testAllApiKeys = async (): Promise<{ keyIndex: number; success: boolean; message: string }[]> => {
   console.log('🧪 Testing all ImgBB API keys...');
-  
+
   const results = await Promise.all(
     IMGBB_API_KEYS.map((_, index) => testApiKey(index))
   );
@@ -643,7 +648,7 @@ export const testAllApiKeys = async (): Promise<{ keyIndex: number; success: boo
   }));
 
   console.log('🧪 API Key Test Results:', formattedResults);
-  
+
   return formattedResults;
 };
 
@@ -663,7 +668,7 @@ export const addApiKey = (apiKey: string, setAsActive: boolean = false): void =>
   // In a real app, this should be stored in a database or config
   console.log(`➕ Adding new API key: ${apiKey.substring(0, 8)}...`);
   console.log('⚠️ Note: API keys are hardcoded and need to be updated in the source code to persist');
-  
+
   if (setAsActive) {
     rateLimitTracker.currentKeyIndex = IMGBB_API_KEYS.length;
   }
@@ -679,19 +684,6 @@ export const logDetailedError = (error: any, context: string) => {
     currentApiKey: rateLimitTracker.currentKeyIndex + 1,
     totalApiKeys: IMGBB_API_KEYS.length,
     rateLimitStatus: getRateLimitStatus()
-  });
-};
-
-export const getImageDimensions = (file: File): Promise<{ width: number; height: number }> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      resolve({ width: img.width, height: img.height });
-    };
-    img.onerror = () => {
-      reject(new Error('Failed to get image dimensions'));
-    };
-    img.src = URL.createObjectURL(file);
   });
 };
 
