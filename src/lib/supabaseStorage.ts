@@ -203,10 +203,7 @@ export class SupabaseStorageService {
       console.error('❌ Failed to run automatic cleanup:', error);
       return 0;
     }
-  }
 }
-    }
-  }
 }
 
 export const supabaseStorage = SupabaseStorageService.getInstance();
