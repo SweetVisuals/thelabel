@@ -132,7 +132,7 @@ export const Dashboard: React.FC = () => {
 
   // Postiz API key state
   const [postizApiKey, setPostizApiKey] = useState('');
-  const [showPostizSettings, setShowPostizSettings] = useState(false);
+  const [showPostizSettingsModal, setShowPostizSettingsModal] = useState(false);
   const [isValidatingApiKey, setIsValidatingApiKey] = useState(false);
   const [showPostizPoster, setShowPostizPoster] = useState(false);
   const [showUrlUploader, setShowUrlUploader] = useState(false);
@@ -152,6 +152,30 @@ export const Dashboard: React.FC = () => {
       loadPostizApiKey();
       loadUserSlideshows();
     }
+  // Periodic cleanup of old consolidated images
+  useEffect(() => {
+    if (!user) return;
+
+    const runPeriodicCleanup = async () => {
+      try {
+        const { supabaseStorage } = await import('../../lib/supabaseStorage');
+        const deletedCount = await supabaseStorage.runAutomaticCleanup();
+        if (deletedCount > 0) {
+          console.log(`🧹 Cleaned up ${deletedCount} old consolidated images`);
+        }
+      } catch (error) {
+        console.warn('Failed to run periodic cleanup:', error);
+      }
+    };
+
+    // Run cleanup immediately when user logs in
+    runPeriodicCleanup();
+
+    // Then run every 24 hours (86400000 ms) while user is active
+    const cleanupInterval = setInterval(runPeriodicCleanup, 24 * 60 * 60 * 1000);
+
+    return () => clearInterval(cleanupInterval);
+  }, [user]);
   }, [user, currentFolderId]); // Add currentFolderId to dependencies
 
   const loadUserSlideshows = async () => {
@@ -506,7 +530,7 @@ export const Dashboard: React.FC = () => {
       postizAPI.setApiKey(postizApiKey);
 
       setNotification({ message: 'Postiz API key saved successfully!', type: 'success' });
-      setShowPostizSettings(false);
+      setShowPostizSettingsModal(false);
     } catch (error) {
       console.error('Error saving Postiz API key:', error);
       setNotification({ message: 'Failed to save API key. Please try again.', type: 'error' });
@@ -1502,58 +1526,14 @@ export const Dashboard: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-muted-foreground">Social Media Integration</h4>
                     <Button
-                      onClick={() => setShowPostizSettings(!showPostizSettings)}
+                      onClick={() => setShowPostizSettingsModal(true)}
                       size="sm"
                       variant="outline"
                     >
-                      {showPostizSettings ? 'Hide' : 'Show'} Settings
+                      Show Settings
                     </Button>
                   </div>
 
-                  {showPostizSettings && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="text-muted-foreground text-sm block mb-2">Postiz API Key</label>
-                        <input
-                          type="password"
-                          value={postizApiKey}
-                          onChange={(e) => setPostizApiKey(e.target.value)}
-                          className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-                          placeholder="Enter your Postiz API key..."
-                        />
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Get your API key from <a href="https://postiz.app" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Postiz</a>
-                        </p>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button
-                          onClick={savePostizApiKey}
-                          disabled={isValidatingApiKey || !postizApiKey.trim()}
-                          className="flex-1 bg-blue-600 hover:bg-blue-700"
-                        >
-                          {isValidatingApiKey ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Validating...
-                            </>
-                          ) : (
-                            <>
-                              <Settings className="w-4 h-4 mr-2" />
-                              Save API Key
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          onClick={() => setShowPostizSettings(false)}
-                          variant="outline"
-                          className="flex-1"
-                        >
-                          Cancel
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </div>
 
               </div>
@@ -1618,9 +1598,9 @@ export const Dashboard: React.FC = () => {
                 <PostizPoster
                   slideshow={currentSlideshow}
                   onPostSuccess={(postId) => {
-                    setNotification({ 
-                      message: 'Slideshow posted to TikTok successfully!', 
-                      type: 'success' 
+                    setNotification({
+                      message: 'Slideshow posted to TikTok successfully!',
+                      type: 'success'
                     });
                     setShowPostizPoster(false);
                   }}
@@ -1634,6 +1614,70 @@ export const Dashboard: React.FC = () => {
                   </Button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Postiz Settings Modal */}
+      {showPostizSettingsModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-background rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-foreground">Postiz Settings</h3>
+                <Button
+                  onClick={() => setShowPostizSettingsModal(false)}
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 w-8 p-0"
+                >
+                  ×
+                </Button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="text-muted-foreground text-sm block mb-2">Postiz API Key</label>
+                  <input
+                    type="password"
+                    value={postizApiKey}
+                    onChange={(e) => setPostizApiKey(e.target.value)}
+                    className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
+                    placeholder="Enter your Postiz API key..."
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Get your API key from <a href="https://postiz.app" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Postiz</a>
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    onClick={savePostizApiKey}
+                    disabled={isValidatingApiKey || !postizApiKey.trim()}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  >
+                    {isValidatingApiKey ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Validating...
+                      </>
+                    ) : (
+                      <>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Save API Key
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => setShowPostizSettingsModal(false)}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

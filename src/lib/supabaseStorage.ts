@@ -177,6 +177,31 @@ export class SupabaseStorageService {
     } catch (error) {
       console.error('❌ Failed to get file metadata:', error);
       throw error;
+  /**
+   * Run automatic cleanup of old consolidated images
+   * This can be called periodically as a fallback when pg_cron is not available
+   */
+  async runAutomaticCleanup(): Promise<number> {
+    try {
+      console.log('🧹 Running automatic cleanup of old consolidated images...');
+
+      // Get current user
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) {
+        console.log('ℹ️ No authenticated user, skipping cleanup');
+        return 0;
+      }
+
+      const deletedCount = await this.deleteOldConsolidatedFiles(session.user.id, 14);
+      console.log(`✅ Automatic cleanup completed: deleted ${deletedCount} old consolidated images`);
+
+      return deletedCount;
+    } catch (error) {
+      console.error('❌ Failed to run automatic cleanup:', error);
+      return 0;
+    }
+  }
+}
     }
   }
 }
