@@ -4,8 +4,13 @@ import { Dashboard } from './components/Dashboard/Dashboard';
 import { useAuth } from './hooks/useAuth';
 import { Toaster } from 'sonner';
 
+import { ensureTikTokFontsLoaded } from '@/lib/fontUtils';
 function App() {
   const { user, loading } = useAuth();
+  // Load TikTok fonts on app startup
+  React.useEffect(() => {
+    ensureTikTokFontsLoaded().catch(console.warn);
+  }, []);
 
   if (loading) {
     return (

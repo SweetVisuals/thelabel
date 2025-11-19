@@ -28,12 +28,19 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
   ): Promise<CondensedSlide[]> {
     const condensedSlides: CondensedSlide[] = [];
 
+    console.log(`🎨 createCondensedSlides called with ${images.length} images and ${textOverlays.length} text overlays`);
+    console.log(`🎨 Text overlays:`, textOverlays.map(o => ({ text: o.text?.substring(0, 20), slideIndex: o.slideIndex })));
+
+    // CRITICAL FIX: Ensure TikTok fonts are loaded once for all slides in bulk operations
+    await ensureTikTokFontsLoaded();
+
     // Creating condensed slides with text overlays
 
     for (let i = 0; i < images.length; i++) {
       const image = images[i];
       const slideTextOverlays = textOverlays.filter(overlay => overlay.slideIndex === i);
 
+      console.log(`🖼️ Slide ${i}: ${slideTextOverlays.length} text overlays`, slideTextOverlays.map(o => ({ text: o.text?.substring(0, 20) })));
 
       try {
         const condensedSlide = await this.createCondensedSlide(image, slideTextOverlays, aspectRatio);
@@ -152,8 +159,7 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
   ): Promise<void> {
     const { text, x, y, fontSize, color, fontFamily, fontWeight, alignment, bold, italic, outline, outlineColor, outlineWidth, outlinePosition, glow, glowColor, glowIntensity } = overlay;
 
-    // Ensure TikTok fonts are loaded before rendering
-    await ensureTikTokFontsLoaded();
+    // Fonts are already loaded at the start of createCondensedSlides for bulk operations
 
     // Calculate position as percentage of canvas
     const posX = (x / 100) * canvasWidth;
@@ -163,7 +169,7 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
     // The preview in TikTokPreview is designed to look good at various sizes
     // but the final TikTok format is standardized at 1080px width
     // We need to scale text appropriately to maintain visual proportions
-    
+
     // Use a scaling factor that makes text appropriately sized for 1080px final width
     // 3x scaling gives better results than 4x
     const tiktokScaleFactor = 3;
@@ -182,7 +188,21 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
     if (bold) fontStyle += 'bold ';
     fontStyle += `${scaledFontSize}px ${canvasFontFamily}`;
 
-    ctx.font = fontStyle;
+    // Try to use the TikTok font directly (fonts are pre-loaded)
+    try {
+      ctx.font = fontStyle;
+      // Test if the font works
+      const testMetrics = ctx.measureText('Test');
+      if (testMetrics.width > 0) {
+        console.log(`✅ Using TikTok font for text overlay: ${fontFamily}`);
+      } else {
+        throw new Error('Font measurement failed');
+      }
+    } catch (error) {
+      console.warn('⚠️ TikTok font not available in canvas, falling back to Arial');
+      ctx.font = fontStyle.replace(canvasFontFamily, 'Arial, sans-serif');
+    }
+
     ctx.fillStyle = color;
     ctx.textAlign = alignment as CanvasTextAlign;
     ctx.textBaseline = 'top'; // Change to 'top' for multi-line text
@@ -233,7 +253,7 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
       // Fill text
       ctx.fillText(line, posX, currentY);
     });
-  }
+   }
 
   /**
    * Parse aspect ratio string to number
@@ -756,14 +776,13 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         console.log(`✅ Successfully uploaded slide ${i + 1} to Supabase storage:`, uploadResult.url);
         optimizedSlides.push(optimizedSlide);
         
-      } catch (error) {
-        console.error(`❌ Failed to upload slide ${i + 1} to Supabase storage:`, error);
-        
-        // Fallback: keep the base64 data if Supabase upload fails
-        console.warn(`⚠️ Keeping base64 data for slide ${i + 1} as fallback`);
-        optimizedSlides.push(slide);
-      }
-    }
+       } catch (error) {
+         console.error(`❌ Failed to upload slide ${i + 1} to Supabase storage:`, error);
+         
+         // CRITICAL FIX: For bulk slideshow creation, we MUST use Supabase storage
+         // Throw error instead of falling back to base64 to ensure proper storage usage
+         throw new Error(`Failed to upload condensed slide to Supabase storage. Please check your Supabase configuration and ensure storage policies are set up correctly. Original error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+       }    }
     
     const successCount = optimizedSlides.filter(slide => slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:')).length;
     console.log(`🎉 Completed upload: ${successCount}/${condensedSlides.length} slides optimized (Supabase storage)`);
@@ -1519,6 +1538,9 @@ async createOptimizedSlideshow(
   try {
     console.log('🚀 Starting optimized slideshow creation with smart cropping...');
 
+    // CRITICAL FIX: Ensure TikTok fonts are loaded once for the entire slideshow creation
+    await ensureTikTokFontsLoaded();
+
     // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
     let processedImages = images;
     
@@ -2049,6 +2071,13 @@ async createOptimizedSlideshow(
     try {
       const { randomizeImages = false, slidesPerSlideshow, customizations = {}, slideshowTitles = [] } = options;
 
+      console.log('🎯 BULK TEMPLATE CREATION DEBUG:', {
+        templateName: template.name,
+        templateTextOverlaysCount: template.textOverlays?.length || 0,
+        templateTextOverlays: template.textOverlays?.map(o => ({ text: o.text?.substring(0, 20), slideIndex: o.slideIndex })) || [],
+        imagesCount: images.length
+      });
+
       if (images.length === 0) {
         return {
           success: false,
@@ -2064,7 +2093,7 @@ async createOptimizedSlideshow(
 
       // Determine number of slideshows to create
       const slideshowCount = Math.ceil(images.length / slidesPerSlideshowFinal);
-      
+
       if (slideshowCount === 0) {
         return {
           success: false,
@@ -2104,6 +2133,9 @@ async createOptimizedSlideshow(
             id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
           }));
 
+          console.log(`📝 Slideshow ${i + 1} text overlays before adaptation:`, template.textOverlays.map(o => ({ text: o.text?.substring(0, 20), slideIndex: o.slideIndex })));
+          console.log(`📝 Slideshow ${i + 1} adapted text overlays:`, adaptedTextOverlays.map(o => ({ text: o.text?.substring(0, 20), slideIndex: o.slideIndex })));
+
           // Always remap text overlay indices to fit within the available slides
           // This ensures text overlays work even when template has more slides than current group
           adaptedTextOverlays = adaptedTextOverlays.map(overlay => {
@@ -2115,6 +2147,8 @@ async createOptimizedSlideshow(
             }
             return overlay;
           });
+
+          console.log(`📝 Slideshow ${i + 1} final text overlays after remapping:`, adaptedTextOverlays.map(o => ({ text: o.text?.substring(0, 20), slideIndex: o.slideIndex })));
 
           console.log(`📝 Text overlays for slideshow ${i + 1}:`, {
             templateOverlays: template.textOverlays.length,

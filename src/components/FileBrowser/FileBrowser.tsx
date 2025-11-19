@@ -1153,14 +1153,22 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
           // CRITICAL FIX: Map ALL template text overlays to each chunk
           // Each slideshow should get the complete template text overlay pattern
-          const chunkTextOverlays = template.textOverlays
-            .filter(overlay => overlay.slideIndex < chunk.length) // Only include overlays that fit within this chunk
-            .map(overlay => ({
-              ...overlay,
-              id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-              // Keep the original slideIndex since each slideshow repeats the template pattern
-              slideIndex: overlay.slideIndex
-            }));
+          let chunkTextOverlays = template.textOverlays.map(overlay => ({
+            ...overlay,
+            id: `${overlay.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          }));
+
+          // Remap text overlay indices to fit within the available slides
+          // This ensures text overlays work even when template has more slides than current chunk
+          chunkTextOverlays = chunkTextOverlays.map(overlay => {
+            // If overlay slide index exceeds available slides, map it using modulo
+            if (overlay.slideIndex >= chunk.length) {
+              const mappedIndex = overlay.slideIndex % chunk.length;
+              console.log(`🔄 Mapping template overlay slide ${overlay.slideIndex} to slide ${mappedIndex} for chunk`);
+              return { ...overlay, slideIndex: mappedIndex };
+            }
+            return overlay;
+          });
 
           console.log(`📝 Chunk ${chunkNumber} text overlays (FINAL):`, {
             chunkNumber,

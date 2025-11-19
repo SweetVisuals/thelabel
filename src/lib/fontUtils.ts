@@ -41,6 +41,8 @@ class FontLoader {
 
     try {
       await Promise.all(loadPromises);
+      // Wait for fonts to be ready in the document
+      await document.fonts.ready;
       console.log('✅ All TikTok fonts loaded successfully for canvas');
     } catch (error) {
       console.warn('⚠️ Some TikTok fonts failed to load:', error);
@@ -120,6 +122,31 @@ class FontLoader {
    */
   areFontsLoaded(): boolean {
     return this.loadedFonts.size > 0;
+  }
+
+  /**
+   * Wait for a specific font to be available in canvas context
+   */
+  async waitForFontInCanvas(ctx: CanvasRenderingContext2D, fontFamily: string, timeout: number = 2000): Promise<boolean> {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < timeout) {
+      try {
+        // Test if the font is available by measuring text
+        ctx.font = `16px ${fontFamily}, Arial, sans-serif`;
+        const metrics = ctx.measureText('Test');
+        if (metrics.width > 0) {
+          return true;
+        }
+      } catch (error) {
+        // Continue trying
+      }
+
+      // Wait a bit before trying again
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+
+    return false;
   }
 }
 

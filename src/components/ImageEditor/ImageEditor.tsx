@@ -27,8 +27,7 @@ import {
 } from 'lucide-react';
 import { UploadedImage, ASPECT_RATIO_PRESETS, AspectRatioPreset } from '@/types';
 import { motion } from 'framer-motion';
-import 'jcanvas';
-import $ from 'jquery';
+import { ensureTikTokFontsLoaded, fontLoader } from '@/lib/fontUtils';
 
 interface ImageEditorProps {
   image: UploadedImage;
@@ -127,7 +126,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     }
   };
 
-  const applyEdits = useCallback(() => {
+  const applyEdits = useCallback(async () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -135,7 +134,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     if (!ctx) return;
 
     const img = new Image();
-    img.onload = () => {
+    img.onload = async function() {
       // Set canvas size
       canvas.width = img.width;
       canvas.height = img.height;
@@ -170,9 +169,16 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         ctx.putImageData(croppedImage, 0, 0);
       }
 
+      // Ensure TikTok fonts are loaded before rendering text
+      await ensureTikTokFontsLoaded();
+
       // Add text overlays
-      editState.textOverlays.forEach(overlay => {
-        ctx.font = `${overlay.fontWeight} ${overlay.fontSize}px "${overlay.fontFamily}"`;
+      for (let i = 0; i < editState.textOverlays.length; i++) {
+        const overlay = editState.textOverlays[i];
+        // Get the proper canvas font family with loaded TikTok fonts
+        const canvasFontFamily = fontLoader.getCanvasFontFamily(overlay.fontFamily, overlay.fontWeight);
+
+        ctx.font = overlay.fontWeight + ' ' + overlay.fontSize + 'px ' + canvasFontFamily;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
 
@@ -188,7 +194,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         // Draw the main text fill on top
         ctx.fillStyle = overlay.color;
         ctx.fillText(overlay.text, overlay.x, overlay.y);
-      });
+      }
 
       ctx.restore();
     };
