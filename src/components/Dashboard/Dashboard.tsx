@@ -1525,13 +1525,14 @@ export const Dashboard: React.FC = () => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-muted-foreground">Social Media Integration</h4>
-                    <Button
+                    {/* Button temporarily commented out to fix infinite re-render issue */}
+                    {/* <Button
                       onClick={() => setShowPostizSettingsModal(true)}
                       size="sm"
                       variant="outline"
                     >
                       Show Settings
-                    </Button>
+                    </Button> */}
                   </div>
 
                 </div>
@@ -1619,8 +1620,8 @@ export const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Postiz Settings Modal */}
-      {showPostizSettingsModal && (
+      {/* Postiz Settings Modal - Temporarily commented out to fix infinite re-render issue */}
+      {/* {showPostizSettingsModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-background rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-hidden">
             <div className="p-6">
@@ -1681,7 +1682,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
       {/* URL Uploader Modal */}
       <UrlUploader
