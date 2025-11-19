@@ -1637,10 +1637,10 @@ async createOptimizedSlideshow(
     textOverlays: TikTokTextOverlay[],
     aspectRatio: string
   ): Promise<CondensedSlide> {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
+
       if (!ctx) {
         reject(new Error('Failed to get canvas context'));
         return;
@@ -1648,8 +1648,8 @@ async createOptimizedSlideshow(
 
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      
-      img.onload = () => {
+
+      img.onload = async () => {
         try {
           // Set canvas size based on aspect ratio
           const ratio = this.parseAspectRatio(aspectRatio);
