@@ -293,134 +293,6 @@ export const uploadToImgbb = async (file: File): Promise<ImgbbUploadResponse> =>
   return uploadToImgbbWithRetry(file);
 };
 
-// Upload to IM.GE API via proxy (primary service)
-export const uploadToImge = async (file: File): Promise<ImgbbUploadResponse> => {
-  try {
-    // Validate file before upload
-    if (file.size === 0) {
-      throw new Error('File is empty');
-    }
-
-    if (file.size > 25 * 1024 * 1024) { // 25MB limit
-      throw new Error('File too large (max 25MB)');
-    }
-
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      console.warn(`Unexpected MIME type: ${file.type}, attempting upload anyway`);
-    }
-
-    console.log(`📤 Uploading to IM.GE via proxy: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
-
-    // Create form data for IM.GE proxy
-    const formData = new FormData();
-    formData.append('source', file);
-
-    // Upload to IM.GE via proxy
-    const response = await fetch('/api/imge-proxy', {
-      method: 'POST',
-      body: formData,
-    });
-
-    console.log(`📊 IM.GE proxy response status: ${response.status} ${response.statusText}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ IM.GE proxy error: ${response.status} ${response.statusText}`);
-      console.error(`❌ Error body: ${errorText}`);
-
-      let errorMessage = `IM.GE upload failed: ${response.status} ${response.statusText}`;
-      try {
-        const errorData = JSON.parse(errorText);
-        if (errorData.error) {
-          errorMessage = `IM.GE Error: ${errorData.error}`;
-        }
-      } catch (parseError) {
-        console.warn('Could not parse error response as JSON');
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    console.log(`✅ IM.GE proxy upload success:`, data);
-
-    if (!data.success || !data.data || !data.data.url) {
-      throw new Error('IM.GE upload incomplete - missing image data');
-    }
-
-    return data;
-
-  } catch (error) {
-    console.error('❌ IM.GE upload failed:', error);
-    throw error;
-  }
-};
-
-// Upload to FreeImage.host via proxy
-export const uploadToFreeImage = async (file: File): Promise<ImgbbUploadResponse> => {
-  try {
-    // Validate file before upload
-    if (file.size === 0) {
-      throw new Error('File is empty');
-    }
-
-    if (file.size > 25 * 1024 * 1024) { // 25MB limit
-      throw new Error('File too large (max 25MB)');
-    }
-
-    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      console.warn(`Unexpected MIME type: ${file.type}, attempting upload anyway`);
-    }
-
-    console.log(`📤 Uploading to FreeImage.host: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
-
-    // Create form data for FreeImage.host proxy
-    const formData = new FormData();
-    formData.append('source', file);
-
-    // Upload to FreeImage.host via proxy
-    const response = await fetch('/api/freeimage-proxy', {
-      method: 'POST',
-      body: formData,
-    });
-
-    console.log(`📊 FreeImage.host proxy response status: ${response.status} ${response.statusText}`);
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ FreeImage.host proxy error: ${response.status} ${response.statusText}`);
-      console.error(`❌ Error body: ${errorText}`);
-
-      let errorMessage = `FreeImage.host upload failed: ${response.status} ${response.statusText}`;
-      try {
-        const errorData = JSON.parse(errorText);
-        if (errorData.error) {
-          errorMessage = `FreeImage Error: ${errorData.error}`;
-        }
-      } catch (parseError) {
-        console.warn('Could not parse error response as JSON');
-      }
-
-      throw new Error(errorMessage);
-    }
-
-    const data = await response.json();
-    console.log(`✅ FreeImage.host upload success:`, data);
-
-    if (!data.success || !data.data || !data.data.url) {
-      throw new Error('FreeImage.host upload incomplete - missing image data');
-    }
-
-    return data;
-
-  } catch (error) {
-    console.error('❌ FreeImage upload failed:', error);
-    throw error;
-  }
-};
-
 // Upload to Supabase Storage
 export const uploadToSupabaseStorage = async (file: File): Promise<ImgbbUploadResponse> => {
   try {
@@ -522,9 +394,14 @@ export const uploadWithFallback = async (file: File): Promise<ImgbbUploadRespons
   // Try Supabase Storage first
   try {
     console.log('🖼️ Attempting upload to Supabase Storage...');
-    return await uploadToSupabaseStorage(file);
+    console.log('🖼️ File details:', { name: file.name, size: file.size, type: file.type });
+    const result = await uploadToSupabaseStorage(file);
+    console.log('✅ Supabase Storage upload successful');
+    return result;
   } catch (supabaseError) {
     console.warn('⚠️ Supabase Storage upload failed, falling back to ImgBB:', supabaseError instanceof Error ? supabaseError.message : 'Unknown error');
+    console.warn('⚠️ Supabase error details:', supabaseError);
+    console.warn('⚠️ Supabase error stack:', supabaseError instanceof Error ? supabaseError.stack : 'No stack trace');
 
     // Fallback to ImgBB with automatic key cycling
     console.log('🖼️ Falling back to ImgBB upload...');
