@@ -816,7 +816,7 @@ export const Dashboard: React.FC = () => {
     }
   };
 
-  const derivedCurrentImages = getCurrentImages();
+  const derivedCurrentImages = useMemo(() => getCurrentImages(), [currentFolderId, images, folders]);
 
   // Filter selected images to only include those from current folder
   const getCurrentSelectedImages = () => {
