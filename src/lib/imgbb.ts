@@ -406,20 +406,11 @@ export const uploadToFreeImage = async (file: File): Promise<ImgbbUploadResponse
   }
 };
 
-// Upload with multi-level fallback: FreeImage -> ImgBB (skip IM.GE due to CORS issues)
+// Upload to ImgBB as the default image uploader
 export const uploadWithFallback = async (file: File): Promise<ImgbbUploadResponse> => {
-  // Try FreeImage first (primary service)
-  try {
-    console.log('🆓 Trying FreeImage upload first...');
-    const freeImageResponse = await uploadToFreeImage(file);
-    console.log('✅ FreeImage upload successful');
-    return freeImageResponse;
-  } catch (freeImageError) {
-    console.warn('⚠️ FreeImage upload failed, falling back to ImgBB:', freeImageError);
-
-    // Final fallback to ImgBB
-    return await uploadToImgbb(file);
-  }
+  // Use ImgBB as the primary and only image upload service
+  console.log('🖼️ Uploading to ImgBB...');
+  return await uploadToImgbb(file);
 };
 
 // Export rate limit info for monitoring

@@ -265,13 +265,19 @@ export const UrlUploader: React.FC<UrlUploaderProps> = ({
       return uploadedImage;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      
-      setUrlInputs(prev => prev.map(input => 
-        input.id === urlInput.id 
-          ? { ...input, status: 'error', error: errorMessage, progress: 0 }
+
+      // Check if this is a rate limit error and make it more user-friendly
+      const isRateLimitError = errorMessage.includes('Rate Limited') || errorMessage.includes('🚦');
+      const userFriendlyMessage = isRateLimitError
+        ? `Upload paused due to rate limits. The system automatically switches between API keys. Please wait a moment and try again, or the upload will retry automatically.`
+        : errorMessage;
+
+      setUrlInputs(prev => prev.map(input =>
+        input.id === urlInput.id
+          ? { ...input, status: 'error', error: userFriendlyMessage, progress: 0 }
           : input
       ));
-      
+
       throw error;
     }
   };

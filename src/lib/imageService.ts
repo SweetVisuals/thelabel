@@ -82,7 +82,7 @@ export class ImageCroppingService {
             type: image.mime_type.includes('png') ? 'image/png' : 'image/jpeg'
           });
 
-          // Upload with multi-level fallback: IM.GE -> FreeImage -> ImgBB
+          // Upload to ImgBB as the default image uploader
           const imgbbResponse = await uploadWithFallback(newFile);
 
           // Update database with new dimensions and aspect ratio
@@ -282,7 +282,7 @@ export const imageService = {
 
       const user = session.user;
 
-      // Upload with multi-level fallback: IM.GE -> FreeImage -> ImgBB
+      // Upload to ImgBB as the default image uploader
       const imgbbResponse = await uploadWithFallback(file);
       const dimensions = await getImageDimensions(file);
 

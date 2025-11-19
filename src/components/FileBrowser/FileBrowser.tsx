@@ -480,7 +480,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
       toast.promise(uploadPromise, {
         loading: `Uploading ${imageFiles.length} images...`,
         success: (newImages) => `Successfully uploaded ${newImages.length} images!`,
-        error: 'Upload failed. Please try again.',
+        error: (error) => {
+          const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+          if (errorMessage.includes('Rate Limited') || errorMessage.includes('🚦')) {
+            return '🚦 Upload failed due to rate limits. Please wait a moment and try again.';
+          }
+          return 'Upload failed. Please try again.';
+        },
       });
     }
 
@@ -1335,7 +1341,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               toast.promise(uploadPromise, {
                 loading: `Uploading ${imageFiles.length} images...`,
                 success: (newImages) => `Successfully uploaded ${newImages.length} images!`,
-                error: 'Upload failed. Please try again.',
+                error: (error) => {
+          const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+          if (errorMessage.includes('Rate Limited') || errorMessage.includes('🚦')) {
+            return '🚦 Upload failed due to rate limits. Please wait a moment and try again.';
+          }
+          return 'Upload failed. Please try again.';
+        },
               });
             }
 
@@ -1456,7 +1468,13 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         toast.promise(uploadPromise, {
           loading: `Uploading ${imageFiles.length} images...`,
           success: (newImages) => `Successfully uploaded ${newImages.length} images!`,
-          error: 'Upload failed. Please try again.',
+          error: (error) => {
+          const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+          if (errorMessage.includes('Rate Limited') || errorMessage.includes('🚦')) {
+            return '🚦 Upload failed due to rate limits. Please wait a moment and try again.';
+          }
+          return 'Upload failed. Please try again.';
+        },
         });
       }
 
