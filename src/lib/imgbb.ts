@@ -1,3 +1,6 @@
+import { supabase } from './supabase';
+
+// IM.GE API Key (primary service)
 // IM.GE API Key (primary service)
 const IMGE_API_KEY = 'imge_5Vvy_4378238aa286a4d62a6d663f395e5c680798e12d2c48ebb25d3da539cfc8b4992c6a7eac72327980c8b7c01fa9f0535f386e1d299de575fdd81230ef710801ea';
 const IMGE_UPLOAD_URL = 'https://im.ge/api/1/upload';
@@ -405,8 +408,119 @@ export const uploadToFreeImage = async (file: File): Promise<ImgbbUploadResponse
     throw error;
   }
 };
+// Upload to Supabase Storage
+export const uploadToSupabaseStorage = async (file: File): Promise<ImgbbUploadResponse> => {
+  try {
+    // Validate file before upload
+    if (file.size === 0) {
+      throw new Error('File is empty');
+    }
+
+    if (file.size > 50 * 1024 * 1024) { // 50MB limit for Supabase Storage
+      throw new Error('File too large (max 50MB)');
+    }
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      console.warn(`Unexpected MIME type: ${file.type}, attempting upload anyway`);
+    }
+
+    console.log(`📤 Uploading to Supabase Storage: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB, ${file.type})`);
+
+    // Get current user for bucket organization
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError || !session?.user) {
+      throw new Error('User not authenticated');
+    }
+
+    const userId = session.user.id;
+
+    // Create unique file path with user ID for organization
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(2, 15);
+    const fileExtension = file.name.split('.').pop() || 'jpg';
+    const filePath = `images/${userId}/${timestamp}_${randomId}.${fileExtension}`;
+
+    // Upload to Supabase Storage
+    const { data, error } = await supabase.storage
+      .from('images') // Using 'images' bucket
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false, // Don't overwrite existing files
+        contentType: file.type
+      });
+
+    if (error) {
+      console.error('❌ Supabase Storage upload error:', error);
+      throw new Error(`Supabase Storage upload failed: ${error.message}`);
+    }
+
+    console.log('✅ Supabase Storage upload success:', data);
+
+    // Get public URL
+    const { data: { publicUrl } } = supabase.storage
+      .from('images')
+      .getPublicUrl(filePath);
+
+    // Get image dimensions
+    const dimensions = await getImageDimensions(file);
+
+    // Return in ImgbbUploadResponse format for compatibility
+    return {
+      data: {
+        id: data.path, // Use the path as ID
+        title: file.name,
+        url_viewer: publicUrl,
+        url: publicUrl,
+        display_url: publicUrl,
+        width: dimensions.width,
+        height: dimensions.height,
+        size: file.size,
+        time: new Date().toISOString(),
+        expiration: 'never', // Supabase Storage doesn't expire
+        image: {
+          filename: file.name,
+          name: file.name,
+          mime: file.type,
+          extension: fileExtension,
+          url: publicUrl,
+        },
+        thumb: {
+          filename: file.name,
+          name: file.name,
+          mime: file.type,
+          extension: fileExtension,
+          url: publicUrl, // Use same URL for thumbnail
+        },
+        delete_url: '', // Supabase Storage doesn't provide delete URLs in the same way
+      },
+      success: true,
+      status: 200
+    };
+
+  } catch (error) {
+    console.error('❌ Supabase Storage upload failed:', error);
+    throw error;
+  }
+};
 
 // Upload to ImgBB as the default image uploader
+
+// Upload to ImgBB as the default image uploader
+// Upload with Supabase Storage as primary, ImgBB as fallback
+export const uploadWithFallback = async (file: File): Promise<ImgbbUploadResponse> => {
+  // Try Supabase Storage first
+  try {
+    console.log('🖼️ Attempting upload to Supabase Storage...');
+    return await uploadToSupabaseStorage(file);
+  } catch (supabaseError) {
+    console.warn('⚠️ Supabase Storage upload failed, falling back to ImgBB:', supabaseError instanceof Error ? supabaseError.message : 'Unknown error');
+
+    // Fallback to ImgBB with automatic key cycling
+    console.log('🖼️ Falling back to ImgBB upload...');
+    return await uploadToImgbb(file);
+  }
+};
 export const uploadWithFallback = async (file: File): Promise<ImgbbUploadResponse> => {
   // Use ImgBB as the primary and only image upload service
   console.log('🖼️ Uploading to ImgBB...');
