@@ -6,7 +6,7 @@ import { uploadWithFallback } from './imgbb';
 import { calculateCropArea } from './aspectRatio';
 import { ensureTikTokFontsLoaded, fontLoader } from './fontUtils';
 
-import { supabaseStorage } from './supabaseStorage';export class SlideshowService {
+import { supabaseStorage } from './supabaseStorage'; export class SlideshowService {
   private static instance: SlideshowService;
   private slideshows: Map<string, SlideshowMetadata> = new Map();
   private templates: Map<string, SlideshowTemplate> = new Map();
@@ -16,6 +16,13 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
       SlideshowService.instance = new SlideshowService();
     }
     return SlideshowService.instance;
+  }
+
+  /**
+   * Get all loaded slideshows
+   */
+  getAllSlideshows(): SlideshowMetadata[] {
+    return Array.from(this.slideshows.values());
   }
 
   /**
@@ -65,7 +72,7 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
+
       if (!ctx) {
         reject(new Error('Failed to get canvas context'));
         return;
@@ -73,7 +80,7 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
 
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      
+
       img.onload = () => {
         try {
           // Set canvas size based on aspect ratio
@@ -253,22 +260,22 @@ import { supabaseStorage } from './supabaseStorage';export class SlideshowServic
       // Fill text
       ctx.fillText(line, posX, currentY);
     });
-   }
+  }
 
   /**
    * Parse aspect ratio string to number
    */
   private parseAspectRatio(aspectRatio: string): number {
     if (aspectRatio === 'free') return 0;
-    
+
     const [width, height] = aspectRatio.split(':').map(Number);
     return width / height;
   }
 
-/**
- * Save slideshow metadata with enhanced cropping integration
- */
-async saveSlideshow(
+  /**
+   * Save slideshow metadata with enhanced cropping integration
+   */
+  async saveSlideshow(
     title: string,
     postTitle: string,
     caption: string,
@@ -285,36 +292,36 @@ async saveSlideshow(
 
       // CRITICAL FIX: Validate and ensure aspect ratio is properly determined
       const finalAspectRatio = aspectRatio || images[0]?.aspectRatio || '9:16';
-      
+
       // Validate the final aspect ratio
       const validatedAspectRatio = this.validateAspectRatio(finalAspectRatio) ? finalAspectRatio : '9:16';
-      
+
       // Use the validated aspect ratio
       const finalAR = validatedAspectRatio;
 
       // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
       let processedImages = images;
-      
+
       if (finalAR !== 'free' && images.length > 0) {
         try {
           console.log('✂️ Pre-cropping images to target aspect ratio before slideshow creation...');
-          
+
           // Get image IDs for cropping
           const imageIds = images.map(img => img.id);
-          
+
           // Use enhanced cropping service to crop images
           const croppedImages = await ImageCroppingService.changeAspectRatio(
             imageIds,
             finalAR,
             userId
           );
-          
+
           // Update images array with cropped versions
           const imageMap = new Map(croppedImages.map(img => [img.id, img]));
           processedImages = images.map(img => imageMap.get(img.id) || img);
-          
+
           console.log(`✅ Pre-cropped ${croppedImages.length} images for slideshow creation`);
-          
+
         } catch (cropError) {
           console.warn('⚠️ Failed to pre-crop images, proceeding with original images:', cropError);
           // Continue with original images if cropping fails
@@ -328,7 +335,7 @@ async saveSlideshow(
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
 
-      
+
       // Upload condensed images to imgbb for slideshow creation and display
       const optimizedCondensedSlides = await this.uploadCondensedSlidesToSupabaseStorage(condensedSlides, userId);
 
@@ -374,7 +381,7 @@ async saveSlideshow(
       try {
         await this.saveSlideshowFile(slideshow);
         console.log('✅ Slideshow file auto-created successfully');
-        
+
         // Trigger storage events to update file browser
         window.dispatchEvent(new StorageEvent('storage', {
           key: 'savedSlideshows',
@@ -422,7 +429,7 @@ async saveSlideshow(
         const { supabase } = await import('./supabase');
         const { data: { session } } = await supabase.auth.getSession();
         console.log('🔐 Auth session check:', { hasSession: !!session, hasUser: !!session?.user?.id });
-        
+
         if (session?.user?.id) {
           await this.loadFromDatabase(session.user.id);
           slideshow = this.slideshows.get(slideshowId);
@@ -449,7 +456,7 @@ async saveSlideshow(
       postTitle: finalResult?.postTitle,
       condensedSlidesCount: finalResult?.condensedSlides?.length || 0
     });
-    
+
     return finalResult;
   }
 
@@ -459,15 +466,15 @@ async saveSlideshow(
    */
   async loadSlideshowWithClearSettings(slideshowId: string): Promise<SlideshowMetadata | null> {
     console.log('🧹📋 SLIDESHOW SERVICE: loadSlideshowWithClearSettings called with ID:', slideshowId);
-    
+
     // Load the original slideshow first
     const originalSlideshow = await this.loadSlideshow(slideshowId);
-    
+
     if (!originalSlideshow) {
       console.log('❌ No slideshow found with ID:', slideshowId);
       return null;
     }
-    
+
     // Create a clean version with cleared text fields
     const cleanSlideshow: SlideshowMetadata = {
       ...originalSlideshow,
@@ -484,7 +491,7 @@ async saveSlideshow(
       condensedSlides: originalSlideshow.condensedSlides, // Keep the slides/images
       updated_at: new Date().toISOString() // Update timestamp to indicate this is a fresh load
     };
-    
+
     console.log('🧹📋 Created clean slideshow with cleared text fields:', {
       slideshowId,
       originalTitle: originalSlideshow.title,
@@ -492,7 +499,7 @@ async saveSlideshow(
       slideCount: cleanSlideshow.condensedSlides.length,
       hasClearedText: !cleanSlideshow.title && !cleanSlideshow.caption && cleanSlideshow.hashtags.length === 0
     });
-    
+
     return cleanSlideshow;
   }
 
@@ -514,7 +521,7 @@ async saveSlideshow(
       if (!('folder_id' in slideshow)) {
         (slideshow as any).folder_id = null;
       }
-      
+
       // Ensure postTitle exists for backward compatibility (fix for missing postTitle)
       if (!('postTitle' in slideshow)) {
         (slideshow as any).postTitle = slideshow.title; // Fallback to title
@@ -607,7 +614,7 @@ async saveSlideshow(
   ): PostizSlideshowData {
     // Get optimized media URLs with size checking
     const { optimizedUrls, hasLargePayload } = this.optimizeSlideshowPayload(slideshow);
-    
+
     if (hasLargePayload) {
       console.warn('⚠️ Large slideshow payload detected. Consider reducing image count or using compressed images.');
     }
@@ -624,14 +631,14 @@ async saveSlideshow(
   /**
    * Optimize slideshow payload to avoid 413 errors
    */
-optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[], hasLargePayload: boolean } {
+  optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[], hasLargePayload: boolean } {
     const urls: string[] = [];
     let totalSize = 0;
     let hasLargeDataUrl = false;
 
     for (const slide of slideshow.condensedSlides) {
       let url = '';
-      
+
       // CRITICAL FIX: Priority 1 - Use imgbb URL if available (best for Postiz)
       if (slide.condensedImageUrl?.includes('i.ibb.co')) {
         console.log(`🔗 Using imgbb URL (optimized) for slide ${slide.id}`);
@@ -655,7 +662,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       }
 
       urls.push(url);
-      
+
       // Estimate size for payload optimization
       if (url.startsWith('data:')) {
         // Base64 data URLs are roughly 33% larger than the original binary data
@@ -692,11 +699,11 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   async upgradeSlideshowPayload(slideshow: SlideshowMetadata): Promise<SlideshowMetadata> {
     try {
       console.log('🔄 Upgrading slideshow payload to reduce size...');
-      
+
       // Load the original images to get their URLs
       const allImages = await imageService.loadImages();
       const imageUrlMap = new Map(allImages.map(img => [img.id, img.url]));
-      
+
       // Update each condensed slide to include original URL if missing
       const upgradedSlides = slideshow.condensedSlides.map(slide => {
         if (!slide.originalImageUrl && slide.originalImageId) {
@@ -720,16 +727,16 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
 
       // Update in memory
       this.slideshows.set(slideshow.id, upgradedSlideshow);
-      
+
       // Save to localStorage
       this.saveToLocalStorage();
-      
+
       // Save to database
       await this.saveToDatabase(upgradedSlideshow);
 
       console.log(`✅ Upgraded slideshow: ${slideshow.title} (${upgradedSlides.length} slides)`);
       return upgradedSlideshow;
-      
+
     } catch (error) {
       console.error('❌ Failed to upgrade slideshow payload:', error);
       return slideshow; // Return original if upgrade fails
@@ -753,40 +760,41 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
    */
   private async uploadCondensedSlidesToSupabaseStorage(condensedSlides: CondensedSlide[], userId: string): Promise<CondensedSlide[]> {
     const optimizedSlides: CondensedSlide[] = [];
-    
+
     for (let i = 0; i < condensedSlides.length; i++) {
       const slide = condensedSlides[i];
-      
+
       try {
         console.log(`📤 Uploading slide ${i + 1}/${condensedSlides.length} to Supabase storage: ${slide.id}`);
-        
+
         // Convert base64 data URL to File object
         const imageFile = await this.dataUrlToFile(slide.condensedImageUrl, `slideshow_slide_${i + 1}.jpg`);
-        
+
         // Upload to Supabase storage
         const uploadResult = await supabaseStorage.uploadFile(imageFile, userId, 'consolidated');
-        
+
         // Create optimized slide with Supabase storage URL
         const optimizedSlide: CondensedSlide = {
           ...slide,
           condensedImageUrl: uploadResult.url, // Replace base64 with Supabase storage URL
           originalImageUrl: slide.originalImageUrl // Keep original as backup
         };
-        
+
         console.log(`✅ Successfully uploaded slide ${i + 1} to Supabase storage:`, uploadResult.url);
         optimizedSlides.push(optimizedSlide);
-        
-       } catch (error) {
-         console.error(`❌ Failed to upload slide ${i + 1} to Supabase storage:`, error);
-         
-         // CRITICAL FIX: For bulk slideshow creation, we MUST use Supabase storage
-         // Throw error instead of falling back to base64 to ensure proper storage usage
-         throw new Error(`Failed to upload condensed slide to Supabase storage. Please check your Supabase configuration and ensure storage policies are set up correctly. Original error: ${error instanceof Error ? error.message : 'Unknown error'}`);
-       }    }
-    
+
+      } catch (error) {
+        console.error(`❌ Failed to upload slide ${i + 1} to Supabase storage:`, error);
+
+        // CRITICAL FIX: For bulk slideshow creation, we MUST use Supabase storage
+        // Throw error instead of falling back to base64 to ensure proper storage usage
+        throw new Error(`Failed to upload condensed slide to Supabase storage. Please check your Supabase configuration and ensure storage policies are set up correctly. Original error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    }
+
     const successCount = optimizedSlides.filter(slide => slide.condensedImageUrl && !slide.condensedImageUrl.startsWith('data:')).length;
     console.log(`🎉 Completed upload: ${successCount}/${condensedSlides.length} slides optimized (Supabase storage)`);
-    
+
     return optimizedSlides;
   }
   /**
@@ -797,17 +805,17 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       const img = new Image();
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
+
       if (!ctx) {
         reject(new Error('Failed to get canvas context'));
         return;
       }
-      
+
       img.onload = () => {
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0);
-        
+
         canvas.toBlob(
           (blob) => {
             if (blob) {
@@ -820,7 +828,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
           0.9
         );
       };
-      
+
       img.onerror = () => reject(new Error('Failed to load image from data URL'));
       img.src = dataUrl;
     });
@@ -836,13 +844,13 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
     postNow: boolean = false
   ): Promise<PostizSlideshowData> {
     let slideshowToUse = slideshow;
-    
+
     // Auto-upgrade if needed
     if (this.needsUpgrade(slideshow)) {
       console.log('🔄 Auto-upgrading slideshow to reduce payload size...');
       slideshowToUse = await this.upgradeSlideshowPayload(slideshow);
     }
-    
+
     // Get optimized data
     return this.createPostizPostData(slideshowToUse, profileIds, scheduledAt, postNow);
   }
@@ -873,11 +881,11 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       // ========================================
       console.log('📤 STEP 1: Uploading images to Postiz storage...');
       const postizMedia = await postizUploadService.uploadImgbbImagesToPostiz(slideshow);
-      
+
       if (postizMedia.length === 0) {
         throw new Error('No images were successfully uploaded to Postiz storage. Cannot create post without images.');
       }
-      
+
       console.log(`✅ STEP 1 COMPLETE: ${postizMedia.length} images uploaded to Postiz storage`);
       console.log('📊 Postiz media details:', postizMedia);
 
@@ -885,9 +893,9 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       // STEP 2: Create post using Postiz image gallery URLs
       // ========================================
       console.log('📤 STEP 2: Creating TikTok post with Postiz image gallery URLs...');
-      
+
       const captionText = this.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags);
-      
+
       const result = await postizAPI.createPostWithPostizImages(
         captionText,                           // Post content
         profileIds[0],                         // Integration ID (TikTok profile)
@@ -895,10 +903,10 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         scheduledAt,                           // Scheduled date (if any)
         postNow                                // Post immediately or schedule
       );
-      
+
       console.log('✅ STEP 2 COMPLETE: TikTok post created successfully');
       console.log('🎉 Final result:', result);
-      
+
       return {
         id: result.postId,
         integration: result.integration,
@@ -907,7 +915,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         mediaCount: postizMedia.length,
         slideshowTitle: slideshow.title
       };
-      
+
     } catch (error) {
       console.error('❌ Failed to post slideshow to Postiz:', error);
       throw error;
@@ -1013,7 +1021,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
     // Also save to localStorage after loading from database to ensure persistence
     this.saveToLocalStorage();
 
-    
+
   }
 
   /**
@@ -1076,12 +1084,12 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   private async saveSlideshowFile(slideshow: SlideshowMetadata): Promise<void> {
     try {
       console.log('💾 saveSlideshowFile called for:', slideshow.title, 'ID:', slideshow.id);
-      
+
       // Create a blob and download link for the slideshow file
       const content = JSON.stringify(slideshow, null, 2);
       const blob = new Blob([content], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      
+
       // Create a simulated file entry in localStorage that the file browser can detect
       const fileKey = `slideshow_file_${slideshow.id}`;
       const fileData = {
@@ -1092,18 +1100,18 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         created: new Date().toISOString(),
         folderId: slideshow.folder_id || null
       };
-      
+
       console.log('💾 About to save slideshow file to localStorage:', fileKey);
       console.log('📁 File data structure:', fileData);
-      
+
       localStorage.setItem(fileKey, JSON.stringify(fileData));
 
       // Verify it was saved
       const saved = localStorage.getItem(fileKey);
       console.log('✅ Slideshow file saved successfully:', !!saved);
-      
+
       console.log('🎯 Slideshow file created and ready for download:', slideshow.title);
-      
+
       // Don't revoke the URL immediately so the user can still download it if needed
       setTimeout(() => URL.revokeObjectURL(url), 30000); // Revoke after 30 seconds
     } catch (error) {
@@ -1117,7 +1125,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
    */
   getSlideshowFiles(): { id: string; name: string; type: string; blob: string; created: string; folderId?: string | null }[] {
     const files: { id: string; name: string; type: string; blob: string; created: string; folderId?: string | null }[] = [];
-    
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('slideshow_file_')) {
@@ -1131,7 +1139,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         }
       }
     }
-    
+
     return files.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
   }
 
@@ -1149,23 +1157,23 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
     try {
       console.log('📝 About to save slideshow file for:', slideshow.title);
       await this.saveSlideshowFile(slideshow);
-      
+
       // Trigger a storage event to update the file browser
       window.dispatchEvent(new StorageEvent('storage', {
         key: 'savedSlideshows',
         newValue: localStorage.getItem('savedSlideshows')
       }));
-      
+
       // Also dispatch custom slideshow updated event
       window.dispatchEvent(new CustomEvent('slideshowUpdated'));
-      
+
       console.log('✅ Slideshow exported as file:', slideshow.title);
-      
+
       // Verify the file was created
       const fileKey = `slideshow_file_${slideshow.id}`;
       const savedFile = localStorage.getItem(fileKey);
       console.log('🔍 Verifying saved file exists:', !!savedFile, 'Key:', fileKey);
-      
+
     } catch (error) {
       console.error('❌ Failed to export slideshow:', error);
       throw error;
@@ -1240,7 +1248,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       // Only log if slideshow count changed
       const currentCount = this.slideshows.size;
       const newCount = slideshows?.length || 0;
-      
+
       if (currentCount !== newCount || currentCount === 0) {
         console.log('📊 Slideshows loaded:', newCount);
       }
@@ -1344,7 +1352,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
       if (!('folder_id' in slideshow)) {
         (slideshow as any).folder_id = null;
       }
-      
+
       // Ensure postTitle exists for backward compatibility (fix for missing postTitle)
       if (!('postTitle' in slideshow)) {
         (slideshow as any).postTitle = slideshow.title; // Fallback to title
@@ -1378,7 +1386,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   async moveSlideshowToFolder(slideshowId: string, folderId: string | null): Promise<void> {
     try {
       console.log(`📁 Moving slideshow ${slideshowId} to folder ${folderId || 'root'}`);
-      
+
       const slideshow = this.slideshows.get(slideshowId);
       if (!slideshow) {
         throw new Error('Slideshow not found');
@@ -1390,7 +1398,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
 
       // Store in memory
       this.slideshows.set(slideshowId, slideshow);
-      
+
       // Save to localStorage
       this.saveToLocalStorage();
 
@@ -1415,9 +1423,9 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
           }
         }
       }
-      
+
       console.log(`🔍 Found ${slideshowFileKeys.length} file entries for slideshow ${slideshowId}`);
-      
+
       // Update all found file entries to the new folder
       slideshowFileKeys.forEach(fileKey => {
         try {
@@ -1433,7 +1441,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
           console.error(`Failed to update file entry ${fileKey}:`, error);
         }
       });
-      
+
       // Also save to database for persistence
       await this.saveToDatabase(slideshow);
 
@@ -1442,7 +1450,7 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
         key: 'savedSlideshows',
         newValue: localStorage.getItem('savedSlideshows')
       }));
-      
+
       // Dispatch custom event to update file browser
       window.dispatchEvent(new CustomEvent('slideshowUpdated'));
 
@@ -1482,12 +1490,12 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
   async loadSlideshowFromFileDataWithFolder(fileData: string): Promise<SlideshowMetadata> {
     try {
       const slideshow = JSON.parse(fileData) as SlideshowMetadata;
-      
+
       // Ensure backward compatibility fields exist
       if (!('folder_id' in slideshow)) {
         (slideshow as any).folder_id = null;
       }
-      
+
       // Ensure postTitle exists for backward compatibility (fix for missing postTitle)
       if (!('postTitle' in slideshow)) {
         (slideshow as any).postTitle = slideshow.title; // Fallback to title
@@ -1523,59 +1531,59 @@ optimizeSlideshowPayload(slideshow: SlideshowMetadata): { optimizedUrls: string[
    * Create slideshow with optimized payload for posting
    * This method ensures slideshows can be posted without 413 errors
    */
-async createOptimizedSlideshow(
-  title: string,
-  postTitle: string,
-  caption: string,
-  hashtags: string[],
-  images: UploadedImage[],
-  textOverlays: TikTokTextOverlay[],
-  aspectRatio: string,
-  transitionEffect: 'fade' | 'slide' | 'zoom',
-  musicEnabled: boolean,
-  userId: string
-): Promise<SlideshowMetadata> {
-  try {
-    console.log('🚀 Starting optimized slideshow creation with smart cropping...');
+  async createOptimizedSlideshow(
+    title: string,
+    postTitle: string,
+    caption: string,
+    hashtags: string[],
+    images: UploadedImage[],
+    textOverlays: TikTokTextOverlay[],
+    aspectRatio: string,
+    transitionEffect: 'fade' | 'slide' | 'zoom',
+    musicEnabled: boolean,
+    userId: string
+  ): Promise<SlideshowMetadata> {
+    try {
+      console.log('🚀 Starting optimized slideshow creation with smart cropping...');
 
-    // CRITICAL FIX: Ensure TikTok fonts are loaded once for the entire slideshow creation
-    await ensureTikTokFontsLoaded();
+      // CRITICAL FIX: Ensure TikTok fonts are loaded once for the entire slideshow creation
+      await ensureTikTokFontsLoaded();
 
-    // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
-    let processedImages = images;
-    
-    if (aspectRatio !== 'free' && images.length > 0) {
-      try {
-        
-        // Get image IDs for cropping
-        const imageIds = images.map(img => img.id);
-        
-        // Use enhanced cropping service to crop images
-        const croppedImages = await ImageCroppingService.changeAspectRatio(
-          imageIds,
-          aspectRatio,
-          userId
-        );
-        
-        // Update images array with cropped versions
-        const imageMap = new Map(croppedImages.map(img => [img.id, img]));
-        processedImages = images.map(img => imageMap.get(img.id) || img);
-        
-        
-      } catch (cropError) {
-        console.warn('⚠️ Failed to pre-crop images, proceeding with original images:', cropError);
-        // Continue with original images if cropping fails
+      // CRITICAL FIX: Crop images to target aspect ratio BEFORE creating slideshow
+      let processedImages = images;
+
+      if (aspectRatio !== 'free' && images.length > 0) {
+        try {
+
+          // Get image IDs for cropping
+          const imageIds = images.map(img => img.id);
+
+          // Use enhanced cropping service to crop images
+          const croppedImages = await ImageCroppingService.changeAspectRatio(
+            imageIds,
+            aspectRatio,
+            userId
+          );
+
+          // Update images array with cropped versions
+          const imageMap = new Map(croppedImages.map(img => [img.id, img]));
+          processedImages = images.map(img => imageMap.get(img.id) || img);
+
+
+        } catch (cropError) {
+          console.warn('⚠️ Failed to pre-crop images, proceeding with original images:', cropError);
+          // Continue with original images if cropping fails
+        }
       }
-    }
 
-    // Create condensed slides first with pre-cropped images
-    const condensedSlides = await this.createCondensedSlides(processedImages, textOverlays, aspectRatio);
+      // Create condensed slides first with pre-cropped images
+      const condensedSlides = await this.createCondensedSlides(processedImages, textOverlays, aspectRatio);
 
       // Generate slideshow ID with prefix for consistency
       const slideshowId = `slideshow_${crypto.randomUUID()}`;
 
       console.log('🖼️ Uploading condensed images to imgbb immediately...');
-      
+
       // IMMEDIATE OPTIMIZATION: Upload condensed images to ImgBB/FreeImage and get URLs
       const optimizedCondensedSlides = await this.uploadCondensedSlidesToSupabaseStorage(condensedSlides, userId);
 
@@ -1749,7 +1757,7 @@ async createOptimizedSlideshow(
   ): Promise<SlideshowTemplate> {
     // CRITICAL FIX: Ensure aspect ratio is properly saved
     const finalAspectRatio = slideshow.aspectRatio || '9:16';
-    
+
     const template: SlideshowTemplate = {
       id: `template_${crypto.randomUUID()}`, // Full ID for memory/localStorage
       name,
@@ -1782,7 +1790,7 @@ async createOptimizedSlideshow(
 
     // Store in memory
     this.templates.set(template.id, template);
-    
+
     // Save to localStorage
     this.saveTemplatesToLocalStorage();
 
@@ -1816,7 +1824,7 @@ async createOptimizedSlideshow(
       // Try to load from localStorage
       this.loadTemplatesFromLocalStorage();
       template = this.templates.get(templateId);
-      
+
       // If not found and templateId doesn't have prefix, try with prefix
       if (!template && !templateId.startsWith('template_')) {
         template = this.templates.get(`template_${templateId}`);
@@ -1841,10 +1849,10 @@ async createOptimizedSlideshow(
     this.templates.delete(templateId);
     this.saveTemplatesToLocalStorage();
     await this.deleteTemplateFromDatabase(templateId);
-    
+
     // Dispatch event to update UI
     window.dispatchEvent(new CustomEvent('templatesUpdated'));
-    
+
     console.log('Template deleted:', templateId);
   }
 
@@ -1950,7 +1958,7 @@ async createOptimizedSlideshow(
 
       // Determine how many images to use based on template
       const selectedImages = images.slice(0, template.slideCount);
-      
+
       if (selectedImages.length === 0) {
         return {
           success: false,
@@ -2108,7 +2116,7 @@ async createOptimizedSlideshow(
 
       // Group images into sets for each slideshow
       const imageGroups = this.groupImagesForSlideshows(images, slidesPerSlideshowFinal, randomizeImages);
-      
+
       const createdSlideshows: SlideshowMetadata[] = [];
       const finalTitle = customizations.title || template.title;
       const finalCaption = customizations.caption || template.caption;
@@ -2118,14 +2126,14 @@ async createOptimizedSlideshow(
       for (let i = 0; i < imageGroups.length; i++) {
         const imageGroup = imageGroups[i];
         const slideshowTitle = slideshowTitles[i] || `${finalTitle} - Set ${i + 1}`;
-        
+
         try {
           console.log(`🎬 Starting slideshow ${i + 1}/${imageGroups.length}: ${slideshowTitle}`);
           console.log(`📋 Image group details:`, {
             images: imageGroup.map(img => img.id),
             imageCount: imageGroup.length
           });
-          
+
           // Apply template text overlays with new image IDs adapted for this group
           // CRITICAL FIX: Always map text overlays to fit within available slides
           let adaptedTextOverlays = template.textOverlays.map(overlay => ({
@@ -2191,7 +2199,7 @@ async createOptimizedSlideshow(
           createdSlideshows.push(slideshow);
           console.log(`✅ Created slideshow ${i + 1}/${imageGroups.length}: ${slideshowTitle} (${imageGroup.length} images)`);
           console.log(`✅ Slideshow textOverlays count:`, slideshow.textOverlays.length);
-          
+
         } catch (error) {
           console.error(`❌ Failed to create slideshow ${i + 1}:`, error);
           // Continue with other slideshows even if one fails
@@ -2230,7 +2238,7 @@ async createOptimizedSlideshow(
     randomize: boolean = false
   ): UploadedImage[][] {
     const workingImages = [...images]; // Create a copy to avoid modifying original
-    
+
     if (randomize) {
       // Fisher-Yates shuffle for true randomization
       for (let i = workingImages.length - 1; i > 0; i--) {
@@ -2240,7 +2248,7 @@ async createOptimizedSlideshow(
     }
 
     const groups: UploadedImage[][] = [];
-    
+
     // Split images into groups of slidesPerSlideshow
     for (let i = 0; i < workingImages.length; i += slidesPerSlideshow) {
       const group = workingImages.slice(i, i + slidesPerSlideshow);
@@ -2362,7 +2370,7 @@ async createOptimizedSlideshow(
   private async deleteTemplateFromDatabase(templateId: string): Promise<void> {
     try {
       const { supabase } = await import('./supabase');
-      
+
       // Extract clean UUID (remove "template_" prefix) for database compatibility
       const cleanTemplateId = templateId.startsWith('template_')
         ? templateId.replace('template_', '')
@@ -2401,7 +2409,7 @@ async createOptimizedSlideshow(
       // Only log if templates count changed or on first load
       const currentCount = Array.from(this.templates.values()).filter(t => t.user_id === userId).length;
       const newCount = templates?.length || 0;
-      
+
       if (currentCount !== newCount || currentCount === 0) {
         console.log('📊 Templates loaded:', newCount);
       }
@@ -2415,11 +2423,11 @@ async createOptimizedSlideshow(
       templates?.forEach(dbTemplate => {
         // Add "template_" prefix to match internal ID format
         const templateId = `template_${dbTemplate.id}`;
-        
+
         // CRITICAL FIX: Ensure aspect ratio is properly loaded and validated
         const loadedAspectRatio = dbTemplate.aspect_ratio || '9:16';
         const validAspectRatio = this.validateAspectRatio(loadedAspectRatio) ? loadedAspectRatio : '9:16';
-        
+
         const template: SlideshowTemplate = {
           id: templateId, // Use prefixed ID for memory/localStorage consistency
           name: dbTemplate.name,
@@ -2451,7 +2459,7 @@ async createOptimizedSlideshow(
 
       // Save to localStorage for faster access
       this.saveTemplatesToLocalStorage();
-      
+
       // Only dispatch event if count changed
       if (currentCount !== newCount) {
         window.dispatchEvent(new CustomEvent('templatesUpdated'));
@@ -2462,18 +2470,25 @@ async createOptimizedSlideshow(
   }
 
   /**
+   * Get saved templates for a specific user
+   */
+  getSavedTemplates(userId: string): SlideshowTemplate[] {
+    return Array.from(this.templates.values()).filter(t => t.user_id === userId);
+  }
+
+  /**
    * Validate aspect ratio format
    */
   private validateAspectRatio(aspectRatio: string): boolean {
     if (!aspectRatio) return false;
-    
+
     // Check for valid formats: "9:16", "16:9", "1:1", "free", etc.
     const validFormats = [
       /^(\d+):(\d+)$/, // Ratios like "9:16", "16:9", "1:1"
       /^free$/,        // Free form
       /^auto$/         // Auto detection
     ];
-    
+
     return validFormats.some(format => format.test(aspectRatio.toLowerCase()));
   }
 }

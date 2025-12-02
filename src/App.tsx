@@ -3,6 +3,7 @@ import { AuthPage } from './components/Auth/AuthPage';
 import { Dashboard } from './components/Dashboard/Dashboard';
 import { useAuth } from './hooks/useAuth';
 import { Toaster } from 'sonner';
+import { BulkPostProvider } from './contexts/BulkPostContext';
 
 import { ensureTikTokFontsLoaded } from '@/lib/fontUtils';
 function App() {
@@ -25,7 +26,13 @@ function App() {
 
   return (
     <>
-      {user ? <Dashboard /> : <AuthPage />}
+      {user ? (
+        <BulkPostProvider>
+          <Dashboard />
+        </BulkPostProvider>
+      ) : (
+        <AuthPage />
+      )}
       <Toaster />
     </>
   );

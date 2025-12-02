@@ -6,14 +6,14 @@ import {
   Save,
   Trash2,
   Play,
-  Download,
+
   Upload,
-  Copy,
+
   Settings,
   Image as ImageIcon,
   FileText,
   Hash,
-  Music,
+
   Palette,
   Zap,
   CheckCircle,
@@ -56,11 +56,11 @@ interface CreateTemplateModalProps {
   onSave: (name: string, description: string) => void;
 }
 
-const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ 
-  isOpen, 
-  slideshow, 
-  onClose, 
-  onSave 
+export const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
+  isOpen,
+  slideshow,
+  onClose,
+  onSave
 }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -75,7 +75,7 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
 
   const handleSave = async () => {
     if (!name.trim()) return; // Only require name, slideshow is optional now
-    
+
     setIsSaving(true);
     try {
       await onSave(name.trim(), description.trim());
@@ -93,7 +93,7 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <motion.div 
+      <motion.div
         className="bg-background rounded-lg shadow-xl max-w-md w-full border border-border"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -187,8 +187,8 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
               <Button variant="outline" onClick={onClose} className="flex-1">
                 Cancel
               </Button>
-              <Button 
-                onClick={handleSave} 
+              <Button
+                onClick={handleSave}
                 disabled={!name.trim() || isSaving}
                 className="flex-1"
               >
@@ -268,7 +268,7 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <motion.div 
+      <motion.div
         className="bg-background rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden border border-border"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -341,7 +341,7 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
               {selectedTemplateData && (
                 <>
                   <Separator />
-                  
+
                   <div>
                     <h4 className="font-medium mb-3">Customizations (Optional)</h4>
                     <div className="space-y-4">
@@ -412,7 +412,7 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
 
               {/* Preview */}
               <Separator />
-              
+
               <div className="bg-muted/50 rounded-lg p-4">
                 <h4 className="font-medium mb-3">Application Preview</h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -450,7 +450,7 @@ const ApplyTemplateModal: React.FC<ApplyTemplateModalProps> = ({
   );
 };
 
-interface BulkCreateFromTemplateModalProps {
+export interface BulkCreateFromTemplateModalProps {
   isOpen: boolean;
   templates: SlideshowTemplate[];
   uploadedImages: UploadedImage[];
@@ -458,7 +458,7 @@ interface BulkCreateFromTemplateModalProps {
   onBulkCreate: (templateId: string, options: BulkTemplateOptions) => Promise<BulkTemplateCreationResult>;
 }
 
-const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = ({
+export const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = ({
   isOpen,
   templates,
   uploadedImages,
@@ -466,10 +466,8 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
   onBulkCreate
 }) => {
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
-  const [customTitle, setCustomTitle] = useState('');
-  const [customCaption, setCustomCaption] = useState('');
-  const [customHashtags, setCustomHashtags] = useState('');
   const [randomizeImages, setRandomizeImages] = useState(false);
+  const [customizeHashtags, setCustomizeHashtags] = useState(false);
   const [slidesPerSlideshow, setSlidesPerSlideshow] = useState<number>(3); // Default to 3 slides per slideshow
   const [isCreating, setIsCreating] = useState(false);
   const [preview, setPreview] = useState<BulkTemplatePreview | null>(null);
@@ -481,7 +479,7 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
   }, [templates, selectedTemplate]);
 
   const selectedTemplateData = templates.find(t => t.id === selectedTemplate);
-  
+
   // Update preview when template, images, randomize setting, or slides per slideshow changes
   useEffect(() => {
     if (selectedTemplateData && uploadedImages.length > 0) {
@@ -502,20 +500,16 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
 
     setIsCreating(true);
     try {
-      const customizations = {
-        title: customTitle || undefined,
-        caption: customCaption || undefined,
-        hashtags: customHashtags ? customHashtags.split(',').map(tag => tag.trim()).filter(Boolean) : undefined
-      };
-
       const options: BulkTemplateOptions = {
         randomizeImages,
         slidesPerSlideshow,
-        customizations
+        customizations: {
+          randomizeHashtags: customizeHashtags
+        }
       };
 
       const result = await onBulkCreate(selectedTemplate, options);
-      
+
       if (result.success) {
         onClose();
         // Trigger a notification for successful bulk creation
@@ -654,36 +648,16 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
                   />
                 </div>
 
-                <div>
-                  <label className="text-sm font-medium block mb-2">Custom Title (Optional)</label>
-                  <input
-                    type="text"
-                    value={customTitle}
-                    onChange={(e) => setCustomTitle(e.target.value)}
-                    placeholder={`Default: ${selectedTemplateData?.title || 'Slideshow'}`}
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none"
-                  />
-                </div>
 
-                <div>
-                  <label className="text-sm font-medium block mb-2">Custom Caption (Optional)</label>
-                  <textarea
-                    value={customCaption}
-                    onChange={(e) => setCustomCaption(e.target.value)}
-                    placeholder={`Default: ${selectedTemplateData?.caption || ''}`}
-                    rows={2}
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none resize-none"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium block mb-2">Custom Hashtags (Optional)</label>
-                  <input
-                    type="text"
-                    value={customHashtags}
-                    onChange={(e) => setCustomHashtags(e.target.value)}
-                    placeholder="tag1, tag2, tag3"
-                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none"
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div>
+                    <label htmlFor="customize-hashtags" className="font-medium">Customize Hashtags</label>
+                    <p className="text-xs text-muted-foreground">Use a different set of hashtags for each slideshow</p>
+                  </div>
+                  <Switch
+                    id="customize-hashtags"
+                    checked={customizeHashtags}
+                    onCheckedChange={setCustomizeHashtags}
                   />
                 </div>
               </div>
@@ -713,14 +687,14 @@ const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalProps> = 
                       <div className="font-medium">{preview.willCreatePartialSlideshow ? 'Yes' : 'No'}</div>
                     </div>
                   </div>
-                  
+
                   {randomizeImages && (
                     <div className="flex items-center gap-2 text-xs text-green-600 mb-2">
                       <Shuffle className="w-3 h-3" />
                       <span>Images will be randomized across slideshows</span>
                     </div>
                   )}
-                  
+
                   <div className="text-xs text-muted-foreground">
                     Each slideshow will contain the template settings (text overlays, aspect ratio, etc.)
                     applied to a different set of {preview.slidesPerSlideshow} images.
@@ -806,7 +780,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
     };
 
     window.addEventListener('templatesUpdated', handleTemplatesUpdate);
-    
+
     return () => {
       window.removeEventListener('templatesUpdated', handleTemplatesUpdate);
     };
@@ -824,7 +798,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
 
   const loadTemplates = async () => {
     if (!user) return;
-    
+
     setIsLoading(true);
     try {
       // Load from database first
@@ -842,7 +816,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
 
   const handleCreateTemplate = async (name: string, description: string) => {
     if (!user) return;
-    
+
     try {
       // Use current slideshow if available, otherwise create from current settings
       if (currentSlideshow) {
@@ -856,7 +830,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
         // Create template from current settings when no slideshow exists
         await createTemplateFromCurrentSettings(name, description);
       }
-      
+
       setNotification({ message: 'Template created successfully!', type: 'success' });
       await loadTemplates();
     } catch (error) {
@@ -947,7 +921,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       );
 
       onTemplateApplied(result);
-      
+
       if (result.success) {
         setNotification({
           message: `Template settings loaded! This template requires ${template.slideCount} images. Select images and create your slideshow.`,
@@ -1013,13 +987,13 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       if (result.success && result.slideshows.length > 0) {
         // Store created slideshows for potential bulk posting
         setCreatedSlideshows(result.slideshows);
-        
+
         // Show success message with option to post to TikTok
         setNotification({
           message: `✅ Created ${result.slideshowCount} slideshows! Would you like to post them to TikTok?`,
           type: 'success'
         });
-        
+
         // Automatically show bulk postiz poster for immediate posting
         setTimeout(() => {
           setShowBulkPostizPoster(true);
@@ -1028,7 +1002,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
 
       // Refresh slideshows list after bulk creation
       window.dispatchEvent(new CustomEvent('slideshowUpdated'));
-      
+
       return result;
     } catch (error) {
       console.error('Bulk template creation failed:', error);
@@ -1057,7 +1031,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
     <div className="space-y-4">
       {/* Notification */}
       {notification.message && (
-        <motion.div 
+        <motion.div
           className={cn(
             "px-3 py-2 rounded-lg text-sm",
             notification.type === 'success'
@@ -1088,8 +1062,8 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
           variant="outline"
           className="flex items-center gap-2"
           title={!user ? 'Please log in to save templates' :
-                 !currentSlideshow && (!currentTitle || !currentCaption || !currentHashtags?.length)
-                   ? 'Please fill in title, caption, and hashtags to save as template' : 'Save current settings as template'}
+            !currentSlideshow && (!currentTitle || !currentCaption || !currentHashtags?.length)
+              ? 'Please fill in title, caption, and hashtags to save as template' : 'Save current settings as template'}
         >
           <Save className="w-4 h-4" />
           Save as Template
@@ -1110,7 +1084,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       {uploadedImages.length > 0 && templates.length > 0 && (
         <>
           <Separator />
-          
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h5 className="font-medium text-sm flex items-center">
@@ -1118,7 +1092,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                 Bulk Template Creation
               </h5>
             </div>
-            
+
             <Button
               onClick={() => setIsBulkCreateModalOpen(true)}
               disabled={!user || templates.length === 0 || uploadedImages.length === 0 || isBulkCreating}
@@ -1136,7 +1110,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                 </>
               )}
             </Button>
-            
+
             <p className="text-xs text-muted-foreground text-center">
               Create multiple slideshows from one template using all your images
             </p>
@@ -1148,7 +1122,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
       {uploadedImages.length > 0 && (
         <>
           <Separator />
-          
+
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h5 className="font-medium text-sm">Bulk Upload Helper</h5>
@@ -1177,7 +1151,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
 
       {/* Saved Templates */}
       <Separator />
-      
+
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <h5 className="font-medium text-sm">Saved Templates</h5>
@@ -1218,7 +1192,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                     </span>
                   </div>
                 </div>
-                
+
                 <div className="flex items-center gap-1 ml-3">
                   <Button
                     onClick={() => handleApplyTemplate(template.id)}
@@ -1241,7 +1215,7 @@ export const TemplateManager: React.FC<TemplateManagerProps> = ({
                 </div>
               </motion.div>
             ))}
-            
+
             {templates.length > 5 && (
               <Button
                 onClick={() => setIsApplyModalOpen(true)}
