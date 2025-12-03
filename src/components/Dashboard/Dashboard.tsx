@@ -634,6 +634,6 @@ export const Dashboard: React.FC = () => {
 
         <Toaster />
       </div>
-    </ThemeProvider >
+    </ThemeProvider>
   );
 };
