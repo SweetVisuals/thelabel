@@ -76,7 +76,7 @@ export const Dashboard: React.FC = () => {
   const [transitionEffect, setTransitionEffect] = useState<'fade' | 'slide' | 'zoom'>('fade');
   const [musicEnabled, setMusicEnabled] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<string>('9:16');
-  const [apiKeys, setApiKeys] = useState({ postizApiKey: '', tiktokAccessToken: '' });
+  const [apiKeys, setApiKeys] = useState({ postizApiKey: '' });
   const [selectedTemplate, setSelectedTemplate] = useState('modern');
 
   // UI State
@@ -148,6 +148,7 @@ export const Dashboard: React.FC = () => {
     if (user) {
       loadSavedHashtags();
       loadUserSlideshows();
+      loadApiKeys();
     }
   }, [user]);
 
@@ -176,6 +177,25 @@ export const Dashboard: React.FC = () => {
     } catch (error) {
       console.error('Error loading saved hashtags:', error);
     }
+  const loadApiKeys = async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('postiz_api_key')
+        .eq('id', user.id)
+        .single();
+      if (error) throw error;
+      if (data?.postiz_api_key) {
+        // Also set it in the postizAPI for immediate use
+        const { postizAPI } = await import('../../lib/postiz');
+        postizAPI.setApiKey(data.postiz_api_key);
+        setApiKeys({ postizApiKey: data.postiz_api_key });
+      }
+    } catch (error) {
+      console.error('Error loading API keys:', error);
+    }
+  };
   };
 
   const handleAddHashtag = async (tag: string) => {
@@ -241,6 +261,27 @@ export const Dashboard: React.FC = () => {
 
   // Slideshow Handlers
   const handleSaveSlideshow = async () => {
+    console.log('Saving API keys...');
+
+    try {
+      const { error } = await supabase
+        .from('users')
+        .update({
+          postiz_api_key: apiKeys.postizApiKey,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      // Also update the postizAPI with the new key
+      const { postizAPI } = await import('../../lib/postiz');
+      postizAPI.setApiKey(apiKeys.postizApiKey);
+      toast.success('API key saved successfully!');
+    } catch (error) {
+      console.error('Error saving API key:', error);
+      toast.error('Failed to save API key');
+    }
     if (!user) return;
     console.log('Saving slideshow...');
     // Implementation would go here

@@ -44,7 +44,6 @@ import {
 
 interface ApiKeys {
     postizApiKey: string;
-    tiktokAccessToken: string;
 }
 
 interface SettingsPanelProps {
@@ -444,16 +443,6 @@ export function SettingsPanel({
                                         onChange={(e) => setApiKeys({ ...apiKeys, postizApiKey: e.target.value })}
                                         className="bg-black/20 border-white/10 focus:border-primary/50 h-9"
                                         placeholder="Enter Postiz API Key"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-xs text-muted-foreground ml-1">TikTok Access Token</Label>
-                                    <Input
-                                        type="password"
-                                        value={apiKeys.tiktokAccessToken}
-                                        onChange={(e) => setApiKeys({ ...apiKeys, tiktokAccessToken: e.target.value })}
-                                        className="bg-black/20 border-white/10 focus:border-primary/50 h-9"
-                                        placeholder="Enter TikTok Access Token"
                                     />
                                 </div>
                             </div>
