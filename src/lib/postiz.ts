@@ -591,7 +591,7 @@ Once you upload images to Postiz, they're permanently available for all your fut
       // Default to 90 days in the future to catch scheduled posts
       const end = endDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
 
-      const proxiedUrl = getProxyUrl(`posts?startDate=${start}&endDate=${end}`);
+      const proxiedUrl = getProxyUrl(`posts?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`);
 
       console.log('📤 Fetching posts via:', proxiedUrl);
 
