@@ -592,9 +592,9 @@ Once you upload images to Postiz, they're permanently available for all your fut
   async getPosts(startDate?: string, endDate?: string): Promise<PostizPost[]> {
     try {
       // Default to 30 days ago if not specified
-      const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, -5) + 'Z';
       // Default to 90 days in the future to catch scheduled posts
-      const end = endDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const end = endDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, -5) + 'Z';
 
       const proxiedUrl = getProxyUrl(`posts?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`);
 
