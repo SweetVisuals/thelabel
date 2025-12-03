@@ -12,6 +12,11 @@ const getProxyUrl = (path: string): string => {
     return `/api/postiz-proxy/${path}`;
   }
   // In production, use query parameter format (works with Vercel functions)
+  // Handle paths that already contain query parameters
+  const [basePath, queryString] = path.split('?');
+  const baseUrl = `${VERCEL_PROXY}${basePath}`;
+  return queryString ? `${baseUrl}&${queryString}` : baseUrl;
+  // In production, use query parameter format (works with Vercel functions)
   return `${VERCEL_PROXY}${path}`;
 };
 
