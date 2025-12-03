@@ -196,7 +196,6 @@ export const Dashboard: React.FC = () => {
       console.error('Error loading API keys:', error);
     }
   };
-  };
 
   const handleAddHashtag = async (tag: string) => {
     if (!user) return;
