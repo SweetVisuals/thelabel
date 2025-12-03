@@ -177,6 +177,8 @@ export const Dashboard: React.FC = () => {
     } catch (error) {
       console.error('Error loading saved hashtags:', error);
     }
+  };
+
   const loadApiKeys = async () => {
     if (!user) return;
     try {
