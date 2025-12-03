@@ -66,17 +66,17 @@ export class ImageCroppingService {
       // Process images with enhanced cropping
       const updatedImages: UploadedImage[] = [];
       let processedCount = 0;
-      
+
       for (const image of images) {
         try {
           console.log(`🖼️ Processing image ${++processedCount}/${images.length}: ${image.filename}`);
-          
+
           // Convert imgbb URL to File object for cropping
           const imageFile = await this.urlToFile(image.file_path, image.filename, image.mime_type);
-          
+
           // Use enhanced cropImage function with smart positioning
           const cropResult = await cropImage(imageFile, numericAspectRatio, 0.92);
-          
+
           // Create new file from cropped result
           const newFile = new File([cropResult.blob], image.filename, {
             type: image.mime_type.includes('png') ? 'image/png' : 'image/jpeg'
@@ -119,17 +119,17 @@ export class ImageCroppingService {
             height: cropResult.height,
             aspectRatio: targetAspectRatio,
           };
-          
+
           updatedImages.push(updatedImageData);
           console.log(`✅ Successfully processed ${image.filename}`, {
             originalSize: `${image.width}x${image.height}`,
             newSize: `${cropResult.width}x${cropResult.height}`,
             fileSize: cropResult.blob.size
           });
-          
+
         } catch (imageError) {
           console.error(`❌ Failed to process image ${image.filename}:`, imageError);
-          
+
           // Add original image without cropping on error
           const fallbackImage = {
             id: image.id,
@@ -144,9 +144,9 @@ export class ImageCroppingService {
             height: image.height,
             aspectRatio: image.aspect_ratio || undefined,
           };
-          
+
           updatedImages.push(fallbackImage);
-          
+
           // Try to update aspect ratio even on failure
           try {
             await supabase
@@ -162,7 +162,7 @@ export class ImageCroppingService {
 
       console.log(`🎉 Aspect ratio change completed: ${updatedImages.length}/${images.length} images processed`);
       return updatedImages;
-      
+
     } catch (error) {
       console.error('❌ Failed to change aspect ratios:', error);
       throw new Error(`Failed to change aspect ratios: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -178,7 +178,7 @@ export class ImageCroppingService {
       if (!response.ok) {
         throw new Error(`Failed to fetch image: ${response.status}`);
       }
-      
+
       const blob = await response.blob();
       return new File([blob], filename, { type: mimeType });
     } catch (error) {
@@ -195,14 +195,14 @@ export class ImageCroppingService {
     userId: string
   ): Promise<UploadedImage[]> {
     console.log('🎬 Preparing images for slideshow with aspect ratio:', targetAspectRatio);
-    
+
     try {
       // First change aspect ratio if needed
       const processedImages = await this.changeAspectRatio(imageIds, targetAspectRatio, userId);
-      
+
       console.log(`✅ Prepared ${processedImages.length} images for slideshow`);
       return processedImages;
-      
+
     } catch (error) {
       console.error('❌ Failed to prepare images for slideshow:', error);
       throw error;
@@ -671,6 +671,11 @@ export const imageService = {
         .single();
 
       if (fetchError) {
+        // If image not found, consider it already deleted
+        if (fetchError.code === 'PGRST116') {
+          console.log('Image not found in database, considering it deleted:', imageId);
+          return;
+        }
         throw new Error(`Failed to fetch image: ${fetchError.message}`);
       }
 
@@ -843,7 +848,7 @@ export const imageService = {
     if (sessionError || !session?.user) {
       throw new Error('User not authenticated');
     }
-    
+
     return ImageCroppingService.changeAspectRatio(imageIds, targetAspectRatio, session.user.id);
   },
 
@@ -858,7 +863,7 @@ export const imageService = {
     if (sessionError || !session?.user) {
       throw new Error('User not authenticated');
     }
-    
+
     return ImageCroppingService.prepareImagesForSlideshow(imageIds, targetAspectRatio, session.user.id);
   },
 

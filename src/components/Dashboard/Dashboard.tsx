@@ -4,357 +4,211 @@ import { Header1 as Header } from './Header';
 import { ThemeProvider } from '../../contexts/ThemeContext';
 import { FileBrowser } from '../FileBrowser/FileBrowser';
 import { TikTokPreview } from '../TikTokPreview/TikTokPreview';
-import { ImageEditor } from '../ImageEditor/ImageEditor';
-import { SlideshowManager } from '../Slideshow/SlideshowManager';
 import { UrlUploader } from '../Upload/UrlUploader';
-import { UploadedImage, Folder, Hashtag, SlideshowMetadata, TikTokTextOverlay } from '../../types';
-import {
-  SidebarProvider,
-  SidebarInset
-} from '../ui/sidebar';
-import { DetailSidebar } from './NewSidebar';
-import { Button } from '../ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../ui/collapsible';
-import { Separator } from '../ui/separator';
-import {
-  Settings,
-  Upload,
-  Download,
-  Edit3,
-  Image,
-  Palette,
-  Filter,
-  Music,
-  Video,
-  Share,
-  Star,
-  Clock,
-  ChevronDown,
-  ChevronRight,
-  Zap,
-  Sparkles,
-  Crop,
-  Type,
-  Volume2,
-  Bold,
-  Italic,
-  Square,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  Loader2
-} from 'lucide-react';
+import { UploadedImage, Folder, SlideshowMetadata, TikTokTextOverlay, SlideshowTemplate } from '../../types';
+import { SettingsPanel } from './SettingsPanel';
 import { cn } from '@/lib/utils';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
-import { postizAPI } from '../../lib/postiz';
 import { PostizPoster } from '../Postiz/PostizPoster';
-import { TemplateSelectionDialog } from '../FileBrowser/TemplateSelectionDialog';
-import { TemplateManager } from '../Slideshow/TemplateManager';
-
-interface FolderPathItem {
-  id: string;
-  name: string;
-}
-
-interface TextOverlay {
-  id: string;
-  slideIndex: number; // Added slideIndex
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  color: string;
-  fontFamily: string;
-  fontWeight: string;
-  alignment: 'left' | 'center' | 'right';
-  outlineColor: string;
-  outlineWidth: number;
-  outlinePosition: 'outer' | 'middle' | 'inner';
-  bold: boolean;
-  italic: boolean;
-  outline: boolean;
-  glow: boolean;
-  glowColor: string;
-  glowIntensity: number;
-  isEditing?: boolean;
-  isSelected?: boolean;
-}
+import { Toaster } from 'sonner';
+import { BulkCreateFromTemplateModal, CreateTemplateModal } from '../Slideshow/TemplateManager';
+import { BulkPostizPoster } from '../Postiz/BulkPostizPoster';
+import { toast } from 'sonner';
+import { slideshowService } from '../../lib/slideshowService';
+import { Folder as FolderIcon, Film as FilmIcon, Settings2 as SettingsIcon } from 'lucide-react';
 
 export const Dashboard: React.FC = () => {
-    const { user } = useAuth();
-    const { folderId } = useParams<{ folderId?: string }>(); // Get folderId from URL
-    const [images, setImages] = useState<UploadedImage[]>([]);
-    const [folders, setFolders] = useState<Folder[]>([]);
-    const [selectedImages, setSelectedImages] = useState<string[]>([]);
-    // Track images in selection order
-    const [selectedImagesOrdered, setSelectedImagesOrdered] = useState<string[]>([]);
-    const [selectedSlideshows, setSelectedSlideshows] = useState<string[]>([]);
-    const [editingImage, setEditingImage] = useState<UploadedImage | null>(null);
-    const [currentFolderId, setCurrentFolderId] = useState<string | null>(folderId || null); // Initialize from URL
-    const [currentSlide, setCurrentSlide] = useState(0); // Added currentSlide state
+  const { user } = useAuth();
+  const { folderId } = useParams<{ folderId?: string }>();
 
-    const [sidebarExpanded, setSidebarExpanded] = useState({
-      upload: true,
-      edit: true,
-      export: false,
-      tools: false,
-      recent: false
-    });
-    const [activeSection, setActiveSection] = useState('main');
+  // Data State
+  const [images, setImages] = useState<UploadedImage[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
 
-  // Edit settings state
-  const [textOverlays, setTextOverlays] = useState<TextOverlay[]>([]);
+  // Selection State
+  const [selectedImages, setSelectedImages] = useState<string[]>([]);
+  const [selectedImagesOrdered, setSelectedImagesOrdered] = useState<string[]>([]);
+  const [selectedSlideshows, setSelectedSlideshows] = useState<string[]>([]);
+  const [savedTemplates, setSavedTemplates] = useState<SlideshowTemplate[]>([]);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(folderId || null);
+
+  // Slideshow/Editor State
+  const [currentSlideshow, setCurrentSlideshow] = useState<SlideshowMetadata | null>(null);
+
+  // Clear current slideshow when selecting individual images to ensure instant preview
+  useEffect(() => {
+    if (selectedImages.length > 0 && selectedSlideshows.length === 0) {
+      setCurrentSlideshow(null);
+    }
+  }, [selectedImages, selectedSlideshows]);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const [textOverlays, setTextOverlays] = useState<TikTokTextOverlay[]>([]);
   const [title, setTitle] = useState('Amazing TikTok Slideshow');
   const [postTitle, setPostTitle] = useState('');
   const [caption, setCaption] = useState('Your amazing TikTok slideshow! 🎉');
   const [hashtags, setHashtags] = useState(['tiktok', 'slideshow', 'viral']);
   const [savedHashtags, setSavedHashtags] = useState<string[]>([]);
-  const [hashtagInput, setHashtagInput] = useState('');
-  const [selectedSavedHashtags, setSelectedSavedHashtags] = useState<Set<string>>(new Set());
 
-  // Slideshow state
+  // Sync state when currentSlideshow changes
+  useEffect(() => {
+    if (currentSlideshow) {
+      setTitle(currentSlideshow.title || '');
+      setPostTitle(currentSlideshow.postTitle || currentSlideshow.title || '');
+      setCaption(currentSlideshow.caption || '');
+      setHashtags(currentSlideshow.hashtags || []);
+      // If the slideshow has condensed slides (it's a generated slideshow), 
+      // we don't want to load the text overlays into the editor state
+      // because the text is already baked into the images.
+      // This prevents duplicate text from showing in the preview.
+      if (currentSlideshow.condensedSlides && currentSlideshow.condensedSlides.length > 0) {
+        setTextOverlays([]);
+      } else {
+        setTextOverlays(currentSlideshow.textOverlays || []);
+      }
+      setAspectRatio(currentSlideshow.aspectRatio || '9:16');
+      setTransitionEffect(currentSlideshow.transitionEffect || 'fade');
+      setMusicEnabled(currentSlideshow.musicEnabled || false);
+    }
+  }, [currentSlideshow]);
+
+  // Settings State
   const [transitionEffect, setTransitionEffect] = useState<'fade' | 'slide' | 'zoom'>('fade');
   const [musicEnabled, setMusicEnabled] = useState(false);
-  const [cutLength, setCutLength] = useState<number>(5); // Store slideshow limit
-  const [currentSlideshow, setCurrentSlideshow] = useState<SlideshowMetadata | null>(null);
-  const [currentImages, setCurrentImages] = useState<UploadedImage[]>([]); // Track current folder images
-  const [aspectRatio, setAspectRatio] = useState<string>('9:16'); // Track aspect ratio
+  const [aspectRatio, setAspectRatio] = useState<string>('9:16');
+  const [apiKeys, setApiKeys] = useState({ postizApiKey: '', tiktokAccessToken: '' });
+  const [selectedTemplate, setSelectedTemplate] = useState('modern');
 
-  // Template functionality
-  const [textTemplates, setTextTemplates] = useState<any[]>([]);
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [templateNameInput, setTemplateNameInput] = useState('');
-  const [showTemplateSelection, setShowTemplateSelection] = useState(false);
-  const [notification, setNotification] = useState<{ message: string; type: 'success' | 'error' | null }>({ message: '', type: null });
-
-  // Postiz API key state
-  const [postizApiKey, setPostizApiKey] = useState('');
-  const [showPostizSettingsModal, setShowPostizSettingsModal] = useState(false);
-  const [isValidatingApiKey, setIsValidatingApiKey] = useState(false);
+  // UI State
+  const [showSettingsPanel, setShowSettingsPanel] = useState(true);
   const [showPostizPoster, setShowPostizPoster] = useState(false);
   const [showUrlUploader, setShowUrlUploader] = useState(false);
+  const [showBulkCreateModal, setShowBulkCreateModal] = useState(false);
+  const [showBulkPostModal, setShowBulkPostModal] = useState(false);
+  const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
 
-  
+  const [slideshowsForBulkPost, setSlideshowsForBulkPost] = useState<SlideshowMetadata[]>([]);
+  const [activeMobileTab, setActiveMobileTab] = useState<'files' | 'preview' | 'settings'>('files');
+
+  const handleCreateFromTemplate = () => {
+    setShowBulkCreateModal(true);
+  };
+
+  const handleBulkPost = () => {
+    if (selectedSlideshows.length === 0) {
+      toast.error('Please select slideshows to post');
+      return;
+    }
+    const allSlideshows = slideshowService.getAllSlideshows();
+    const selected = allSlideshows.filter(s => selectedSlideshows.includes(s.id));
+    setSlideshowsForBulkPost(selected);
+    setShowBulkPostModal(true);
+  };
+
+  const handleCreateTemplate = async (name: string, description: string) => {
+    if (!user) return;
+    try {
+      if (currentSlideshow) {
+        await slideshowService.createTemplateFromSlideshow(name, description, currentSlideshow, user.id);
+      } else {
+        const tempSlideshow: SlideshowMetadata = {
+          id: `temp_${Date.now()}`,
+          title: title,
+          postTitle: postTitle || title,
+          caption: caption,
+          hashtags: hashtags,
+          condensedSlides: [{}, {}, {}] as any,
+          textOverlays: textOverlays || [],
+          aspectRatio: aspectRatio || '9:16',
+          transitionEffect: transitionEffect || 'fade',
+          musicEnabled: musicEnabled || false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          user_id: user.id,
+          folder_id: null
+        };
+        await slideshowService.createTemplateFromSlideshow(name, description, tempSlideshow, user.id);
+      }
+      toast.success('Template created successfully!');
+      await loadUserSlideshows(); // Reload templates
+      setShowCreateTemplateModal(false);
+    } catch (error) {
+      console.error('Failed to create template:', error);
+      toast.error('Failed to create template');
+    }
+  };
 
   // Update currentFolderId when URL param changes
   useEffect(() => {
     setCurrentFolderId(folderId || null);
   }, [folderId]);
 
-  // Load saved hashtags and text templates on component mount
+  // Load initial data
   useEffect(() => {
     if (user) {
       loadSavedHashtags();
-      loadTextTemplates();
-      loadPostizApiKey();
       loadUserSlideshows();
     }
-  }, [user]); // Remove currentFolderId dependency as the functions don't use it
-
-  // Periodic cleanup of old consolidated images
-  useEffect(() => {
-    if (!user) return;
-
-    const runPeriodicCleanup = async () => {
-      try {
-        const { supabaseStorage } = await import('../../lib/supabaseStorage');
-        const deletedCount = await supabaseStorage.runAutomaticCleanup();
-        if (deletedCount > 0) {
-          console.log(`🧹 Cleaned up ${deletedCount} old consolidated images`);
-        }
-      } catch (error) {
-        console.warn('Failed to run periodic cleanup:', error);
-      }
-    };
-
-    // Run cleanup immediately when user logs in
-    runPeriodicCleanup();
-
-    // Then run every 24 hours (86400000 ms) while user is active
-    const cleanupInterval = setInterval(runPeriodicCleanup, 24 * 60 * 60 * 1000);
-
-    return () => clearInterval(cleanupInterval);
   }, [user]);
 
   const loadUserSlideshows = async () => {
     if (!user) return;
-
     try {
       const { slideshowService } = await import('../../lib/slideshowService');
       await slideshowService.loadUserSlideshows(user.id);
+      await slideshowService.loadUserTemplates(user.id);
+      const templates = slideshowService.getSavedTemplates(user.id);
+      setSavedTemplates(templates);
     } catch (error) {
-      console.error('Error loading user slideshows:', error);
-    }
-  };
-
-  // Auto-hide notifications
-  useEffect(() => {
-    if (notification.message) {
-      const timer = setTimeout(() => {
-        setNotification({ message: '', type: null });
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [notification]);
-
-  const handleImagesUploaded = (newImages: UploadedImage[]) => {
-    // Only update images if we're in root folder (currentFolderId === null)
-    // This prevents images from being duplicated when uploading to folders
-    if (currentFolderId === null) {
-      setImages(newImages);
+      console.error('Error loading user slideshows/templates:', error);
     }
   };
 
   const loadSavedHashtags = async () => {
     if (!user) return;
-
     try {
       const { data, error } = await supabase
         .from('hashtags')
         .select('tag')
         .eq('user_id', user.id);
-
       if (error) throw error;
-
       setSavedHashtags(data.map(item => item.tag));
     } catch (error) {
       console.error('Error loading saved hashtags:', error);
     }
   };
 
-  const loadTextTemplates = async () => {
+  const handleAddHashtag = async (tag: string) => {
     if (!user) return;
+    if (hashtags.includes(tag)) return;
 
-    try {
-      const { data, error } = await supabase
-        .from('text_templates')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+    setHashtags([...hashtags, tag]);
 
-      if (error) throw error;
-
-      setTextTemplates(data || []);
-    } catch (error) {
-      console.error('Error loading text templates:', error);
-    }
-  };
-
-  const saveHashtag = async (tag: string) => {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from('hashtags')
-        .upsert({
-          user_id: user.id,
-          tag: tag,
-          updated_at: new Date().toISOString()
-        });
-
-      if (error) throw error;
-
-      // Reload saved hashtags
-      await loadSavedHashtags();
-    } catch (error) {
-      console.error('Error saving hashtag:', error);
-    }
-  };
-
-  const deleteSavedHashtag = async (tag: string) => {
-    if (!user) return;
-
-    try {
-      const { error } = await supabase
-        .from('hashtags')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('tag', tag);
-
-      if (error) throw error;
-
-      // Reload saved hashtags
-      await loadSavedHashtags();
-    } catch (error) {
-      console.error('Error deleting saved hashtag:', error);
-    }
-  };
-
-  const addHashtag = () => {
-    const tag = hashtagInput.trim();
-    if (tag && !hashtags.includes(tag)) {
-      setHashtags((prev: string[]) => [...prev, tag]);
-      setHashtagInput('');
-    }
-  };
-
-  const removeHashtag = (tagToRemove: string) => {
-    setHashtags((prev: string[]) => prev.filter((tag: string) => tag !== tagToRemove));
-  };
-
-  const loadSelectedHashtags = () => {
-    const tagsToLoad = Array.from(selectedSavedHashtags);
-    const newHashtags = [...hashtags];
-
-    tagsToLoad.forEach((tag: string) => {
-      if (!newHashtags.includes(tag)) {
-        newHashtags.push(tag);
-      }
-    });
-
-    setHashtags(newHashtags);
-    setSelectedSavedHashtags(new Set()); // Clear selection after loading
-  };
-
-  const toggleSavedHashtagSelection = (tag: string) => {
-    const newSelection = new Set(selectedSavedHashtags);
-    if (newSelection.has(tag)) {
-      newSelection.delete(tag);
-    } else {
-      newSelection.add(tag);
-    }
-    setSelectedSavedHashtags(newSelection);
-  };
-
-  // Enhanced hashtag sync - synchronize hashtags from templates with saved hashtag library
-  const syncTemplateHashtagsWithLibrary = async (templateHashtags: string[]) => {
-    if (!user || !templateHashtags.length) return;
-
-    try {
-      const newHashtags = templateHashtags.filter(tag => !savedHashtags.includes(tag));
-      if (newHashtags.length === 0) return;
-
-      console.log('🔄 Syncing template hashtags with library:', newHashtags);
-
-      const { error } = await supabase
-        .from('hashtags')
-        .upsert(
-          newHashtags.map(tag => ({
+    // Save to library if not exists
+    if (!savedHashtags.includes(tag)) {
+      try {
+        const { error } = await supabase
+          .from('hashtags')
+          .upsert({
             user_id: user.id,
             tag: tag,
             updated_at: new Date().toISOString()
-          }))
-        );
-
-      if (error) throw error;
-      
-      // Reload saved hashtags to reflect changes
-      await loadSavedHashtags();
-      console.log('✅ Synced template hashtags with library');
-    } catch (error) {
-      console.error('❌ Failed to sync template hashtags:', error);
+          });
+        if (!error) {
+          setSavedHashtags([...savedHashtags, tag]);
+        }
+      } catch (error) {
+        console.error('Error saving hashtag:', error);
+      }
     }
   };
 
-  // Text overlay functions
-  const addTextOverlay = () => {
-    const newText: TextOverlay = {
+  // Text Overlay Handlers
+  const handleAddTextOverlay = () => {
+    const newText: TikTokTextOverlay = {
       id: Math.random().toString(36).substr(2, 9),
-      slideIndex: currentSlide, // Added slideIndex
-      text: 'Your Text Here',
+      slideIndex: currentSlide,
+      text: 'New Text',
       x: 50,
       y: 50,
       width: 60,
@@ -362,452 +216,60 @@ export const Dashboard: React.FC = () => {
       fontSize: 24,
       color: '#ffffff',
       fontFamily: 'TikTok Sans',
-      fontWeight: '400',
+      fontWeight: '700',
       alignment: 'center',
       outlineColor: '#000000',
-      outlineWidth: 1.9,
+      outlineWidth: 2,
       outlinePosition: 'outer',
-      bold: false,
+      bold: true,
       italic: false,
-      outline: true, // Enable outline by default for better visibility
+      outline: true,
       glow: false,
       glowColor: '#ffffff',
       glowIntensity: 5,
     };
-
-    setTextOverlays((prev: TextOverlay[]) => [...prev, newText]);
+    setTextOverlays([...textOverlays, newText]);
   };
 
-  const updateTextOverlay = (id: string, updates: Partial<TextOverlay>) => {
-    setTextOverlays((prev: TextOverlay[]) => prev.map((overlay: TextOverlay) =>
-      overlay.id === id ? { ...overlay, ...updates } : overlay
-    ));
+  const handleUpdateTextOverlay = (id: string, updates: Partial<TikTokTextOverlay>) => {
+    setTextOverlays(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
   };
 
-  const removeTextOverlay = (id: string) => {
-    setTextOverlays((prev: TextOverlay[]) => prev.filter((overlay: TextOverlay) => overlay.id !== id));
+  const handleRemoveTextOverlay = (id: string) => {
+    setTextOverlays(prev => prev.filter(t => t.id !== id));
   };
 
-  const saveTextOverlayAsTemplate = async (overlay: TextOverlay) => {
-    if (!user) {
-      setNotification({ message: 'Please log in to save templates', type: 'error' });
-      return;
-    }
-
-    if (!overlay.text.trim()) {
-      setNotification({ message: 'Cannot save template with empty text', type: 'error' });
-      return;
-    }
-
-    try {
-      const templateName = overlay.text.trim(); // Use the text content as the template name
-      const templateData = {
-        user_id: user.id,
-        name: templateName,
-        text_content: templateName, // Save the template name as the text content
-        slide_index: overlay.slideIndex,
-        x: overlay.x,
-        y: overlay.y,
-        width: overlay.width,
-        height: overlay.height,
-        font_size: overlay.fontSize,
-        color: overlay.color,
-        font_family: overlay.fontFamily,
-        font_weight: overlay.fontWeight,
-        alignment: overlay.alignment,
-        bold: overlay.bold,
-        italic: overlay.italic,
-        outline: overlay.outline,
-        outline_color: overlay.outlineColor,
-        outline_width: overlay.outlineWidth,
-        outline_position: overlay.outlinePosition,
-        glow: overlay.glow,
-        glow_color: overlay.glowColor,
-        glow_intensity: overlay.glowIntensity,
-      };
-
-      const { error } = await supabase
-        .from('text_templates')
-        .upsert(templateData);
-
-      if (error) throw error;
-
-      await loadTextTemplates();
-      setNotification({ message: 'Template saved successfully!', type: 'success' });
-    } catch (error) {
-      console.error('Error saving template:', error);
-      setNotification({ message: 'Failed to save template. Please try again.', type: 'error' });
-    }
-  };
-
-  const applyTextTemplate = (template: any) => {
-    const newText: TextOverlay = {
-      id: Math.random().toString(36).substr(2, 9),
-      slideIndex: currentSlide, // Apply to current slide
-      text: template.text_content,
-      x: template.x,
-      y: template.y,
-      width: template.width,
-      height: template.height,
-      fontSize: template.font_size,
-      color: template.color,
-      fontFamily: template.font_family,
-      fontWeight: template.font_weight,
-      alignment: template.alignment,
-      outlineColor: template.outline_color,
-      outlineWidth: template.outline_width,
-      outlinePosition: template.outline_position,
-      bold: template.bold,
-      italic: template.italic,
-      outline: template.outline,
-      glow: template.glow,
-      glowColor: template.glow_color,
-      glowIntensity: template.glow_intensity,
-    };
-
-    setTextOverlays((prev: TextOverlay[]) => [...prev, newText]);
-  };
-
-  const deleteTextTemplate = async (templateId: string) => {
+  // Slideshow Handlers
+  const handleSaveSlideshow = async () => {
     if (!user) return;
+    console.log('Saving slideshow...');
+    // Implementation would go here
+  };
 
-    try {
-      const { error } = await supabase
-        .from('text_templates')
-        .delete()
-        .eq('id', templateId)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      await loadTextTemplates();
-    } catch (error) {
-      console.error('Error deleting template:', error);
+  const handlePostToTikTok = () => {
+    if (selectedImages.length > 0 || currentSlideshow) {
+      setShowPostizPoster(true);
+    } else {
+      // toast.error('Please select images or a slideshow first');
     }
   };
 
-  const loadPostizApiKey = async () => {
-    if (!user) return;
+  // Navigation & Path
+  const getFolderPath = (folderId: string | null, allFolders: Folder[]) => {
+    const path: { id: string; name: string }[] = [];
+    let current: Folder | undefined = allFolders.find(f => f.id === folderId);
 
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('postiz_api_key')
-        .eq('id', user.id)
-        .single();
-
-      if (error) throw error;
-
-      if (data?.postiz_api_key) {
-        setPostizApiKey(data.postiz_api_key);
-        postizAPI.setApiKey(data.postiz_api_key);
-      }
-    } catch (error) {
-      console.error('Error loading Postiz API key:', error);
+    while (current) {
+      path.unshift({ id: current.id, name: current.name });
+      const nextFolder = current.parent_id ? allFolders.find(f => f.id === current.parent_id) : undefined;
+      current = nextFolder;
     }
+    return path;
   };
-
-  const savePostizApiKey = async () => {
-    if (!user) return;
-
-    setIsValidatingApiKey(true);
-    try {
-      // First validate the API key
-      const isValid = await postizAPI.testApiKey(postizApiKey);
-      if (!isValid) {
-        setNotification({ message: 'Invalid Postiz API key. Please check and try again.', type: 'error' });
-        return;
-      }
-
-      // Save to database
-      const { error } = await supabase
-        .from('users')
-        .update({ postiz_api_key: postizApiKey })
-        .eq('id', user.id);
-
-      if (error) throw error;
-
-      // Set in local storage and API
-      postizAPI.setApiKey(postizApiKey);
-
-      setNotification({ message: 'Postiz API key saved successfully!', type: 'success' });
-      setShowPostizSettingsModal(false);
-    } catch (error) {
-      console.error('Error saving Postiz API key:', error);
-      setNotification({ message: 'Failed to save API key. Please try again.', type: 'error' });
-    } finally {
-      setIsValidatingApiKey(false);
-    }
-  };
-
-  const handleItemClick = (label: string) => {
-    switch (label) {
-      case "Upload Images":
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.multiple = true;
-        input.accept = 'image/*';
-        input.onchange = (e) => {
-          const files = Array.from((e.target as HTMLInputElement).files || []);
-          if (files.length > 0) {
-            handleImagesUploaded(files.map(file => ({
-              id: Math.random().toString(36).substr(2, 9),
-              file,
-              url: URL.createObjectURL(file),
-              preview: URL.createObjectURL(file),
-            })));
-          }
-        };
-        input.click();
-        break;
-      case "Import Folder":
-        // similar for folder
-        break;
-      case "From URL":
-        setShowUrlUploader(true);
-        break;
-      case "Batch Edit":
-        if (selectedImages.length > 0) {
-          const image = images.find((img: UploadedImage) => img.id === selectedImages[0]);
-          if (image) {
-            setEditingImage(image);
-          }
-        }
-        break;
-      case "Apply Filters":
-        // apply filters
-        break;
-      case "AI Enhance":
-        // ai enhance
-        break;
-      case "Add Music":
-        // add music
-        break;
-      case "Export Video":
-        // export video
-        break;
-      case "Export Slideshow":
-        // export slideshow
-        break;
-      case "Schedule to Buffer":
-        // the buffer code
-        break;
-      case "Post to TikTok":
-        if (selectedSlideshows.length > 0) {
-          setShowPostizPoster(true);
-        } else {
-          setNotification({ message: 'Please select a slideshow to post to TikTok', type: 'error' });
-        }
-        break;
-      case "Templates":
-        setShowTemplateSelection(true);
-        break;
-      case "Transitions":
-        // transitions
-        break;
-      case "Settings":
-        // settings
-        break;
-      default:
-        break;
-    }
-  };
-
-  // Handle template selection
-  const handleTemplateSelection = async (templateId: string, randomizeHashtags: boolean, randomizePictures: boolean, selectedHashtags?: string[]) => {
-    try {
-      const { slideshowService } = await import('../../lib/slideshowService');
-      const userTemplates = slideshowService.getSavedTemplates(user!.id);
-      const template = userTemplates.find(t => t.id === templateId);
-
-      if (!template) {
-        setNotification({ message: 'Template not found', type: 'error' });
-        return;
-      }
-
-      // Apply template settings to editor
-      setTitle(template.title);
-      setPostTitle(template.postTitle || template.title);
-      setCaption(template.caption);
-      setHashtags(template.hashtags);
-      setTextOverlays(template.textOverlays || []);
-      setTransitionEffect(template.transitionEffect);
-      setMusicEnabled(template.musicEnabled);
-      setAspectRatio(template.aspectRatio);
-
-      // Clear any current slideshow to exit preview mode
-      setCurrentSlideshow(null);
-
-      // Auto-select appropriate images for the template
-      const currentImages = getCurrentImages();
-      const imagesToSelect = currentImages.slice(0, template.slideCount);
-      const imageIdsToSelect = imagesToSelect.map(img => img.id);
-
-      if (imageIdsToSelect.length > 0) {
-        setSelectedImages(imageIdsToSelect);
-        setSelectedImagesOrdered(imageIdsToSelect);
-      }
-
-      setNotification({ message: `Template "${template.name}" applied to editor!`, type: 'success' });
-    } catch (error) {
-      console.error('Failed to apply template:', error);
-      setNotification({ message: 'Failed to apply template. Please try again.', type: 'error' });
-    }
-  };
-
-  const handleApplyTemplateToSettings = async (template: SlideshowTemplate) => {
-    try {
-      // Apply template settings to edit settings (similar to handleTemplateSelection but without slideshow creation)
-      setTitle(template.title);
-      setPostTitle(template.postTitle || template.title);
-      setCaption(template.caption);
-      setHashtags(template.hashtags);
-      setTextOverlays(template.textOverlays || []);
-      setTransitionEffect(template.transitionEffect);
-      setMusicEnabled(template.musicEnabled);
-      setAspectRatio(template.aspectRatio); // This includes the aspect ratio
-
-      // Clear any current slideshow to exit preview mode
-      setCurrentSlideshow(null);
-
-      setNotification({ message: `Template "${template.name}" applied to settings!`, type: 'success' });
-    } catch (error) {
-      console.error('Failed to apply template to settings:', error);
-      setNotification({ message: 'Failed to apply template to settings. Please try again.', type: 'error' });
-    }
-  };
-
-  // Function to construct the full breadcrumb path
-    const getFolderPath = (folderId: string | null, allFolders: Folder[]) => {
-      const path: { id: string; name: string }[] = [];
-      let current: Folder | undefined = allFolders.find(f => f.id === folderId);
-
-      while (current) {
-        path.unshift({ id: current.id, name: current.name });
-        const nextFolder = current.parent_id ? allFolders.find(f => f.id === current.parent_id) : undefined;
-        current = nextFolder;
-      }
-      return path;
-    };
 
   const folderPath = useMemo(() => getFolderPath(currentFolderId, folders), [currentFolderId, folders]);
 
-  const handleSlideshowLoad = (slideshow: SlideshowMetadata) => {
-    // Only set as current slideshow if it has actual condensed slides (not a template-only slideshow)
-    if (slideshow.condensedSlides && slideshow.condensedSlides.length > 0) {
-      setCurrentSlideshow(slideshow);
-    } else {
-      // For template-only slideshows (empty condensedSlides), don't set as current slideshow
-      // This prevents "No Image to process" while still applying settings
-      console.log('Template loaded without images, applying settings only');
-      setCurrentSlideshow(null);
-    }
-    
-    setSelectedImages([]);
-    setTitle(slideshow.title);
-    setPostTitle(slideshow.postTitle || '');
-    setCaption(slideshow.caption);
-    setHashtags(slideshow.hashtags);
-    setTextOverlays(slideshow.textOverlays || []);
-    setTransitionEffect(slideshow.transitionEffect || 'fade');
-    setMusicEnabled(slideshow.musicEnabled || false);
-  };
-
-  const handleSlideshowUnload = () => {
-    setCurrentSlideshow(null);
-    setSelectedSlideshows([]);
-  };
-
-  // Handle slideshow selection changes
-  const handleSlideshowSelectionChange = (selectedIds: string[]) => {
-    const wasSelected = selectedSlideshows.length > 0;
-    const willBeSelected = selectedIds.length > 0;
-    const newlySelected = selectedIds.find(id => !selectedSlideshows.includes(id));
-    
-    setSelectedSlideshows(selectedIds);
-    
-    // Clear image selection when slideshows are selected (mutually exclusive)
-    if (selectedIds.length > 0) {
-      setSelectedImages([]);
-    }
-    
-    // Handle load if we have a newly selected slideshow
-    if (newlySelected) {
-      (async () => {
-        try {
-          const { slideshowService } = await import('../../lib/slideshowService');
-          // Use clean loading approach - slideshow loads with clear text settings
-          const slideshow = await slideshowService.loadSlideshowWithClearSettings(newlySelected);
-          if (slideshow) {
-            await handleSlideshowLoad(slideshow);
-          }
-        } catch (error) {
-          // Error handled silently for better UX
-        }
-      })();
-    }
-    
-    // Handle unload if we were selected but now we're not
-    if (wasSelected && !willBeSelected) {
-      if (currentSlideshow) {
-        setCurrentSlideshow(null);
-      }
-    }
-  };
-
-  // Handle image selection changes
-  const handleImageSelectionChange = (selectedIds: string[]) => {
-    setSelectedImages(selectedIds);
-    setSelectedImagesOrdered(selectedIds); // Always sync ordered selection with current selection
-    
-    // Clear slideshow selection when images are selected (mutually exclusive)
-    if (selectedIds.length > 0) {
-      setSelectedSlideshows([]);
-    }
-  };
-  
-  // Handle folder navigation while preserving selections
-  const handleCurrentFolderIdChangeWithPreservation = (folderId: string | null) => {
-    console.log('🗂️ Navigating to folder:', folderId);
-    
-    // Get the target folder images if navigating to a folder
-    if (folderId !== null) {
-      const targetFolder = folders.find(f => f.id === folderId);
-      const targetFolderImageIds = targetFolder ? targetFolder.images.map(img => img.id) : [];
-      
-      // Update selection to only include images from the target folder
-      const validSelectionIds = selectedImagesOrdered.filter(id => targetFolderImageIds.includes(id));
-      
-      console.log('📁 Updating selection for folder navigation:', {
-        folderId,
-        targetFolderImageCount: targetFolderImageIds.length,
-        currentSelectionCount: selectedImagesOrdered.length,
-        validSelectionCount: validSelectionIds.length
-      });
-      
-      // Update both the main selection and ordered selection
-      setSelectedImages(validSelectionIds);
-      setSelectedImagesOrdered(validSelectionIds);
-    }
-    
-    setCurrentFolderId(folderId);
-  };
-
-  // Handle selection order changes from remix operations
-  useEffect(() => {
-    const handleSelectionOrderChange = (event: CustomEvent) => {
-      const { newOrderedSelection } = event.detail;
-      setSelectedImagesOrdered(newOrderedSelection);
-    };
-
-    window.addEventListener('selectionOrderChange', handleSelectionOrderChange as EventListener);
-    
-    return () => {
-      window.removeEventListener('selectionOrderChange', handleSelectionOrderChange as EventListener);
-    };
-  }, []);
-
-  // Get current images based on folder context for TikTokPreview
+  // Helper: Get images for current folder context
   const getCurrentImages = () => {
     if (currentFolderId === null) {
       return images; // Root level images
@@ -819,892 +281,317 @@ export const Dashboard: React.FC = () => {
 
   const derivedCurrentImages = useMemo(() => getCurrentImages(), [currentFolderId, images, folders]);
 
-  // Filter selected images to only include those from current folder
+  // Helper: Filter selected images to only include those from current folder
   const getCurrentSelectedImages = () => {
     const currentImageIds = derivedCurrentImages.map(img => img.id);
     const filtered = selectedImages.filter(id => currentImageIds.includes(id));
-    
-    console.log('🎯 Current selected images for folder:', {
-      currentFolderId,
-      totalSelected: selectedImages.length,
-      currentFolderImages: derivedCurrentImages.length,
-      filteredSelected: filtered.length,
-      selectedImageIds: selectedImages,
-      currentImageIds: currentImageIds
-    });
-    
     return filtered;
   };
 
   const currentSelectedImages = getCurrentSelectedImages();
-  // Update TikTokPreview props logging
-  // Ensure selected images are properly synced when folder changes
-  useEffect(() => {
-    console.log('🔄 Folder change detected, updating selection...', {
-      currentFolderId,
-      totalSelected: selectedImagesOrdered.length,
-      availableImages: derivedCurrentImages.length
-    });
 
-    // Get current folder image IDs
+  // Sync selection when folder changes
+  useEffect(() => {
     const currentImageIds = new Set(derivedCurrentImages.map(img => img.id));
-    const oldSelectedImageIds = new Set(selectedImagesOrdered);
-    
-    // Find intersection (images that are both selected AND exist in current folder)
     const validSelectionIds = selectedImagesOrdered.filter(id => currentImageIds.has(id));
-    
-    console.log('🎯 Selection sync results:', {
-      oldSelectedCount: oldSelectedImageIds.size,
-      currentFolderImageCount: currentImageIds.size,
-      validSelectionCount: validSelectionIds.length,
-      invalidIds: [...oldSelectedImageIds].filter(id => !currentImageIds.has(id))
-    });
-    
-    // Update main selection state to only include valid IDs
-    // This ensures the FileBrowser selection reflects the current folder context
+
     if (validSelectionIds.length !== selectedImagesOrdered.length) {
       setSelectedImages(validSelectionIds);
     }
   }, [currentFolderId, derivedCurrentImages]);
+
+  // Event Listener for Selection Order
+  const handleSelectionOrderChange = (event: CustomEvent<string[]>) => {
+    setSelectedImagesOrdered(event.detail);
+  };
+
   useEffect(() => {
-    console.log('📺 TikTokPreview props update:', {
-      currentFolderId,
-      imagesCount: derivedCurrentImages.length,
-      selectedImagesCount: currentSelectedImages.length,
-      selectedImageIds: currentSelectedImages,
-      hasCurrentSlideshow: !!currentSlideshow
-    });
-  }, [currentFolderId, derivedCurrentImages, currentSelectedImages, currentSlideshow]);
+    window.addEventListener('selectionOrderChange', handleSelectionOrderChange as EventListener);
+    return () => {
+      window.removeEventListener('selectionOrderChange', handleSelectionOrderChange as EventListener);
+    };
+  }, []);
+
+  // Handle Header Actions
+  const handleItemClick = (action: string) => {
+    switch (action) {
+      case 'upload':
+        setShowUrlUploader(true);
+        break;
+      case 'settings':
+        setShowSettingsPanel(!showSettingsPanel);
+        break;
+      default:
+        console.log('Unknown action:', action);
+    }
+  };
 
   return (
     <ThemeProvider>
-      <SidebarProvider>
-      <div className="h-screen bg-background flex w-full overflow-hidden">
-        {/* Sidebar */}
-        <DetailSidebar
-          activeSection={activeSection}
-          onItemClick={handleItemClick}
-          images={images}
-          selectedImages={selectedImages}
+      <div className="flex flex-col h-screen w-full bg-background text-foreground overflow-hidden">
+        {/* Topbar */}
+        <Header
+          path={folderPath}
+          onNavigateToFolder={setCurrentFolderId}
+          onAction={handleItemClick}
         />
 
-        {/* Main Content */}
-        <SidebarInset className="flex-1 h-screen overflow-hidden">
-          <Header
-            path={folderPath}
-            onNavigateToFolder={handleCurrentFolderIdChangeWithPreservation}
-          />
-
-          <main className="flex h-full w-full overflow-hidden">
-            {/* Left Panel - File Browser */}
-            <div className="w-[50%] border-r border-border min-w-0">
-              <div className="h-full overflow-hidden">
-                <FileBrowser
-                  images={images}
-                  onImagesUploaded={handleImagesUploaded}
-                  selectedImages={selectedImages}
-                  onSelectionChange={setSelectedImages}
-                  folders={folders}
-                  onFoldersChange={setFolders}
-                  currentFolderId={currentFolderId}
-                  onCurrentFolderIdChange={handleCurrentFolderIdChangeWithPreservation}
-                  onSlideshowLoad={handleSlideshowLoad}
-                  onSlideshowUnload={handleSlideshowUnload}
-                  selectedSlideshows={selectedSlideshows}
-                  onSlideshowSelectionChange={handleSlideshowSelectionChange}
-                  cutLength={cutLength}
-                  onCutLengthChange={setCutLength}
-                  onCurrentImagesChange={setCurrentImages}
-                />
-              </div>
-            </div>
-
-            {/* Middle Panel - TikTok Preview */}
-            <div className="w-[30%] min-w-0">
-              <TikTokPreview
-                images={derivedCurrentImages}
-                selectedImages={currentSelectedImages}
-                textOverlays={textOverlays}
-                title={title}
-                postTitle={postTitle}
-                caption={caption}
-                hashtags={hashtags}
-                transitionEffect={transitionEffect}
-                musicEnabled={musicEnabled}
-                aspectRatio={aspectRatio}
-                cutLength={cutLength}
-                previewMode={!!currentSlideshow} // Enable preview mode when slideshow is loaded
-                onTextOverlaysChange={setTextOverlays}
-                onTitleChange={setTitle}
-                onPostTitleChange={setPostTitle}
-                onCaptionChange={setCaption}
-                onHashtagsChange={setHashtags}
-                onTransitionEffectChange={setTransitionEffect}
-                onMusicEnabledChange={setMusicEnabled}
-                onAspectRatioChange={setAspectRatio}
-                onCurrentSlideChange={setCurrentSlide}
-                onImagesUpdate={(updatedImages) => {
-                  // Handle image updates for both root and folder images
-                  if (currentFolderId === null) {
-                    // Root level images update
-                    const newImagesArray = [...updatedImages];
-                    const otherImages = images.filter(img => !updatedImages.some(updated => updated.id === img.id));
-                    const finalImages = [...otherImages, ...newImagesArray];
-                    setImages(finalImages);
-                  } else {
-                    // Folder images update
-                    const updatedFolders = folders.map(f => {
-                      if (f.id === currentFolderId) {
-                        const folderImageIds = new Set(updatedImages.map(img => img.id));
-                        const otherFolderImages = f.images.filter(img => !folderImageIds.has(img.id));
-                        return {
-                          ...f,
-                          images: [...otherFolderImages, ...updatedImages]
-                        };
-                      }
-                      return f;
-                    });
-                    setFolders(updatedFolders);
-                  }
-                }}
-                onSelectionOrderChange={setSelectedImagesOrdered} // Callback to update selection order
-                currentSlideshow={currentSlideshow}
-              />
-            </div>
-
-            {/* Right Panel - Edit Settings */}
-            <div className="w-[20%] bg-background border-l border-border flex flex-col min-w-0 overflow-hidden">
-              <div className="p-4 border-b border-border">
-                <h3 className="font-semibold text-foreground flex items-center">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Edit Settings
-                </h3>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ transition: 'none' }}>
-                {/* Slideshow Manager */}
-                <SlideshowManager
-                  images={images}
-                  selectedImages={selectedImages}
-                  textOverlays={textOverlays}
-                  title={title}
-                  postTitle={postTitle}
-                  caption={caption}
-                  hashtags={hashtags}
-                  aspectRatio={aspectRatio}
-                  transitionEffect={transitionEffect}
-                  musicEnabled={musicEnabled}
-                  onTitleChange={setTitle}
-                  onPostTitleChange={setPostTitle}
-                  onCaptionChange={setCaption}
-                  onHashtagsChange={setHashtags}
-                  onTextOverlaysChange={setTextOverlays}
-                  onAspectRatioChange={(ratio) => {
-                    // Update both local state and TikTok preview with new aspect ratio
-                    setAspectRatio(ratio);
-                    window.dispatchEvent(new CustomEvent('tiktokAspectRatioChange', {
-                      detail: { aspectRatio: ratio }
-                    }));
-                  }}
-                  onTransitionEffectChange={setTransitionEffect}
-                  onMusicEnabledChange={setMusicEnabled}
-                  currentSlideshow={currentSlideshow}
-                  onTemplateApplied={(result) => {
-                    if (result.success && result.slideshow) {
-                      // Apply template settings to the editor without entering preview mode
-                      // This allows template settings to populate the form while keeping normal editor functionality
-                      setTitle(result.slideshow.title);
-                      setPostTitle(result.slideshow.postTitle || '');
-                      setCaption(result.slideshow.caption);
-                      setHashtags(result.slideshow.hashtags);
-                      setTextOverlays(result.slideshow.textOverlays || []);
-                      setTransitionEffect(result.slideshow.transitionEffect || 'fade');
-                      setMusicEnabled(result.slideshow.musicEnabled || false);
-
-                      // Clear any current slideshow to exit preview mode
-                      setCurrentSlideshow(null);
-
-                      // Automatically select appropriate images for the template
-                      // Use the first N images from the current folder where N = template slide count
-                      const currentImages = getCurrentImages();
-                      const imagesToSelect = currentImages.slice(0, result.slideshow.condensedSlides?.length || result.processedImages || 3);
-                      const imageIdsToSelect = imagesToSelect.map(img => img.id);
-
-                      if (imageIdsToSelect.length > 0) {
-                        setSelectedImages(imageIdsToSelect);
-                        setSelectedImagesOrdered(imageIdsToSelect);
-                        console.log('Template applied - auto-selected images:', imageIdsToSelect.length, 'images');
-                      }
-
-                      console.log('Template applied to editor settings:', result.slideshow.title);
-                    }
-                  }}
-                />
-
-                {/* Template Manager Section */}
-                <TemplateManager
-                  currentSlideshow={currentSlideshow}
-                  uploadedImages={derivedCurrentImages}
-                  selectedImages={currentSelectedImages}
-                  onTemplateApplied={(result) => {
-                    if (result.success && result.slideshow) {
-                      // Apply template settings to the editor without entering preview mode
-                      setTitle(result.slideshow.title);
-                      setPostTitle(result.slideshow.postTitle || '');
-                      setCaption(result.slideshow.caption);
-                      setHashtags(result.slideshow.hashtags);
-                      setTextOverlays(result.slideshow.textOverlays || []);
-                      setTransitionEffect(result.slideshow.transitionEffect || 'fade');
-                      setMusicEnabled(result.slideshow.musicEnabled || false);
-
-                      // Clear any current slideshow to exit preview mode
-                      setCurrentSlideshow(null);
-
-                      // Automatically select appropriate images for the template
-                      const currentImages = getCurrentImages();
-                      const imagesToSelect = currentImages.slice(0, result.processedImages || 3);
-                      const imageIdsToSelect = imagesToSelect.map(img => img.id);
-
-                      if (imageIdsToSelect.length > 0) {
-                        setSelectedImages(imageIdsToSelect);
-                        setSelectedImagesOrdered(imageIdsToSelect);
-                      }
-                    }
-                  }}
-                  onImagesSelectForBulk={(images) => {
-                    const imageIds = images.map(img => img.id);
-                    setSelectedImages(imageIds);
-                    setSelectedImagesOrdered(imageIds);
-                  }}
-                  currentTitle={title}
-                  currentPostTitle={postTitle}
-                  currentCaption={caption}
-                  currentHashtags={hashtags}
-                  currentTextOverlays={textOverlays}
-                  currentAspectRatio={aspectRatio}
-                  currentTransitionEffect={transitionEffect}
-                  currentMusicEnabled={musicEnabled}
-                />
-
-                {/* Text Edit Controls - Always show for editing */}
-                {true && (
-                  <div className="space-y-3">
-                    <h4 className="font-medium text-muted-foreground">Text Editor</h4>
-                    <Button
-                      onClick={addTextOverlay}
-                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                    >
-                      <Type className="w-4 h-4 mr-2" />
-                      Add Text
-                    </Button>
-
-                    {/* List of text overlays */}
-                    {textOverlays.length > 0 && (
-                      <div className="space-y-4">
-                        <label className="text-muted-foreground text-sm">Text Overlays</label>
-                        <div className="space-y-4">
-                          {textOverlays.map((overlay: TextOverlay, index: number) => (
-                            <div
-                              key={overlay.id}
-                              className={cn(
-                                "p-3 rounded-lg border transition-colors",
-                                overlay.isSelected
-                                  ? "border-primary bg-primary/5"
-                                  : "border-border hover:border-primary/50"
-                              )}
-                            >
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-2 flex-1">
-                                  <span className="text-sm font-medium text-foreground truncate">
-                                    {overlay.text || `Text ${index + 1}`}
-                                  </span>
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
-                                    Slide {overlay.slideIndex + 1}
-                                  </span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <button
-                                    onClick={() => saveTextOverlayAsTemplate(overlay)}
-                                    className="text-muted-foreground hover:text-green-500 text-xs"
-                                    title="Save as template"
-                                  >
-                                    💾
-                                  </button>
-                                  <button
-                                    onClick={() => removeTextOverlay(overlay.id)}
-                                    className="text-muted-foreground hover:text-destructive"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              </div>
-
-                              {/* Text Input */}
-                              <div className="mb-3">
-                                <textarea
-                                  value={overlay.text}
-                                  onChange={(e) => updateTextOverlay(overlay.id, { text: e.target.value })}
-                                  className="w-full px-2 py-1 text-sm bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none resize-none"
-                                  rows={2}
-                                  placeholder="Enter multi-line text..."
-                                />
-                              </div>
-
-                              {/* Text Edit Options - Always Visible */}
-                              <div className="space-y-2">
-                                <div className="flex gap-1">
-                                  <Button
-                                    size="sm"
-                                    variant={overlay.bold ? "default" : "outline"}
-                                    onClick={() => updateTextOverlay(overlay.id, { bold: !overlay.bold })}
-                                    className="text-xs px-2 py-1 h-7"
-                                    title="Bold"
-                                  >
-                                    <Bold className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant={overlay.italic ? "default" : "outline"}
-                                    onClick={() => updateTextOverlay(overlay.id, { italic: !overlay.italic })}
-                                    className="text-xs px-2 py-1 h-7"
-                                    title="Italic"
-                                  >
-                                    <Italic className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant={overlay.outline ? "default" : "outline"}
-                                    onClick={() => updateTextOverlay(overlay.id, { outline: !overlay.outline })}
-                                    className="text-xs px-2 py-1 h-7"
-                                    title="Outline"
-                                  >
-                                    <Square className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant={overlay.glow ? "default" : "outline"}
-                                    onClick={() => updateTextOverlay(overlay.id, { glow: !overlay.glow })}
-                                    className="text-xs px-2 py-1 h-7"
-                                    title="Glow"
-                                  >
-                                    <Sparkles className="w-3 h-3" />
-                                  </Button>
-                                  <div className="w-px bg-border mx-1"></div>
-                                  <Button
-                                    size="sm"
-                                    variant={overlay.alignment === 'left' ? "default" : "outline"}
-                                    onClick={() => updateTextOverlay(overlay.id, { alignment: 'left' })}
-                                    className="text-xs px-2 py-1 h-7"
-                                    title="Align Left"
-                                  >
-                                    <AlignLeft className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant={overlay.alignment === 'center' ? "default" : "outline"}
-                                    onClick={() => updateTextOverlay(overlay.id, { alignment: 'center' })}
-                                    className="text-xs px-2 py-1 h-7"
-                                    title="Align Center"
-                                  >
-                                    <AlignCenter className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant={overlay.alignment === 'right' ? "default" : "outline"}
-                                    onClick={() => updateTextOverlay(overlay.id, { alignment: 'right' })}
-                                    className="text-xs px-2 py-1 h-7"
-                                    title="Align Right"
-                                  >
-                                    <AlignRight className="w-3 h-3" />
-                                  </Button>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-2">
-                                  <div className="flex items-center gap-1">
-                                    <label className="text-xs text-muted-foreground">Size:</label>
-                                    <input
-                                      type="number"
-                                      min="12"
-                                      max="200"
-                                      value={overlay.fontSize}
-                                      onChange={(e) => updateTextOverlay(overlay.id, { fontSize: parseInt(e.target.value) || 24 })}
-                                      className="w-12 px-1 py-0.5 text-xs bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <label className="text-xs text-muted-foreground">Text:</label>
-                                    <input
-                                      type="color"
-                                      value={overlay.color}
-                                      onChange={(e) => updateTextOverlay(overlay.id, { color: e.target.value })}
-                                      className="w-8 h-7 rounded border border-border"
-                                    />
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <label className="text-xs text-muted-foreground">Outline:</label>
-                                    <input
-                                      type="color"
-                                      value={overlay.outlineColor}
-                                      onChange={(e) => updateTextOverlay(overlay.id, { outlineColor: e.target.value })}
-                                      className="w-6 h-6 rounded border border-border"
-                                    />
-                                    <input
-                                      type="number"
-                                      min="0.1"
-                                      max="20"
-                                      step="0.1"
-                                      value={overlay.outlineWidth}
-                                      onChange={(e) => updateTextOverlay(overlay.id, { outlineWidth: parseFloat(e.target.value) || 1.9 })}
-                                      className="w-12 px-1 py-0.5 text-xs bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-                                    />
-                                  </div>
-                                </div>
-
-
-                                {overlay.glow && (
-                                  <div className="flex items-center gap-1">
-                                    <label className="text-xs text-muted-foreground">Glow:</label>
-                                    <input
-                                      type="color"
-                                      value={overlay.glowColor}
-                                      onChange={(e) => updateTextOverlay(overlay.id, { glowColor: e.target.value })}
-                                      className="w-6 h-6 rounded border border-border"
-                                    />
-                                    <input
-                                      type="number"
-                                      min="1"
-                                      max="50"
-                                      value={overlay.glowIntensity}
-                                      onChange={(e) => updateTextOverlay(overlay.id, { glowIntensity: parseInt(e.target.value) || 5 })}
-                                      className="w-10 px-1 py-0.5 text-xs bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-                                    />
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Text Templates Section */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-muted-foreground">Text Templates</h4>
-                    <Button
-                      onClick={() => setShowTemplates(!showTemplates)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      {showTemplates ? 'Hide' : 'Show'} ({textTemplates.length})
-                    </Button>
-                  </div>
-                  
-                  {/* Browse Templates Button */}
-                  <Button
-                    onClick={() => setShowTemplateSelection(true)}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
-                    size="sm"
-                  >
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Browse Templates
-                  </Button>
-
-                  {showTemplates && (
-                    <div className="space-y-3">
-                      {textTemplates.length === 0 ? (
-                        <p className="text-muted-foreground text-sm">No saved templates yet</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {textTemplates.map((template: any) => (
-                            <div
-                              key={template.id}
-                              className="p-3 rounded-lg border border-border bg-muted/50 hover:bg-muted/70 transition-colors"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex-1">
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-sm font-medium text-foreground">
-                                      {template.name}
-                                    </span>
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                                      Slide {template.slide_index + 1}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground mt-1 truncate">
-                                    "{template.text_content}"
-                                  </p>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <Button
-                                    onClick={() => applyTextTemplate(template)}
-                                    size="sm"
-                                    variant="outline"
-                                    className="text-xs px-2 py-1 h-6"
-                                  >
-                                    Apply
-                                  </Button>
-                                  <button
-                                    onClick={() => deleteTextTemplate(template.id)}
-                                    className="text-muted-foreground hover:text-destructive text-xs"
-                                    title="Delete template"
-                                  >
-                                    🗑️
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Caption & Hashtags Only - Title & Post Title are handled in SlideshowManager */}
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-muted-foreground text-sm block mb-2">Caption</label>
-                    <textarea
-                      value={caption}
-                      onChange={(e) => setCaption(e.target.value)}
-                      className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none resize-none"
-                      rows={3}
-                      placeholder="Write your TikTok caption..."
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-muted-foreground text-sm block mb-2">Hashtags</label>
-
-                    {/* Current hashtags as badges */}
-                    {hashtags.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {hashtags.map((tag: string, index: number) => (
-                          <span
-                            key={index}
-                            className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-primary/10 text-primary border border-primary/20"
-                          >
-                            #{tag}
-                            <button
-                              onClick={() => removeHashtag(tag)}
-                              className="ml-1 hover:text-destructive"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Add hashtag input */}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={hashtagInput}
-                        onChange={(e) => setHashtagInput(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && addHashtag()}
-                        className="flex-1 px-3 py-2 bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-                        placeholder="Add hashtag..."
-                      />
-                      <Button
-                        onClick={addHashtag}
-                        size="sm"
-                        className="px-3"
-                      >
-                        Add
-                      </Button>
-                    </div>
-
-                    {/* Save hashtags button */}
-                    <div className="mt-2">
-                      <Button
-                        onClick={async () => {
-                          if (!user) return;
-                          try {
-                            const hashtagsToSave = hashtags.filter(tag => !savedHashtags.includes(tag));
-                            if (hashtagsToSave.length === 0) return;
-
-                            const { error } = await supabase
-                              .from('hashtags')
-                              .upsert(
-                                hashtagsToSave.map(tag => ({
-                                  user_id: user.id,
-                                  tag: tag,
-                                  updated_at: new Date().toISOString()
-                                }))
-                              );
-
-                            if (error) throw error;
-                            await loadSavedHashtags();
-                          } catch (error) {
-                            console.error('Error saving hashtags:', error);
-                          }
-                        }}
-                        size="sm"
-                        className="w-full"
-                        disabled={!user || hashtags.length === 0}
-                      >
-                        Save Hashtags
-                      </Button>
-                    </div>
-
-                    {/* Saved hashtags */}
-                    {savedHashtags.length > 0 && (
-                      <div className="mt-2">
-                        <label className="text-muted-foreground text-xs block mb-1">Saved hashtags:</label>
-                        <div className="flex flex-wrap gap-1">
-                          {savedHashtags.map((tag: string, index: number) => (
-                            <div
-                              key={index}
-                              className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-secondary text-secondary-foreground border border-border group"
-                            >
-                              <button
-                                onClick={() => {
-                                  if (!hashtags.includes(tag)) {
-                                    setHashtags((prev: string[]) => [...prev, tag]);
-                                  }
-                                }}
-                                className="hover:text-primary"
-                                title="Add to current hashtags"
-                              >
-                                #{tag}
-                              </button>
-                              <button
-                                onClick={() => deleteSavedHashtag(tag)}
-                                className="ml-1 opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                                title="Remove from saved hashtags"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Bulk Load Saved Hashtags Section */}
-                    {savedHashtags.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-border">
-                        <label className="text-muted-foreground text-xs block mb-2">Select & Load Multiple:</label>
-
-                        <div className="space-y-2 max-h-32 overflow-y-auto">
-                          {savedHashtags.map((tag: string, index: number) => (
-                            <label
-                              key={index}
-                              className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-1 rounded"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedSavedHashtags.has(tag)}
-                                onChange={() => toggleSavedHashtagSelection(tag)}
-                                className="w-3 h-3 text-primary border-border rounded focus:ring-primary focus:ring-1"
-                              />
-                              <span className="text-sm text-foreground">#{tag}</span>
-                            </label>
-                          ))}
-                        </div>
-
-                        <Button
-                          onClick={loadSelectedHashtags}
-                          disabled={selectedSavedHashtags.size === 0}
-                          size="sm"
-                          className="w-full mt-3 bg-primary hover:bg-primary/90 text-primary-foreground"
-                        >
-                          Load Selected Hashtags ({selectedSavedHashtags.size})
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Postiz API Settings */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-muted-foreground">Social Media Integration</h4>
-                    <Button
-                      onClick={() => setShowPostizSettingsModal(true)}
-                      size="sm"
-                      variant="outline"
-                    >
-                      Show Settings
-                    </Button>
-                  </div>
-
-                </div>
-
-              </div>
-            </div>
-          </main>
-        </SidebarInset>
-      </div>
-
-      {/* Notification Toast */}
-      {notification.message && (
-        <div className="fixed top-4 right-4 z-50 animate-in slide-in-from-right-5">
+        {/* Main Content Area */}
+        <div className="flex flex-1 overflow-hidden relative">
+          {/* Left: File Browser */}
           <div className={cn(
-            "px-4 py-2 rounded-lg shadow-lg border max-w-sm",
-            notification.type === 'success'
-              ? "bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-200 dark:border-green-800"
-              : "bg-red-50 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-200 dark:border-red-800"
+            "flex-1 flex flex-col min-w-0 bg-background/50 backdrop-blur-sm border-r border-white/10",
+            activeMobileTab === 'files' ? 'flex' : 'hidden xl:flex'
           )}>
-            <div className="flex items-center space-x-2">
-              {notification.type === 'success' && (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-              )}
-              {notification.type === 'error' && (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              )}
-              <span className="text-sm font-medium">{notification.message}</span>
-              <button
-                onClick={() => setNotification({ message: '', type: null })}
-                className="ml-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                ×
-              </button>
-            </div>
+            <FileBrowser
+              images={images}
+              onImagesUploaded={setImages}
+              selectedImages={selectedImages}
+              onSelectionChange={(ids) => {
+                setSelectedImages(ids);
+                setSelectedImagesOrdered(ids);
+              }}
+              selectedSlideshows={selectedSlideshows}
+              onSlideshowSelectionChange={setSelectedSlideshows}
+              folders={folders}
+              onFoldersChange={setFolders}
+              currentFolderId={currentFolderId}
+              onCurrentFolderIdChange={setCurrentFolderId}
+              onSlideshowLoad={setCurrentSlideshow}
+              onCreateFromTemplate={handleCreateFromTemplate}
+              onBulkPost={handleBulkPost}
+            />
+          </div>
+
+          {/* Middle: TikTok Preview */}
+          <div className={cn(
+            "flex flex-col min-w-0 bg-black/40 backdrop-blur-sm border-r border-white/10",
+            "w-full xl:w-[500px]",
+            activeMobileTab === 'preview' ? 'flex' : 'hidden xl:flex'
+          )}>
+            <TikTokPreview
+              images={derivedCurrentImages}
+              selectedImages={currentSelectedImages}
+              textOverlays={textOverlays}
+              title={title}
+              postTitle={postTitle}
+              caption={caption}
+              hashtags={hashtags}
+              transitionEffect={transitionEffect}
+              musicEnabled={musicEnabled}
+              aspectRatio={aspectRatio}
+              previewMode={!!currentSlideshow}
+              onTextOverlaysChange={setTextOverlays}
+              onTitleChange={setTitle}
+              onPostTitleChange={setPostTitle}
+              onCaptionChange={setCaption}
+              onHashtagsChange={setHashtags}
+              onTransitionEffectChange={setTransitionEffect}
+              onMusicEnabledChange={setMusicEnabled}
+              onAspectRatioChange={setAspectRatio}
+              onCurrentSlideChange={setCurrentSlide}
+              onImagesUpdate={(updatedImages) => {
+                // Handle image updates logic
+                if (currentFolderId === null) {
+                  const newImagesArray = [...updatedImages];
+                  const otherImages = images.filter(img => !updatedImages.some(updated => updated.id === img.id));
+                  setImages([...otherImages, ...newImagesArray]);
+                } else {
+                  const updatedFolders = folders.map(f => {
+                    if (f.id === currentFolderId) {
+                      const folderImageIds = new Set(updatedImages.map(img => img.id));
+                      const otherFolderImages = f.images.filter(img => !folderImageIds.has(img.id));
+                      return { ...f, images: [...otherFolderImages, ...updatedImages] };
+                    }
+                    return f;
+                  });
+                  setFolders(updatedFolders);
+                }
+              }}
+              onSelectionOrderChange={setSelectedImagesOrdered}
+              currentSlideshow={currentSlideshow}
+            />
+          </div>
+
+          {/* Right: Settings Panel */}
+          <div className={cn(
+            "transition-all duration-300 ease-in-out bg-card/30 backdrop-blur-md",
+            showSettingsPanel ? "xl:w-[500px] xl:translate-x-0" : "xl:w-0 xl:translate-x-full xl:opacity-0 xl:overflow-hidden",
+            activeMobileTab === 'settings' ? "w-full translate-x-0 block" : "hidden xl:block"
+          )}>
+            <SettingsPanel
+              title={title}
+              setTitle={setTitle}
+              postTitle={postTitle}
+              setPostTitle={setPostTitle}
+              caption={caption}
+              setCaption={setCaption}
+              hashtags={hashtags}
+              setHashtags={setHashtags}
+              textOverlays={textOverlays}
+              setTextOverlays={setTextOverlays}
+
+              aspectRatio={aspectRatio}
+              setAspectRatio={setAspectRatio}
+              onSaveSlideshow={handleSaveSlideshow}
+              onPostToTikTok={handlePostToTikTok}
+              onAddTextOverlay={handleAddTextOverlay}
+              onRemoveTextOverlay={handleRemoveTextOverlay}
+              onUpdateTextOverlay={handleUpdateTextOverlay}
+              savedHashtags={savedHashtags}
+              onAddHashtag={handleAddHashtag}
+              selectedImagesCount={selectedImages.length}
+              apiKeys={apiKeys}
+              setApiKeys={setApiKeys}
+              selectedTemplate={selectedTemplate}
+              setSelectedTemplate={setSelectedTemplate}
+              savedTemplates={savedTemplates}
+              onLoadTemplate={(template) => {
+                setCurrentSlideshow({
+                  ...template,
+                  id: `slideshow_${Date.now()}`, // Create new ID for the slideshow
+                  textOverlays: template.textOverlays.map(o => ({ ...o, id: `overlay_${Date.now()}_${Math.random()}` })),
+                  condensedSlides: []
+                } as SlideshowMetadata);
+                setTitle(template.title);
+                setPostTitle(template.postTitle || template.title);
+                setCaption(template.caption);
+                setHashtags(template.hashtags);
+                setTextOverlays(template.textOverlays);
+                setAspectRatio(template.aspectRatio);
+                setTransitionEffect(template.transitionEffect);
+                setMusicEnabled(template.musicEnabled);
+                setSelectedTemplate(template.id);
+              }}
+              onSaveTemplate={() => setShowCreateTemplateModal(true)}
+            />
           </div>
         </div>
-      )}
 
-      {/* Image Editor Modal */}
-      {editingImage && (
-        <ImageEditor
-          image={editingImage}
-          onSave={(editedImage) => {
-            const updatedImages = images.map((img: UploadedImage) =>
-              img.id === editedImage.id ? editedImage : img
-            );
-            setImages(updatedImages);
-            setEditingImage(null);
-          }}
-          onCancel={() => setEditingImage(null)}
-        />
-      )}
-
-      {/* Postiz Poster Modal */}
-      {showPostizPoster && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            <div className="p-6">
-              {currentSlideshow ? (
-                <PostizPoster
-                  slideshow={currentSlideshow}
-                  onPostSuccess={(postId) => {
-                    setNotification({
-                      message: 'Slideshow posted to TikTok successfully!',
-                      type: 'success'
-                    });
-                    setShowPostizPoster(false);
-                  }}
-                  onClose={() => setShowPostizPoster(false)}
-                />
-              ) : (
-                <div className="text-center py-6">
-                  <p className="text-muted-foreground mb-4">No slideshow selected</p>
-                  <Button onClick={() => setShowPostizPoster(false)} variant="outline">
-                    Close
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
+        {/* Mobile Bottom Navigation */}
+        <div className="xl:hidden bg-black/80 backdrop-blur-lg border-t border-white/10 p-2 flex justify-around items-center z-50 shrink-0 safe-area-bottom">
+          <button
+            onClick={() => setActiveMobileTab('files')}
+            className={cn(
+              "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors",
+              activeMobileTab === 'files' ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-white'
+            )}
+          >
+            <FolderIcon className="w-5 h-5" />
+            <span className="text-[10px] font-medium">Files</span>
+          </button>
+          <button
+            onClick={() => setActiveMobileTab('preview')}
+            className={cn(
+              "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors",
+              activeMobileTab === 'preview' ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-white'
+            )}
+          >
+            <FilmIcon className="w-5 h-5" />
+            <span className="text-[10px] font-medium">Preview</span>
+          </button>
+          <button
+            onClick={() => setActiveMobileTab('settings')}
+            className={cn(
+              "flex flex-col items-center gap-1 p-2 rounded-lg transition-colors",
+              activeMobileTab === 'settings' ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-white'
+            )}
+          >
+            <SettingsIcon className="w-5 h-5" />
+            <span className="text-[10px] font-medium">Settings</span>
+          </button>
         </div>
-      )}
 
-      {/* Postiz Settings Modal */}
-      {showPostizSettingsModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-background rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-hidden">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-foreground">Postiz Settings</h3>
-                <Button
-                  onClick={() => setShowPostizSettingsModal(false)}
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                >
-                  ×
-                </Button>
-              </div>
+        {/* Modals & Overlays */}
+        {showUrlUploader && (
+          <UrlUploader
+            onClose={() => setShowUrlUploader(false)}
+            onUpload={(newImages) => {
+              setImages([...images, ...newImages]);
+              setShowUrlUploader(false);
+            }}
+          />
+        )}
 
-              <div className="space-y-4">
-                <div>
-                  <label className="text-muted-foreground text-sm block mb-2">Postiz API Key</label>
-                  <input
-                    type="password"
-                    value={postizApiKey}
-                    onChange={(e) => setPostizApiKey(e.target.value)}
-                    className="w-full px-3 py-2 bg-input text-foreground rounded border border-border focus:border-primary focus:outline-none"
-                    placeholder="Enter your Postiz API key..."
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Get your API key from <a href="https://postiz.app" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Postiz</a>
-                  </p>
-                </div>
+        {showPostizPoster && (
+          <PostizPoster
+            isOpen={showPostizPoster}
+            onClose={() => setShowPostizPoster(false)}
+            slideshow={currentSlideshow}
+            images={images.filter(img => selectedImages.includes(img.id))}
+          />
+        )}
 
-                <div className="flex gap-2">
-                  <Button
-                    onClick={savePostizApiKey}
-                    disabled={isValidatingApiKey || !postizApiKey.trim()}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  >
-                    {isValidatingApiKey ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Validating...
-                      </>
-                    ) : (
-                      <>
-                        <Settings className="w-4 h-4 mr-2" />
-                        Save API Key
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={() => setShowPostizSettingsModal(false)}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        {showBulkCreateModal && (
+          <BulkCreateFromTemplateModal
+            isOpen={showBulkCreateModal}
+            onClose={() => setShowBulkCreateModal(false)}
+            templates={savedTemplates}
+            uploadedImages={derivedCurrentImages}
+            selectedImageIds={currentSelectedImages}
+            onBulkCreate={async (templateId, options, imagesToUse) => {
+              try {
+                const template = savedTemplates.find(t => t.id === templateId);
+                if (!template) {
+                  return {
+                    success: false,
+                    slideshows: [],
+                    error: 'Template not found',
+                    slideshowCount: 0,
+                    totalImages: 0
+                  };
+                }
 
-      {/* URL Uploader Modal */}
-      <UrlUploader
-        isOpen={showUrlUploader}
-        onClose={() => setShowUrlUploader(false)}
-        onImagesUploaded={(newImages) => {
-          // Merge new images with existing ones
-          const updatedImages = [...images, ...newImages];
-          setImages(updatedImages);
-        }}
-        currentFolderId={currentFolderId}
-      />
+                const result = await slideshowService.createBulkSlideshowsFromTemplate(
+                  template,
+                  imagesToUse,
+                  user?.id || '',
+                  options
+                );
 
-      {/* Template Selection Dialog */}
-      <TemplateSelectionDialog
-        isOpen={showTemplateSelection}
-        onClose={() => setShowTemplateSelection(false)}
-        onConfirm={handleTemplateSelection}
-        onApplyToSettings={handleApplyTemplateToSettings}
-        applyToSettingsMode={true}
-      />
-      </SidebarProvider>
-    </ThemeProvider>
+                if (result.success) {
+                  // Trigger refresh
+                  await loadUserSlideshows();
+                  window.dispatchEvent(new CustomEvent('slideshowUpdated'));
+                }
+
+                return result;
+              } catch (error) {
+                console.error('Error in bulk create:', error);
+                return {
+                  success: false,
+                  slideshows: [],
+                  error: error instanceof Error ? error.message : 'Unknown error',
+                  slideshowCount: 0,
+                  totalImages: 0
+                };
+              }
+            }}
+          />
+        )}
+
+        {showBulkPostModal && (
+          <BulkPostizPoster
+            slideshows={slideshowsForBulkPost}
+            onClose={() => setShowBulkPostModal(false)}
+            onPostSuccess={(postIds) => {
+              toast.success(`Successfully posted ${postIds.length} slideshows!`);
+              setShowBulkPostModal(false);
+            }}
+          />
+        )}
+
+        {showCreateTemplateModal && (
+          <CreateTemplateModal
+            isOpen={showCreateTemplateModal}
+            slideshow={currentSlideshow || null}
+            onClose={() => setShowCreateTemplateModal(false)}
+            onSave={handleCreateTemplate}
+          />
+        )}
+
+        <Toaster />
+      </div>
+    </ThemeProvider >
   );
 };

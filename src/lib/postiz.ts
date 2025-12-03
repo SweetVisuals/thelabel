@@ -80,9 +80,9 @@ export const postizAPI = {
     try {
       const headers = postizAPI.getAuthHeaders();
       const proxiedUrl = getProxyUrl('integrations');
-      
+
       console.log('📤 Fetching profiles via:', proxiedUrl);
-      
+
       const response = await fetch(proxiedUrl, {
         headers,
       });
@@ -120,22 +120,22 @@ export const postizAPI = {
       }) || [];
 
       return profiles;
-      
+
     } catch (error) {
-      
+
       // More specific error messages
       if (error instanceof TypeError && error.message.includes('fetch')) {
         throw new Error('Network error: Could not connect to Postiz API. Check your internet connection.');
       }
-      
+
       if (error instanceof Error && error.message.includes('401')) {
         throw new Error('Authentication error: Invalid API key. Please check your Postiz API key.');
       }
-      
+
       if (error instanceof Error && error.message.includes('403')) {
         throw new Error('Access denied: API key may not have required permissions.');
       }
-      
+
       throw new Error(`Failed to load profiles: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   },
@@ -144,13 +144,13 @@ export const postizAPI = {
   async createPostWithPostizImages(
     text: string,
     integrationId: string,
-    postizMedia: {id: string, path: string}[],
+    postizMedia: { id: string, path: string }[],
     scheduledAt?: Date,
     postNow: boolean = false
-  ): Promise<{postId: string, integration: string}> {
+  ): Promise<{ postId: string, integration: string }> {
     try {
       const proxiedUrl = getProxyUrl('posts');
-      
+
       // Validate required fields
       if (!integrationId) {
         throw new Error('Integration ID (profile ID) is required');
@@ -217,7 +217,7 @@ export const postizAPI = {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Postiz API Error Details:', errorText);
-        
+
         // Try to parse the error response for more details
         try {
           const errorData = JSON.parse(errorText);
@@ -227,13 +227,13 @@ export const postizAPI = {
         } catch (parseError) {
           // If we can't parse the error, use the raw response
         }
-        
+
         throw new Error(`Postiz API error: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const responseData = await response.json();
       console.log('✅ Postiz API response:', responseData);
-      
+
       // Return exact format as specified: [{ "postId": "POST_ID", "integration": "INTEGRATION_ID" }]
       if (Array.isArray(responseData) && responseData.length > 0) {
         return {
@@ -250,7 +250,7 @@ export const postizAPI = {
   },
 
   // Legacy method for backward compatibility (Step 1 & 2 combined)
-  async createPost(postData: CreatePostData & { _postizMedia?: {id: string, path: string}[] }): Promise<PostizPost> {
+  async createPost(postData: CreatePostData & { _postizMedia?: { id: string, path: string }[] }): Promise<PostizPost> {
     try {
       // Step 1: Validate required fields
       if (!postData.profileIds || postData.profileIds.length === 0) {
@@ -285,7 +285,7 @@ export const postizAPI = {
       return {
         id: result.postId,
         text: postData.text,
-        mediaUrls: postData._postizMedia.map((media: {id: string, path: string}) => media.path),
+        mediaUrls: postData._postizMedia.map((media: { id: string, path: string }) => media.path),
         scheduledAt: postData.scheduledAt,
         status: 'scheduled',
         profiles: postData.profileIds,
@@ -298,19 +298,19 @@ export const postizAPI = {
     }
   },
 
-// Upload images to Postiz domain via API (as documented in Discord)
-  async uploadImagesToPostizDomain(imageUrls: string[]): Promise<{id: string, path: string}[]> {
+  // Upload images to Postiz domain via API (as documented in Discord)
+  async uploadImagesToPostizDomain(imageUrls: string[]): Promise<{ id: string, path: string }[]> {
     try {
       console.log('🔄 Starting automatic upload to Postiz domain...', imageUrls.length, 'images');
-      
+
       const uploadResults = await Promise.all(imageUrls.map(async (imageUrl, index) => {
         try {
           console.log(`📤 Processing image ${index + 1}/${imageUrls.length}: ${imageUrl}`);
-          
+
           // Method 1: Try upload from URL (preferred method)
           console.log(`🌐 Attempting upload from URL for image ${index + 1}...`);
           const urlUploadResult = await this.uploadImageFromUrl(imageUrl, index);
-          
+
           if (urlUploadResult.success) {
             console.log(`✅ Successfully uploaded ${imageUrl} via URL method`);
             return {
@@ -318,11 +318,11 @@ export const postizAPI = {
               path: urlUploadResult.path
             };
           }
-          
+
           // Method 2: Fallback to multipart upload if URL method fails
           console.log(`📁 Falling back to multipart upload for image ${index + 1}...`);
           const fileUploadResult = await this.uploadImageFile(imageUrl, index);
-          
+
           if (fileUploadResult.success) {
             console.log(`✅ Successfully uploaded ${imageUrl} via file method`);
             return {
@@ -330,14 +330,14 @@ export const postizAPI = {
               path: fileUploadResult.path
             };
           }
-          
+
           // If both methods fail, return original URL with error marker
           console.warn(`⚠️ Both upload methods failed for ${imageUrl}, using original URL`);
           return {
             id: `fallback_${index + 1}`,
             path: imageUrl
           };
-          
+
         } catch (error) {
           console.error(`❌ Failed to process image ${index + 1}:`, error);
           return {
@@ -349,7 +349,7 @@ export const postizAPI = {
 
       console.log(`🏁 Upload process completed: ${uploadResults.length} images processed`);
       return uploadResults;
-      
+
     } catch (error) {
       console.error('💥 Critical failure in upload process:', error);
       return imageUrls.map((imageUrl, index) => ({
@@ -362,7 +362,7 @@ export const postizAPI = {
   // Skip test functionality - focus on actual slideshow uploads
   // The slideshow condensed images are already in proper PNG/JPEG format
   // No need for separate testing endpoint
-  async testUploadFunctionality(): Promise<{success: boolean, message: string}> {
+  async testUploadFunctionality(): Promise<{ success: boolean, message: string }> {
     return {
       success: true,
       message: 'Upload functionality ready - will be tested with actual slideshow images.'
@@ -370,12 +370,12 @@ export const postizAPI = {
   },
 
   // Upload image from URL using Postiz API (as documented in Discord)
-  async uploadImageFromUrl(imageUrl: string, index: number): Promise<{success: boolean, path: string}> {
+  async uploadImageFromUrl(imageUrl: string, index: number): Promise<{ success: boolean, path: string }> {
     try {
       const proxiedUrl = getProxyUrl('upload-from-url');
-      
+
       console.log(`📤 Uploading from URL via:`, proxiedUrl);
-      
+
       const response = await fetch(proxiedUrl, {
         method: 'POST',
         headers: postizAPI.getAuthHeaders(),
@@ -402,7 +402,7 @@ export const postizAPI = {
   },
 
   // Upload image file using Postiz API multipart upload (as documented in Discord)
-  async uploadImageFile(imageUrl: string, index: number): Promise<{success: boolean, path: string}> {
+  async uploadImageFile(imageUrl: string, index: number): Promise<{ success: boolean, path: string }> {
     try {
       // Download the image first
       const imageResponse = await fetch(imageUrl);
@@ -418,7 +418,7 @@ export const postizAPI = {
       formData.append('file', blob, filename);
 
       const proxiedUrl = getProxyUrl('upload');
-      
+
       console.log(`📤 Multipart upload via:`, proxiedUrl);
 
       const response = await fetch(proxiedUrl, {
@@ -450,14 +450,14 @@ export const postizAPI = {
   },
 
   // Upload images to Postiz domain and get upload IDs
-  async uploadImagesToPostiz(imageUrls: string[]): Promise<{id: string, url: string}[]> {
+  async uploadImagesToPostiz(imageUrls: string[]): Promise<{ id: string, url: string }[]> {
     try {
       const uploadPromises = imageUrls.map(async (imageUrl, index) => {
         try {
           // For now, we'll try to use the image URL directly
           // In a real implementation, you'd upload to Postiz's upload endpoint first
           console.log(`Processing image ${index + 1}:`, imageUrl);
-          
+
           return {
             id: `uploaded_${index + 1}_${Date.now()}`,
             url: imageUrl
@@ -489,37 +489,37 @@ export const postizAPI = {
       if (postData.mediaUrls && postData.mediaUrls.length > 0) {
         // Check if images need to be on uploads.postiz.com domain
         const externalUrls = postData.mediaUrls.filter(url => !url.includes('uploads.postiz.com'));
-        
+
         if (externalUrls.length > 0) {
           console.log(`🔄 Found ${externalUrls.length} external images - attempting automatic upload...`);
-          
+
           try {
             const uploadedImages = await this.uploadImagesToPostizDomain(externalUrls);
-            
+
             // Check results
             const successfulUploads = uploadedImages.filter(result =>
               result.path.includes('uploads.postiz.com') || result.path.startsWith('http')
             );
-            
+
             if (successfulUploads.length === externalUrls.length) {
               // All uploads successful
               const processedUrls = [...postData.mediaUrls];
               let uploadIndex = 0;
-              
+
               for (let i = 0; i < processedUrls.length; i++) {
                 if (!processedUrls[i].includes('uploads.postiz.com') && uploadIndex < uploadedImages.length) {
                   processedUrls[i] = uploadedImages[uploadIndex].path;
                   uploadIndex++;
                 }
               }
-              
+
               console.log(`🎉 Automatic upload successful! ${successfulUploads.length} images uploaded`);
-              
+
               const processedPostData: CreatePostData = {
                 ...postData,
                 mediaUrls: processedUrls
               };
-              
+
               return await this.createPost(processedPostData);
             } else {
               // Partial success - fall through to manual guidance
@@ -528,7 +528,7 @@ export const postizAPI = {
           } catch (uploadError) {
             console.warn('⚠️ Upload attempt failed, proceeding to manual guidance:', uploadError);
           }
-          
+
           // If we get here, automatic upload failed - provide manual guidance
           const manualSteps = this.generateManualUploadSteps(externalUrls);
           throw new Error(manualSteps);
@@ -544,10 +544,10 @@ export const postizAPI = {
 
   // Generate step-by-step manual upload instructions
   generateManualUploadSteps(imageUrls: string[]): string {
-    const imageList = imageUrls.map((url, index) => 
+    const imageList = imageUrls.map((url, index) =>
       `${index + 1}. ${url}`
     ).join('\n');
-    
+
     return `📸 MANUAL IMAGE UPLOAD REQUIRED
 
 Postiz requires images on uploads.postiz.com domain. Here's how to fix it:
@@ -573,9 +573,9 @@ Once you upload images to Postiz, they're permanently available for all your fut
   },
 
   // Helper method to validate if images are Postiz-compatible
-  validateImageUrls(imageUrls: string[]): {isValid: boolean, needsUpload: boolean, externalUrls: string[]} {
+  validateImageUrls(imageUrls: string[]): { isValid: boolean, needsUpload: boolean, externalUrls: string[] } {
     const externalUrls = imageUrls.filter(url => !url.includes('uploads.postiz.com'));
-    
+
     return {
       isValid: externalUrls.length === 0,
       needsUpload: externalUrls.length > 0,
@@ -584,11 +584,14 @@ Once you upload images to Postiz, they're permanently available for all your fut
   },
 
   // Get user's posts
-  async getPosts(): Promise<PostizPost[]> {
+  async getPosts(startDate?: string, endDate?: string): Promise<PostizPost[]> {
     try {
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(); // 30 days ago
-      const endDate = new Date().toISOString();
-      const proxiedUrl = getProxyUrl(`posts?startDate=${startDate}&endDate=${endDate}`);
+      // Default to 30 days ago if not specified
+      const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      // Default to 90 days in the future to catch scheduled posts
+      const end = endDate || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+
+      const proxiedUrl = getProxyUrl(`posts?startDate=${start}&endDate=${end}`);
 
       console.log('📤 Fetching posts via:', proxiedUrl);
 
