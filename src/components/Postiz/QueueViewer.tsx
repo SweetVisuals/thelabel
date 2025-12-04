@@ -142,7 +142,13 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                                     <span>Scheduled: {new Date(job.scheduled_start_time).toLocaleString()}</span>
                                                     {job.status === 'pending' && new Date(job.scheduled_start_time) > new Date() && (
                                                         <span className="text-blue-400 ml-2">
-                                                            (Starts in {Math.ceil((new Date(job.scheduled_start_time).getTime() - new Date().getTime()) / 60000)} mins)
+                                                            (Starts in {(() => {
+                                                                const diffMins = Math.ceil((new Date(job.scheduled_start_time).getTime() - new Date().getTime()) / 60000);
+                                                                const hours = Math.floor(diffMins / 60);
+                                                                const mins = diffMins % 60;
+                                                                if (hours > 0) return `${hours}h ${mins}m`;
+                                                                return `${mins} mins`;
+                                                            })()})
                                                         </span>
                                                     )}
                                                 </div>

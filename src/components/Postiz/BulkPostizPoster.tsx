@@ -33,7 +33,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
   // Batch State
   const [batchSize, setBatchSize] = useState(10);
-  const [batchIntervalHours, setBatchIntervalHours] = useState(1.5);
+
   const [postIntervalMinutes, setPostIntervalMinutes] = useState(1);
 
   // Validation State
@@ -134,7 +134,8 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         if (indexInBatch === 0) {
           // Calculate when this batch will actually be sent to Postiz
           // First batch is sent immediately (startTime), subsequent batches wait batchIntervalHours
-          const batchSendTime = addMinutes(startTime, batchIndex * (batchIntervalHours * 60));
+          // First batch is sent immediately (startTime), subsequent batches wait 66 minutes (1.1 hours)
+          const batchSendTime = addMinutes(startTime, batchIndex * 66);
           batchInfo = { number: batchIndex + 1, time: batchSendTime };
         }
 
@@ -163,7 +164,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       }
     }
     return schedule;
-  }, [slideshows, postingStrategy, intervalHours, startTime, batchSize, batchIntervalHours, postIntervalMinutes]);
+  }, [slideshows, postingStrategy, intervalHours, startTime, batchSize, postIntervalMinutes]);
 
   const handleSchedule = () => {
     if (selectedProfiles.length === 0) {
@@ -180,7 +181,6 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         intervalHours,
         startTime,
         batchSize,
-        batchIntervalHours,
         postIntervalMinutes
       }
     );
@@ -307,17 +307,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                             className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm text-center"
                           />
                         </div>
-                        <div className="space-y-1.5">
-                          <label className="text-xs text-muted-foreground block ml-1">Batch Interval (Hrs)</label>
-                          <input
-                            type="number"
-                            min={0.1}
-                            step={0.1}
-                            value={batchIntervalHours}
-                            onChange={(e) => setBatchIntervalHours(Math.max(0.1, parseFloat(e.target.value) || 1))}
-                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm text-center"
-                          />
-                        </div>
+
                       </div>
                       <div className="space-y-1.5">
                         <label className="text-xs text-muted-foreground block ml-1">Post Interval (Mins)</label>
