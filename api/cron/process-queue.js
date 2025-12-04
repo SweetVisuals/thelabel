@@ -76,7 +76,11 @@ export async function GET(request) {
                 const processedSlideshows = [];
 
                 // Process slideshows in this batch
-                for (const slideshow of slideshows) {
+                const failedSlideshows = [];
+                const batchIntervalHours = job.payload.settings.batchIntervalHours || 1.5;
+
+                for (let i = 0; i < slideshows.length; i++) {
+                    const slideshow = slideshows[i];
                     try {
                         // Check if already uploaded (idempotency check)
                         if (slideshow.lastUploadStatus === 'success') {
@@ -163,7 +167,42 @@ export async function GET(request) {
                     } catch (err) {
                         console.error(`Failed to process slideshow ${slideshow.id}:`, err);
                         failCount++;
+
+                        // STOP AND RESCHEDULE LOGIC
+                        // Add current failed slideshow and ALL remaining slideshows to retry list
+                        failedSlideshows.push(slideshow);
+                        for (let j = i + 1; j < slideshows.length; j++) {
+                            failedSlideshows.push(slideshows[j]);
+                        }
+                        break; // Stop processing this batch
                     }
+                }
+
+                // Handle Rescheduling if there are failed/skipped items
+                if (failedSlideshows.length > 0) {
+                    const retryTime = new Date();
+                    retryTime.setMinutes(retryTime.getMinutes() + (batchIntervalHours * 60));
+
+                    const retryPayload = {
+                        ...job.payload,
+                        slideshows: failedSlideshows,
+                        settings: {
+                            ...job.payload.settings,
+                            startTime: retryTime.toISOString()
+                        }
+                    };
+
+                    await supabase.from('job_queue').insert({
+                        user_id: job.user_id,
+                        account_id: job.account_id,
+                        status: 'pending',
+                        scheduled_start_time: retryTime.toISOString(),
+                        batch_index: job.batch_index + 1, // Logically next
+                        total_batches: job.total_batches,
+                        payload: retryPayload
+                    });
+
+                    console.log(`Rescheduled ${failedSlideshows.length} items to ${retryTime.toISOString()}`);
                 }
 
                 // Mark job as completed

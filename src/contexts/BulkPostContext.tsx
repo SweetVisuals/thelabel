@@ -415,6 +415,18 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         ));
                         failedCount++;
                         failedSlideshows.push(slideshow);
+
+                        // Stop processing immediately and reschedule remaining posts
+                        console.log('Batch failure detected. Rescheduling remaining posts...');
+                        for (let j = i + 1; j < slideshows.length; j++) {
+                            failedSlideshows.push(slideshows[j]);
+                            // Update UI to show these are being skipped/rescheduled
+                            setPostingSchedule(prev => prev.map((item, index) =>
+                                index === j ? { ...item, status: 'pending', error: 'Rescheduled' } : item
+                            ));
+                        }
+                        toast.error(`Batch interrupted. Rescheduling ${failedSlideshows.length} posts for next interval.`);
+                        break;
                     }
                 }
 
