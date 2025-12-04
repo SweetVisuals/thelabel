@@ -1,8 +1,8 @@
 {
-    "crons": [
+    "rewrites": [
         {
-            "path": "/api/cron/process-queue",
-            "schedule": "* * * * *"
+            "source": "/api/postiz-proxy",
+            "destination": "/api/postiz-proxy.js"
         }
     ]
 }
