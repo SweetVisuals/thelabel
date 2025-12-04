@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, LogOut, Folder, Home, ChevronRight, Sparkles, Calendar as CalendarIcon } from "lucide-react";
+import { Menu, X, LogOut, Folder, Home, ChevronRight, Sparkles, Calendar as CalendarIcon, ListOrdered } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from "@/lib/utils";
@@ -22,7 +22,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
     // const { theme } = useTheme(); // Unused
-    const { statusMessage, isPosting, isPaused } = useBulkPost();
+    const { statusMessage, isPosting, isPaused, jobQueue } = useBulkPost();
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     // const [rateLimitCountdown, setRateLimitCountdown] = useState<string>(''); // Unused
     // const [uploadError, setUploadError] = useState<string>(''); // Unused
@@ -50,7 +50,6 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                         {/* ... Logo, Breadcrumb, Actions ... */}
                         {/* (Keep existing content exactly as is, just need to make sure I don't delete it) */}
                         {/* Since I am replacing the whole file or large chunk, I should be careful. */}
-                        {/* Actually, I will use replace_file_content on specific blocks to be safer if possible, or just rewrite the component if I have the full content. */}
                         {/* I have the full content from view_file. I will rewrite the component to ensure I don't miss anything. */}
                         <div className="flex items-center space-x-6">
                             {/* Logo */}
@@ -115,6 +114,23 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                         {/* Right Section - Actions & User */}
                         <div className="flex items-center space-x-4">
                             <div className="hidden md:flex items-center space-x-2">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => onAction?.('queue')}
+                                    className={cn(
+                                        "hover:bg-white/10 text-muted-foreground hover:text-white px-3 h-9 rounded-lg transition-all duration-300",
+                                        jobQueue.length > 0 && "text-primary bg-primary/10 hover:bg-primary/20"
+                                    )}
+                                >
+                                    <ListOrdered className="w-4 h-4 mr-2" />
+                                    Queue
+                                    {jobQueue.length > 0 && (
+                                        <span className="ml-2 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                                            {jobQueue.length}
+                                        </span>
+                                    )}
+                                </Button>
 
                                 <Button
                                     variant="ghost"
@@ -167,6 +183,17 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                             className="md:hidden border-t border-white/10 bg-black/60 backdrop-blur-xl"
                         >
                             <div className="p-4 space-y-4">
+                                <Button
+                                    variant="ghost"
+                                    className="w-full justify-start"
+                                    onClick={() => {
+                                        onAction?.('queue');
+                                        setMobileMenuOpen(false);
+                                    }}
+                                >
+                                    <ListOrdered className="w-4 h-4 mr-2" />
+                                    Queue ({jobQueue.length})
+                                </Button>
 
                                 <Button
                                     variant="ghost"

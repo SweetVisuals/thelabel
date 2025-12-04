@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Calendar, Clock, AlertCircle, CheckCircle, Loader2, Send, Settings, Layers, CalendarDays, User, Play } from 'lucide-react';
+import { X, Calendar, Clock, AlertCircle, CheckCircle, Loader2, Send, Settings, Layers, CalendarDays, User, Play, ListOrdered } from 'lucide-react';
 import { Button } from '../ui/button';
 import { SlideshowMetadata, PostizProfile } from '../../types';
 import { cn } from '@/lib/utils';
@@ -20,7 +20,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   slideshows,
   onClose
 }) => {
-  const { startBulkPost, isPosting: isGlobalPosting } = useBulkPost();
+  const { startBulkPost, isPosting: isGlobalPosting, jobQueue, lastScheduledTime } = useBulkPost();
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [profiles, setProfiles] = useState<PostizProfile[]>([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
@@ -29,6 +29,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   const [postingStrategy, setPostingStrategy] = useState<'interval' | 'first-now' | 'batch'>('interval');
   const [intervalHours, setIntervalHours] = useState(1.5);
   const [startTime, setStartTime] = useState<Date>(new Date());
+  const [startAfterLastBatch, setStartAfterLastBatch] = useState(false);
 
   // Batch State
   const [batchSize, setBatchSize] = useState(10);
@@ -42,6 +43,17 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   useEffect(() => {
     loadProfiles();
   }, []);
+
+  // Update start time when "Start after last batch" is toggled
+  useEffect(() => {
+    if (startAfterLastBatch && lastScheduledTime) {
+      // Add 1.5 hours buffer by default as requested
+      const nextStart = addMinutes(lastScheduledTime, 90);
+      setStartTime(nextStart);
+    } else if (!startAfterLastBatch) {
+      setStartTime(new Date());
+    }
+  }, [startAfterLastBatch, lastScheduledTime]);
 
   const loadProfiles = async () => {
     try {
@@ -85,6 +97,10 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       if (hour >= 0 && hour < 9) {
         const adjustedTime = new Date(baseTime);
         adjustedTime.setHours(9, 0, 0, 0);
+        // If we pushed it to tomorrow, make sure we didn't go back in time relative to baseTime
+        if (adjustedTime < baseTime) {
+          adjustedTime.setDate(adjustedTime.getDate() + 1);
+        }
         return adjustedTime;
       }
       return baseTime;
@@ -171,6 +187,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
     // Close modal immediately
     onClose();
+  };
+
+  // Helper to get profile name
+  const getProfileName = (profileId: string) => {
+    const profile = profiles.find(p => p.id === profileId);
+    return profile ? profile.displayName : 'Unknown Account';
   };
 
   return (
@@ -331,8 +353,28 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                   )}
 
                   <div className="space-y-1.5">
-                    <label className="text-xs text-muted-foreground block ml-1">Start Date & Time</label>
-                    <DateTimePicker date={startTime} setDate={setStartTime} />
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-muted-foreground block ml-1">Start Date & Time</label>
+                      {lastScheduledTime && (
+                        <button
+                          onClick={() => setStartAfterLastBatch(!startAfterLastBatch)}
+                          className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full transition-colors border",
+                            startAfterLastBatch
+                              ? "bg-primary/20 text-primary border-primary/30"
+                              : "bg-white/5 text-muted-foreground border-white/10 hover:bg-white/10"
+                          )}
+                        >
+                          Start after last batch
+                        </button>
+                      )}
+                    </div>
+                    <DateTimePicker date={startTime} setDate={setStartTime} disabled={startAfterLastBatch} />
+                    {startAfterLastBatch && lastScheduledTime && (
+                      <p className="text-[10px] text-primary/80 ml-1">
+                        Starts 1.5h after previous batch ends ({addMinutes(lastScheduledTime, 90).toLocaleTimeString()})
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -377,8 +419,53 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
             </div>
 
-            {/* RIGHT COLUMN: Accounts (8 cols) */}
+            {/* RIGHT COLUMN: Accounts & Queue (8 cols) */}
             <div className="lg:col-span-8 space-y-4 flex flex-col">
+
+              {/* Queue Status */}
+              {jobQueue.length > 0 && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-4">
+                  <h4 className="font-medium text-sm text-blue-200 uppercase tracking-wider flex items-center mb-3">
+                    <ListOrdered className="w-4 h-4 mr-2" />
+                    Active Job Queue ({jobQueue.length})
+                  </h4>
+                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                    {jobQueue.map((job, idx) => (
+                      <div key={job.id} className="flex items-center justify-between text-xs bg-black/20 p-2 rounded border border-white/5">
+                        <div className="flex items-center space-x-3">
+                          <span className="font-mono text-muted-foreground">#{idx + 1}</span>
+                          <div className="flex flex-col">
+                            <span className="font-medium text-white/90">
+                              {job.payload.slideshows.length} Posts • {job.payload.strategy === 'batch' ? 'Batch Mode' : 'Interval Mode'}
+                            </span>
+                            <div className="flex items-center space-x-2 text-muted-foreground">
+                              <span>Account: {getProfileName(job.payload.profiles[0])}</span>
+                              {job.total_batches > 1 && (
+                                <>
+                                  <span>•</span>
+                                  <span className="text-primary/80">Batch {job.batch_index}/{job.total_batches}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <span className="text-muted-foreground">
+                            Starts: {new Date(job.scheduled_start_time).toLocaleString()}
+                          </span>
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full uppercase text-[10px] font-bold",
+                            job.status === 'processing' ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
+                          )}>
+                            {job.status}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider flex items-center">
                   <User className="w-3 h-3 mr-2" />
@@ -396,7 +483,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                 )}
               </div>
 
-              <div className="flex-1 bg-white/5 rounded-xl border border-white/10 p-4 min-h-[400px]">
+              <div className="flex-1 bg-white/5 rounded-xl border border-white/10 p-4 min-h-[300px]">
                 {isLoadingProfiles ? (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                     <Loader2 className="w-8 h-8 animate-spin mb-3 text-primary" />
@@ -482,11 +569,11 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           <div className="flex gap-4">
             <Button
               onClick={handleSchedule}
-              disabled={isGlobalPosting || selectedProfiles.length === 0}
+              disabled={selectedProfiles.length === 0}
               className="flex-1 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-lg shadow-primary/25 h-12 text-base font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
             >
               <Send className="w-5 h-5 mr-2" />
-              {isGlobalPosting ? 'Add to Schedule (Busy)' : `Schedule ${slideshows.length} Posts`}
+              {isGlobalPosting ? 'Add to Queue' : `Schedule ${slideshows.length} Posts`}
             </Button>
 
             <Button

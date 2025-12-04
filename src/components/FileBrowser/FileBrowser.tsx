@@ -4,10 +4,7 @@ import { UploadedImage, Folder, SlideshowMetadata } from '../../types';
 import {
   FolderPlus,
   ImagePlus,
-  Filter,
-  ArrowUpAz,
-  ChevronDown,
-  Clock,
+
   Trash2,
   Film,
   Folder as FolderIcon,
@@ -24,14 +21,7 @@ import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel
-} from "@/components/ui/dropdown-menu";
+
 import { format } from 'date-fns';
 import { imageService } from '../../lib/imageService';
 import { slideshowService } from '../../lib/slideshowService';
@@ -779,85 +769,57 @@ export function FileBrowser({
         )}
       </AnimatePresence>
 
-      {/* Toolbar */}
-      <div className="flex flex-col gap-4 bg-black/40 backdrop-blur-xl border-b border-white/10 p-4 z-20">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Left: Search & Sort */}
-          <div className="flex flex-col md:flex-row items-center gap-3 flex-1 w-full">
-            <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" className="h-9 md:h-11 px-3 md:px-4 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-xl gap-2 group flex-1 md:flex-none">
-                    <ArrowUpAz className="w-3.5 h-3.5 md:w-4 md:h-4 text-white/60 group-hover:text-primary transition-colors" />
-                    <span className="text-xs md:text-sm font-medium text-white/80 group-hover:text-white">Sort</span>
-                    <ChevronDown className="w-3 h-3 text-white/40 group-hover:text-primary/70 ml-1" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56 bg-black/90 border-white/10 backdrop-blur-2xl p-2 rounded-xl shadow-2xl shadow-black/50">
-                  <DropdownMenuLabel className="text-xs font-medium text-white/40 px-2 py-1.5 uppercase tracking-wider">Sort By</DropdownMenuLabel>
-                  <DropdownMenuItem onClick={() => setSortBy('date')} className="rounded-lg focus:bg-primary/20 focus:text-primary cursor-pointer">
-                    <Clock className="w-4 h-4 mr-2 opacity-70" />
-                    Date Modified
-                    {sortBy === 'date' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy('name')} className="rounded-lg focus:bg-primary/20 focus:text-primary cursor-pointer">
-                    <ArrowUpAz className="w-4 h-4 mr-2 opacity-70" />
-                    Name
-                    {sortBy === 'name' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setSortBy('size')} className="rounded-lg focus:bg-primary/20 focus:text-primary cursor-pointer">
-                    <Filter className="w-4 h-4 mr-2 opacity-70" />
-                    Size
-                    {sortBy === 'size' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary" />}
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-white/10 my-1" />
-                  <DropdownMenuItem onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} className="rounded-lg focus:bg-primary/20 focus:text-primary cursor-pointer">
-                    {sortOrder === 'asc' ? 'Ascending' : 'Descending'}
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <Button
-                variant="outline"
-                onClick={selectAll}
-                className="h-9 md:h-11 px-3 md:px-4 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-xl gap-2 group flex-1 md:flex-none"
-              >
-                <CheckSquare className="w-3.5 h-3.5 md:w-4 md:h-4 text-white/60 group-hover:text-primary transition-colors" />
-                <span className="text-xs md:text-sm font-medium text-white/80 group-hover:text-white">Select All</span>
-              </Button>
-            </div>
-          </div>
+      <div className="flex flex-col gap-2 bg-black/40 backdrop-blur-xl border-b border-white/10 p-2 z-20">
+        <div className="flex items-center justify-between gap-2">
+          {/* Left: Select All */}
+          <Button
+            variant="outline"
+            onClick={selectAll}
+            className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
+          >
+            <CheckSquare className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+            <span className="text-xs font-medium text-white/80 group-hover:text-white">Select All</span>
+          </Button>
 
           {/* Right: Actions */}
-          <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 w-full md:w-auto">
-            {(selectedImages.length > 0 || selectedSlideshows.length > 0) && (
-              <Button
-                variant="destructive"
-                onClick={removeSelected}
-                className="h-9 md:h-11 px-3 md:px-4 bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 text-red-500 hover:text-red-400 transition-all duration-300 rounded-xl gap-2 group"
-              >
-                <Trash2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                <span className="text-xs md:text-sm font-medium">Delete ({selectedImages.length + selectedSlideshows.length})</span>
-              </Button>
-            )}
-
+          <div className="flex items-center gap-2">
+            {/* Delete Button */}
+            <AnimatePresence>
+              {(selectedImages.length > 0 || selectedSlideshows.length > 0) && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9, width: 0 }}
+                  animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                  exit={{ opacity: 0, scale: 0.9, width: 0 }}
+                  className="overflow-hidden"
+                >
+                  <Button
+                    variant="destructive"
+                    onClick={removeSelected}
+                    className="h-8 px-3 bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 text-red-500 hover:text-red-400 transition-all duration-300 rounded-lg gap-2 whitespace-nowrap"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Delete ({selectedImages.length + selectedSlideshows.length})</span>
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <Button
               variant="outline"
               onClick={onCreateFromTemplate}
-              className="h-9 md:h-11 px-3 md:px-4 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-xl gap-2 group"
+              className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
             >
-              <LayoutTemplate className="w-3.5 h-3.5 md:w-4 md:h-4 text-white/60 group-hover:text-primary transition-colors" />
-              <span className="text-xs md:text-sm font-medium text-white/80 group-hover:text-white">Template</span>
+              <LayoutTemplate className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+              <span className="text-xs font-medium text-white/80 group-hover:text-white">Template</span>
             </Button>
 
             <Button
               variant="outline"
               onClick={onBulkPost}
-              className="h-9 md:h-11 px-3 md:px-4 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-xl gap-2 group"
+              className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
             >
-              <Send className="w-3.5 h-3.5 md:w-4 md:h-4 text-white/60 group-hover:text-primary transition-colors" />
-              <span className="text-xs md:text-sm font-medium text-white/80 group-hover:text-white">Bulk Post</span>
+              <Send className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+              <span className="text-xs font-medium text-white/80 group-hover:text-white">Bulk Post</span>
             </Button>
 
             <div className="relative">
@@ -868,9 +830,9 @@ export function FileBrowser({
                 onChange={handleFileSelect}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
               />
-              <Button className="h-9 md:h-11 px-4 md:px-6 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 border-0 rounded-xl gap-2 transition-all duration-300 hover:scale-105 active:scale-95">
-                <ImagePlus className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                <span className="text-xs md:text-sm font-medium">Upload</span>
+              <Button className="h-8 px-4 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 border-0 rounded-lg gap-2 transition-all duration-300 hover:scale-105 active:scale-95">
+                <ImagePlus className="w-3.5 h-3.5" />
+                <span className="text-xs font-medium">Upload</span>
               </Button>
             </div>
           </div>

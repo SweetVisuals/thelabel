@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SlideshowTemplate } from '../../types';
 import {
     Type,
@@ -41,6 +41,8 @@ import {
     CollapsibleContent,
     CollapsibleTrigger,
 } from "@/components/ui/collapsible"
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 interface ApiKeys {
     postizApiKey: string;
@@ -109,6 +111,26 @@ export function SettingsPanel({
 }: SettingsPanelProps) {
     const [hashtagInput, setHashtagInput] = useState('');
     const [openSections, setOpenSections] = useState<string[]>(['general', 'templates', 'visual', 'text', 'api', 'export']);
+    const [isSavingKey, setIsSavingKey] = useState(false);
+
+    // Load API key from Supabase on mount
+    useEffect(() => {
+        const loadApiKey = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data, error } = await supabase
+                    .from('user_settings')
+                    .select('postiz_api_key')
+                    .eq('user_id', user.id)
+                    .single();
+
+                if (data?.postiz_api_key) {
+                    setApiKeys(prev => ({ ...prev, postizApiKey: data.postiz_api_key }));
+                }
+            }
+        };
+        loadApiKey();
+    }, []);
 
     const toggleSection = (section: string) => {
         setOpenSections(prev =>
@@ -125,8 +147,32 @@ export function SettingsPanel({
         }
     };
 
+    const handleSaveApiKey = async () => {
+        setIsSavingKey(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                toast.error('You must be logged in to save API keys');
+                return;
+            }
 
+            const { error } = await supabase
+                .from('user_settings')
+                .upsert({
+                    user_id: user.id,
+                    postiz_api_key: apiKeys.postizApiKey,
+                    updated_at: new Date().toISOString()
+                });
 
+            if (error) throw error;
+            toast.success('Postiz API Key saved securely');
+        } catch (error) {
+            console.error('Failed to save API key:', error);
+            toast.error('Failed to save API key');
+        } finally {
+            setIsSavingKey(false);
+        }
+    };
 
     return (
         <div className="w-full h-full flex flex-col bg-black/40 backdrop-blur-xl border-l border-white/10 shadow-2xl">
@@ -438,13 +484,26 @@ export function SettingsPanel({
                             <div className="space-y-3">
                                 <div className="space-y-1.5">
                                     <Label className="text-xs text-muted-foreground ml-1">Postiz API Key</Label>
-                                    <Input
-                                        type="password"
-                                        value={apiKeys.postizApiKey}
-                                        onChange={(e) => setApiKeys({ ...apiKeys, postizApiKey: e.target.value })}
-                                        className="bg-black/20 border-white/10 focus:border-primary/50 h-9"
-                                        placeholder="Enter Postiz API Key"
-                                    />
+                                    <div className="flex gap-2">
+                                        <Input
+                                            type="password"
+                                            value={apiKeys.postizApiKey}
+                                            onChange={(e) => setApiKeys({ ...apiKeys, postizApiKey: e.target.value })}
+                                            className="bg-black/20 border-white/10 focus:border-primary/50 h-9"
+                                            placeholder="Enter Postiz API Key"
+                                        />
+                                        <Button
+                                            size="sm"
+                                            onClick={handleSaveApiKey}
+                                            disabled={isSavingKey || !apiKeys.postizApiKey}
+                                            className="h-9 px-3"
+                                        >
+                                            {isSavingKey ? 'Saving...' : 'Save'}
+                                        </Button>
+                                    </div>
+                                    <p className="text-[10px] text-muted-foreground ml-1">
+                                        Required for background processing. Saved securely to your account.
+                                    </p>
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label className="text-xs text-muted-foreground ml-1">TikTok Access Token</Label>

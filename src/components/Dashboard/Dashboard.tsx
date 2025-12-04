@@ -14,6 +14,7 @@ import { PostizPoster } from '../Postiz/PostizPoster';
 import { Toaster } from 'sonner';
 import { BulkCreateFromTemplateModal, CreateTemplateModal } from '../Slideshow/TemplateManager';
 import { BulkPostizPoster } from '../Postiz/BulkPostizPoster';
+import { QueueViewer } from '../Postiz/QueueViewer';
 import { toast } from 'sonner';
 import { slideshowService } from '../../lib/slideshowService';
 import { postizAPI } from '../../lib/postiz';
@@ -127,6 +128,7 @@ export const Dashboard: React.FC = () => {
   const [showBulkCreateModal, setShowBulkCreateModal] = useState(false);
   const [showBulkPostModal, setShowBulkPostModal] = useState(false);
   const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
+  const [showQueueViewer, setShowQueueViewer] = useState(false);
 
   const [slideshowsForBulkPost, setSlideshowsForBulkPost] = useState<SlideshowMetadata[]>([]);
   const [activeMobileTab, setActiveMobileTab] = useState<'files' | 'preview' | 'settings'>('files');
@@ -362,6 +364,9 @@ export const Dashboard: React.FC = () => {
         break;
       case 'settings':
         setShowSettingsPanel(!showSettingsPanel);
+        break;
+      case 'queue':
+        setShowQueueViewer(true);
         break;
       default:
         console.log('Unknown action:', action);
@@ -631,6 +636,10 @@ export const Dashboard: React.FC = () => {
             onClose={() => setShowCreateTemplateModal(false)}
             onSave={handleCreateTemplate}
           />
+        )}
+
+        {showQueueViewer && (
+          <QueueViewer onClose={() => setShowQueueViewer(false)} />
         )}
 
         <Toaster />

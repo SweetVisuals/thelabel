@@ -1,7 +1,37 @@
-import React, { createContext, useContext, useState, useRef, useCallback } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
 import { SlideshowMetadata } from '../types';
 import { postizUploadService } from '../lib/postizUploadService';
 import { slideshowService } from '../lib/slideshowService';
+import { supabase } from '../lib/supabase';
+import { toast } from 'sonner';
+import { addMinutes, addHours } from 'date-fns';
+
+interface JobPayload {
+    slideshows: SlideshowMetadata[];
+    profiles: string[];
+    strategy: 'interval' | 'first-now' | 'batch';
+    settings: {
+        intervalHours: number;
+        startTime: string; // ISO string for JSON serialization
+        batchSize: number;
+        batchIntervalHours: number;
+        postIntervalMinutes: number;
+    };
+}
+
+export interface JobQueueItem {
+    id: string;
+    user_id: string;
+    account_id?: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    scheduled_start_time: string;
+    batch_index: number;
+    total_batches: number;
+    payload: JobPayload;
+    created_at: string;
+    updated_at: string;
+    error?: string;
+}
 
 interface PostingSchedule {
     slideshowId: string;
@@ -16,8 +46,10 @@ interface BulkPostContextType {
     isPosting: boolean;
     isPaused: boolean;
     nextResumeTime: Date | null;
-    postingSchedule: PostingSchedule[];
+    postingSchedule: PostingSchedule[]; // Current active job schedule
     statusMessage: string;
+    jobQueue: JobQueueItem[];
+    lastScheduledTime: Date | null;
     startBulkPost: (
         slideshows: SlideshowMetadata[],
         profiles: string[],
@@ -44,14 +76,111 @@ export const useBulkPost = () => {
 };
 
 export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    // const { user } = useAuth(); // Unused
     const [isPosting, setIsPosting] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
     const [nextResumeTime, setNextResumeTime] = useState<Date | null>(null);
     const [postingSchedule, setPostingSchedule] = useState<PostingSchedule[]>([]);
     const [statusMessage, setStatusMessage] = useState('');
+    const [jobQueue, setJobQueue] = useState<JobQueueItem[]>([]);
+    const [lastScheduledTime, setLastScheduledTime] = useState<Date | null>(null);
 
     const stopProcessingRef = useRef(false);
+
+    // Load initial queue and subscribe to changes
+    useEffect(() => {
+        const fetchQueue = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            const { data, error } = await supabase
+                .from('job_queue')
+                .select('*')
+                .eq('user_id', user.id)
+                .in('status', ['pending', 'processing'])
+                .order('scheduled_start_time', { ascending: true });
+
+            if (error) {
+                console.error('Failed to fetch job queue:', error);
+            } else {
+                setJobQueue(data || []);
+                updateLastScheduledTime(data || []);
+            }
+        };
+
+        fetchQueue();
+
+        const subscription = supabase
+            .channel('job_queue_changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'job_queue'
+                },
+                (payload) => {
+                    console.log('Job queue change received:', payload);
+                    fetchQueue();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            subscription.unsubscribe();
+        };
+    }, []);
+
+    // Calculate the projected end time of the entire queue
+    const updateLastScheduledTime = (queue: JobQueueItem[]) => {
+        if (queue.length === 0) {
+            setLastScheduledTime(null);
+            return;
+        }
+
+        // Find the last job in the queue
+        const lastJob = queue[queue.length - 1];
+        const payload = lastJob.payload;
+        const startTime = new Date(lastJob.scheduled_start_time);
+
+        // Calculate duration of this specific job/batch
+        const totalItems = payload.slideshows.length;
+        const postIntervalMinutes = payload.settings.postIntervalMinutes;
+        const intervalHours = payload.settings.intervalHours;
+
+        let durationMinutes = 0;
+
+        if (payload.strategy === 'batch') {
+            // Since we split batches into separate jobs, a "batch job" is just one batch
+            // Duration is just (Items - 1) * PostInterval
+            durationMinutes = (totalItems - 1) * postIntervalMinutes;
+        } else {
+            // Interval strategy
+            durationMinutes = (totalItems - 1) * (intervalHours * 60);
+        }
+
+        const endTime = new Date(startTime.getTime() + durationMinutes * 60000);
+        setLastScheduledTime(endTime);
+    };
+
+    // Poll for pending jobs that are ready to run
+    useEffect(() => {
+        const checkQueue = async () => {
+            if (isPosting) return; // Already processing a job
+
+            const now = new Date();
+            const readyJob = jobQueue.find(job =>
+                job.status === 'pending' && new Date(job.scheduled_start_time) <= now
+            );
+
+            if (readyJob) {
+                console.log('Found ready job:', readyJob.id);
+                processJob(readyJob);
+            }
+        };
+
+        const interval = setInterval(checkQueue, 10000); // Check every 10 seconds
+        return () => clearInterval(interval);
+    }, [jobQueue, isPosting]);
 
     // Helper to wait with UI feedback
     const waitWithFeedback = async (ms: number) => {
@@ -107,6 +236,176 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
     };
 
+    const processJob = async (job: JobQueueItem) => {
+        if (isPosting) return;
+
+        try {
+            // 1. Lock the job
+            const { error: lockError } = await supabase
+                .from('job_queue')
+                .update({ status: 'processing' })
+                .eq('id', job.id)
+                .eq('status', 'pending');
+
+            if (lockError) {
+                console.error('Failed to lock job:', lockError);
+                return;
+            }
+
+            setIsPosting(true);
+            stopProcessingRef.current = false;
+            setStatusMessage(`Starting job ${job.id} (Batch ${job.batch_index}/${job.total_batches})...`);
+
+            const { slideshows, profiles, strategy, settings } = job.payload;
+            const { intervalHours, postIntervalMinutes } = settings;
+
+            // Generate Schedule for this specific job/batch
+            const schedule: PostingSchedule[] = [];
+            let currentTime = new Date(); // Start processing now
+
+            const applyScheduleConstraints = (baseTime: Date): Date => {
+                const hour = baseTime.getHours();
+                if (hour >= 0 && hour < 9) {
+                    const adjustedTime = new Date(baseTime);
+                    adjustedTime.setHours(9, 0, 0, 0);
+                    if (adjustedTime < baseTime) {
+                        adjustedTime.setDate(adjustedTime.getDate() + 1);
+                    }
+                    return adjustedTime;
+                }
+                return baseTime;
+            };
+
+            // Since we've split batches, 'batch' strategy here just means "post these items with postIntervalMinutes"
+            // 'interval' strategy means "post these items with intervalHours"
+            // 'first-now' is handled by the first batch having start time = now, and subsequent items having interval
+
+            let currentScheduledTime = new Date(currentTime);
+
+            for (let i = 0; i < slideshows.length; i++) {
+                currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
+
+                schedule.push({
+                    slideshowId: slideshows[i].id,
+                    slideshowTitle: slideshows[i].title,
+                    scheduledTime: new Date(currentScheduledTime),
+                    status: 'pending'
+                });
+
+                if (strategy === 'batch') {
+                    currentScheduledTime = addMinutes(currentScheduledTime, postIntervalMinutes);
+                } else {
+                    currentScheduledTime = addHours(currentScheduledTime, intervalHours);
+                }
+            }
+
+            setPostingSchedule(schedule);
+
+            let successfulCount = 0;
+            let hasError = false;
+
+            for (let i = 0; i < schedule.length; i++) {
+                if (stopProcessingRef.current) break;
+
+                const scheduleItem = schedule[i];
+
+                setPostingSchedule(prev => prev.map((item, index) =>
+                    index === i ? { ...item, status: 'posting' } : item
+                ));
+                setStatusMessage(`Posting ${i + 1}/${schedule.length}: ${scheduleItem.slideshowTitle}`);
+
+                const slideshow = slideshows.find(s => s.id === scheduleItem.slideshowId);
+                if (!slideshow) continue;
+
+                // For 'first-now', the first item of the first batch should be immediate
+                // But since we split jobs, we need to know if this is the VERY first item of the VERY first batch
+                // However, the job's scheduled_start_time handles the "when to start" part.
+                // If the job is scheduled for NOW, we post now.
+                // We don't need special 'postNow' flag for API unless we really want to bypass scheduling
+                // But here we are "processing" which means we are doing the actions NOW.
+                // So we always send "postNow=true" to Postiz? 
+                // Wait, if we send "postNow=true", Postiz posts immediately.
+                // If we send a date, Postiz schedules it.
+                // The user wants to "schedule" batches.
+                // But the requirement was "Sequential Batch Scheduling... each new batch starts only after the previous one has completed".
+                // And "We can't schedule future posts immedietly because it still requires the postiz API".
+                // So we are acting as the scheduler. We tell Postiz to post NOW.
+
+                const result = await postSingleSlideshow(slideshow, profiles[0], undefined, true);
+
+                if (result.success) {
+                    setPostingSchedule(prev => prev.map((item, index) =>
+                        index === i ? { ...item, status: 'success', postId: result.postId } : item
+                    ));
+                    successfulCount++;
+                    await slideshowService.incrementUploadCount(slideshow.id);
+                } else {
+                    hasError = true;
+                    const isRateLimit = result.error && (
+                        result.error.toLowerCase().includes('rate limit') ||
+                        result.error.toLowerCase().includes('too many requests')
+                    );
+
+                    if (isRateLimit) {
+                        setPostingSchedule(prev => prev.map((item, index) =>
+                            index === i ? { ...item, status: 'pending', error: 'Rate limit hit' } : item
+                        ));
+                        try {
+                            // Wait 1 hour for rate limits
+                            await waitWithFeedback(60 * 60 * 1000);
+                            i--; // Retry
+                            continue;
+                        } catch (e) {
+                            break;
+                        }
+                    } else {
+                        setPostingSchedule(prev => prev.map((item, index) =>
+                            index === i ? { ...item, status: 'error', error: result.error } : item
+                        ));
+                    }
+                }
+
+                // Wait for next item if not last
+                if (i < schedule.length - 1) {
+                    const nextItem = schedule[i + 1];
+                    const waitTime = nextItem.scheduledTime.getTime() - new Date().getTime();
+                    if (waitTime > 0) {
+                        await waitWithFeedback(waitTime);
+                    }
+                }
+            }
+
+            // Mark job as completed or failed
+            await supabase
+                .from('job_queue')
+                .update({
+                    status: hasError && successfulCount < schedule.length ? 'failed' : 'completed',
+                    error: hasError ? 'Some posts failed' : null
+                })
+                .eq('id', job.id);
+
+            toast.success(`Batch ${job.batch_index}/${job.total_batches} completed`);
+
+        } catch (error) {
+            console.error('Job processing error:', error);
+            await supabase
+                .from('job_queue')
+                .update({
+                    status: 'failed',
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                })
+                .eq('id', job.id);
+            toast.error('Job failed');
+        } finally {
+            setIsPosting(false);
+            setIsPaused(false);
+            setNextResumeTime(null);
+            stopProcessingRef.current = false;
+            setPostingSchedule([]);
+            setStatusMessage('');
+        }
+    };
+
     const startBulkPost = useCallback(async (
         slideshows: SlideshowMetadata[],
         profiles: string[],
@@ -119,170 +418,92 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             postIntervalMinutes: number;
         }
     ) => {
-        if (isPosting) return;
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+            toast.error('You must be logged in to schedule posts');
+            return;
+        }
 
-        setIsPosting(true);
-        stopProcessingRef.current = false;
-        setStatusMessage('Initializing bulk post...');
+        const jobsToInsert = [];
+        let currentStartTime = new Date(settings.startTime);
 
-        // Generate Schedule
-        const schedule: PostingSchedule[] = [];
-        let currentTime = new Date(settings.startTime);
-        const { intervalHours, batchSize, batchIntervalHours, postIntervalMinutes } = settings;
+        if (strategy === 'batch') {
+            const batchSize = settings.batchSize;
+            const totalBatches = Math.ceil(slideshows.length / batchSize);
 
-        // ... (Reuse schedule generation logic from BulkPostizPoster) ...
-        // Simplified for brevity, assuming the passed schedule or generating it here is fine.
-        // For now, let's replicate the generation logic quickly or assume the caller passes it?
-        // Better to generate it here to keep it consistent.
+            for (let i = 0; i < totalBatches; i++) {
+                const batchSlideshows = slideshows.slice(i * batchSize, (i + 1) * batchSize);
 
-        const applyScheduleConstraints = (baseTime: Date): Date => {
-            const hour = baseTime.getHours();
-            if (hour >= 0 && hour < 9) {
-                const adjustedTime = new Date(baseTime);
-                adjustedTime.setHours(9, 0, 0, 0);
-                return adjustedTime;
-            }
-            return baseTime;
-        };
+                // Calculate start time for this batch
+                // First batch starts at startTime
+                // Subsequent batches start after:
+                // Previous Batch Start + (ItemsInPrevBatch * PostInterval) + BatchInterval
 
-        const { addHours, addMinutes } = await import('date-fns');
+                if (i > 0) {
+                    const prevBatchSize = slideshows.slice((i - 1) * batchSize, i * batchSize).length;
+                    const prevBatchDurationMinutes = (prevBatchSize - 1) * settings.postIntervalMinutes;
+                    // Add duration of previous batch + buffer
+                    currentStartTime = addMinutes(currentStartTime, prevBatchDurationMinutes);
+                    currentStartTime = addHours(currentStartTime, settings.batchIntervalHours);
+                }
 
-        if (strategy === 'first-now') {
-            schedule.push({
-                slideshowId: slideshows[0].id,
-                slideshowTitle: slideshows[0].title,
-                scheduledTime: new Date(),
-                status: 'pending'
-            });
-            for (let i = 1; i < slideshows.length; i++) {
-                currentTime = addHours(currentTime, intervalHours);
-                currentTime = applyScheduleConstraints(currentTime);
-                schedule.push({
-                    slideshowId: slideshows[i].id,
-                    slideshowTitle: slideshows[i].title,
-                    scheduledTime: new Date(currentTime),
-                    status: 'pending'
+                const payload: JobPayload = {
+                    slideshows: batchSlideshows,
+                    profiles,
+                    strategy: 'batch', // Keep as batch so processor knows to use postIntervalMinutes
+                    settings: {
+                        ...settings,
+                        startTime: currentStartTime.toISOString()
+                    }
+                };
+
+                jobsToInsert.push({
+                    user_id: user.id,
+                    account_id: profiles[0],
+                    status: 'pending',
+                    scheduled_start_time: currentStartTime.toISOString(),
+                    batch_index: i + 1,
+                    total_batches: totalBatches,
+                    payload
                 });
-            }
-        } else if (strategy === 'batch') {
-            // Continuous scheduling logic matching BulkPostizPoster
-            let currentScheduledTime = new Date(settings.startTime);
-
-            for (let i = 0; i < slideshows.length; i++) {
-                // const batchIndex = Math.floor(i / batchSize); // Unused variable
-
-                // Apply constraints to the current scheduled time
-                currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
-
-                schedule.push({
-                    slideshowId: slideshows[i].id,
-                    slideshowTitle: slideshows[i].title,
-                    scheduledTime: new Date(currentScheduledTime),
-                    status: 'pending'
-                });
-
-                // Advance time for the next post
-                currentScheduledTime = addMinutes(currentScheduledTime, postIntervalMinutes);
             }
         } else {
-            for (let i = 0; i < slideshows.length; i++) {
-                currentTime = applyScheduleConstraints(currentTime);
-                schedule.push({
-                    slideshowId: slideshows[i].id,
-                    slideshowTitle: slideshows[i].title,
-                    scheduledTime: new Date(currentTime),
-                    status: 'pending'
-                });
-                currentTime = addHours(currentTime, intervalHours);
-            }
+            // Interval or First-Now strategy - treat as single job
+            const payload: JobPayload = {
+                slideshows,
+                profiles,
+                strategy,
+                settings: {
+                    ...settings,
+                    startTime: settings.startTime.toISOString()
+                }
+            };
+
+            jobsToInsert.push({
+                user_id: user.id,
+                account_id: profiles[0],
+                status: 'pending',
+                scheduled_start_time: settings.startTime.toISOString(),
+                batch_index: 1,
+                total_batches: 1,
+                payload
+            });
         }
 
-        setPostingSchedule(schedule);
+        const { error } = await supabase
+            .from('job_queue')
+            .insert(jobsToInsert);
 
-        try {
-            let successfulCount = 0;
-
-            for (let i = 0; i < schedule.length; i++) {
-                if (stopProcessingRef.current) break;
-
-                // Proactive Batch Throttling
-                // Wait ONLY between batches, not before the first one
-                if (strategy === 'batch' && i > 0 && i % batchSize === 0) {
-                    await waitWithFeedback(batchIntervalHours * 60 * 60 * 1000);
-                }
-
-                const scheduleItem = schedule[i];
-
-                // Update status locally
-                setPostingSchedule(prev => prev.map((item, index) =>
-                    index === i ? { ...item, status: 'posting' } : item
-                ));
-                setStatusMessage(`Posting ${i + 1}/${schedule.length}: ${scheduleItem.slideshowTitle}`);
-
-                const slideshow = slideshows.find(s => s.id === scheduleItem.slideshowId);
-                if (!slideshow) continue;
-
-                const shouldPostNow = strategy === 'first-now' && i === 0;
-                const scheduledAt = shouldPostNow ? undefined : scheduleItem.scheduledTime;
-
-                const result = await postSingleSlideshow(slideshow, profiles[0], scheduledAt, shouldPostNow);
-
-                if (result.success) {
-                    setPostingSchedule(prev => prev.map((item, index) =>
-                        index === i ? { ...item, status: 'success', postId: result.postId } : item
-                    ));
-                    successfulCount++;
-
-                    // Increment upload count for the slideshow
-                    await slideshowService.incrementUploadCount(slideshow.id);
-
-                    // No wait here for batch strategy - we want to send the whole batch immediately
-                    // The batch throttling is handled at the start of the loop
-                } else {
-                    const isRateLimit = result.error && (
-                        result.error.toLowerCase().includes('rate limit') ||
-                        result.error.toLowerCase().includes('too many requests')
-                    );
-
-                    if (isRateLimit) {
-                        setPostingSchedule(prev => prev.map((item, index) =>
-                            index === i ? { ...item, status: 'pending', error: 'Rate limit hit' } : item
-                        ));
-
-                        try {
-                            await waitWithFeedback(Math.max(batchIntervalHours, 1) * 60 * 60 * 1000);
-                            i--;
-                            continue;
-                        } catch (e) {
-                            break;
-                        }
-                    } else {
-                        setPostingSchedule(prev => prev.map((item, index) =>
-                            index === i ? { ...item, status: 'error', error: result.error } : item
-                        ));
-                    }
-                }
-            }
-
-            setStatusMessage(successfulCount === schedule.length ? 'All posts scheduled successfully!' : 'Bulk post finished with errors.');
-
-        } catch (error) {
-            console.error('Bulk post error:', error);
-            setStatusMessage('Error during bulk post.');
-        } finally {
-            setIsPosting(false);
-            setIsPaused(false);
-            setNextResumeTime(null);
-            stopProcessingRef.current = false;
+        if (error) {
+            console.error('Failed to queue jobs:', error);
+            toast.error('Failed to add jobs to queue');
+        } else {
+            toast.success(`Added ${jobsToInsert.length} batches to queue`);
         }
-    }, [isPosting]);
+    }, []);
 
     const stopBulkPost = () => {
         stopProcessingRef.current = true;
-        setIsPosting(false);
-        setIsPaused(false);
-        setNextResumeTime(null);
-        setStatusMessage('Processing stopped.');
     };
 
     return (
@@ -292,6 +513,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             nextResumeTime,
             postingSchedule,
             statusMessage,
+            jobQueue,
+            lastScheduledTime,
             startBulkPost,
             stopBulkPost
         }}>

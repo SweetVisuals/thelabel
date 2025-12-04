@@ -1,0 +1,173 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, ListOrdered, Loader2, CheckCircle, AlertCircle, Clock, Trash2, RefreshCw } from 'lucide-react';
+import { Button } from '../ui/button';
+import { useBulkPost } from '../../contexts/BulkPostContext';
+import { cn } from '@/lib/utils';
+import { postizAPI } from '../../lib/postiz';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
+
+interface QueueViewerProps {
+    onClose: () => void;
+}
+
+export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
+    const { jobQueue, refreshQueue } = useBulkPost();
+    const [profiles, setProfiles] = useState<any[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+
+    useEffect(() => {
+        loadProfiles();
+    }, []);
+
+    const loadProfiles = async () => {
+        try {
+            const connectedProfiles = await postizAPI.getProfiles();
+            setProfiles(connectedProfiles);
+        } catch (error) {
+            console.error('Failed to load profiles:', error);
+        }
+    };
+
+    const getProfileName = (profileId: string) => {
+        const profile = profiles.find(p => p.id === profileId);
+        return profile ? profile.displayName : 'Unknown Account';
+    };
+
+    const handleDeleteJob = async (jobId: string) => {
+        try {
+            const { error } = await supabase
+                .from('job_queue')
+                .delete()
+                .eq('id', jobId);
+
+            if (error) throw error;
+            toast.success('Job removed from queue');
+            refreshQueue(); // Refresh the context
+        } catch (error) {
+            console.error('Failed to delete job:', error);
+            toast.error('Failed to delete job');
+        }
+    };
+
+    const handleClearCompleted = async () => {
+        try {
+            const { error } = await supabase
+                .from('job_queue')
+                .delete()
+                .in('status', ['completed', 'failed']);
+
+            if (error) throw error;
+            toast.success('Cleared completed jobs');
+            refreshQueue();
+        } catch (error) {
+            console.error('Failed to clear jobs:', error);
+            toast.error('Failed to clear jobs');
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <motion.div
+                className="bg-[#09090b] w-full max-w-4xl max-h-[80vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                transition={{ duration: 0.2 }}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
+                    <h3 className="text-xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent flex items-center">
+                        <ListOrdered className="w-5 h-5 mr-3 text-primary" />
+                        Background Job Queue
+                    </h3>
+                    <div className="flex items-center gap-2">
+                        <Button variant="ghost" size="sm" onClick={refreshQueue} className="hover:bg-white/10">
+                            <RefreshCw className="w-4 h-4 mr-2" /> Refresh
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-white/10 rounded-full">
+                            <X className="w-5 h-5 text-muted-foreground" />
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+                    {jobQueue.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground border-2 border-dashed border-white/10 rounded-xl">
+                            <ListOrdered className="w-12 h-12 mb-4 opacity-20" />
+                            <p>No jobs in the queue</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-3">
+                            {jobQueue.map((job, idx) => (
+                                <div key={job.id} className="flex items-center justify-between bg-black/40 border border-white/10 p-4 rounded-xl hover:border-white/20 transition-colors">
+                                    <div className="flex items-center gap-4">
+                                        <div className={cn(
+                                            "w-10 h-10 rounded-full flex items-center justify-center border",
+                                            job.status === 'completed' ? "bg-green-500/10 border-green-500/20 text-green-500" :
+                                                job.status === 'processing' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
+                                                    job.status === 'failed' ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                                                        "bg-white/5 border-white/10 text-muted-foreground"
+                                        )}>
+                                            {job.status === 'completed' ? <CheckCircle className="w-5 h-5" /> :
+                                                job.status === 'processing' ? <Loader2 className="w-5 h-5 animate-spin" /> :
+                                                    job.status === 'failed' ? <AlertCircle className="w-5 h-5" /> :
+                                                        <Clock className="w-5 h-5" />}
+                                        </div>
+                                        <div>
+                                            <div className="font-medium text-white flex items-center gap-2">
+                                                {job.payload.slideshows.length} Posts
+                                                <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-muted-foreground border border-white/5">
+                                                    {job.payload.strategy}
+                                                </span>
+                                            </div>
+                                            <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                                                <span>{getProfileName(job.payload.profiles[0])}</span>
+                                                <span>•</span>
+                                                <span>Batch {job.batch_index}/{job.total_batches}</span>
+                                                <span>•</span>
+                                                <span>Scheduled: {new Date(job.scheduled_start_time).toLocaleString()}</span>
+                                            </div>
+                                            {job.error && (
+                                                <div className="text-xs text-red-400 mt-1">
+                                                    Error: {job.error}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2">
+                                        {job.status === 'pending' && (
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                                onClick={() => handleDeleteJob(job.id)}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-white/10 bg-white/5 flex justify-between items-center">
+                    <div className="text-xs text-muted-foreground">
+                        Background jobs run every minute. Keep your API key saved in settings.
+                    </div>
+                    {jobQueue.some(j => ['completed', 'failed'].includes(j.status)) && (
+                        <Button variant="outline" size="sm" onClick={handleClearCompleted} className="border-white/10 hover:bg-white/5">
+                            Clear Completed
+                        </Button>
+                    )}
+                </div>
+            </motion.div>
+        </div>
+    );
+};
