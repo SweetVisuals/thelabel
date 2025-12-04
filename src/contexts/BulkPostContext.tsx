@@ -259,6 +259,11 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 return;
             }
 
+            // Optimistically update local queue state
+            setJobQueue(prev => prev.map(j =>
+                j.id === job.id ? { ...j, status: 'processing' } : j
+            ));
+
             setIsPosting(true);
             setCurrentJobId(job.id);
             setCurrentBatchIndex(job.batch_index);
@@ -455,6 +460,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 })
                 .eq('id', job.id);
             toast.error('Job failed');
+            setJobQueue(prev => prev.map(j =>
+                j.id === job.id ? { ...j, status: 'failed', error: 'Job failed' } : j
+            ));
         } finally {
             setIsPosting(false);
             setCurrentJobId(null);
@@ -464,6 +472,11 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setNextResumeTime(null);
             stopProcessingRef.current = false;
             setPostingSchedule([]);
+            // Update local queue state to completed
+            setJobQueue(prev => prev.map(j =>
+                j.id === job.id ? { ...j, status: 'completed' } : j
+            ));
+
             setStatusMessage('');
             fetchQueue(); // Refresh queue immediately
         }
