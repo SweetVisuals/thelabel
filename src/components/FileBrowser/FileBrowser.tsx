@@ -997,9 +997,10 @@ export function FileBrowser({
                       : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/40"
                   ),
                   item.type === 'slideshow' && (
-                    (item.slideshow?.uploadCount || 0) > 1 ? "bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/20 hover:border-yellow-500/40" :
-                      (item.slideshow?.uploadCount === 1) ? "bg-green-500/10 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/40" :
-                        "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/40"
+                    (item.slideshow?.lastUploadStatus === 'failed') ? "bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40" :
+                      (item.slideshow?.uploadCount || 0) > 1 ? "bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/20 hover:border-yellow-500/40" :
+                        (item.slideshow?.uploadCount === 1) ? "bg-green-500/10 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/40" :
+                          "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/40"
                   ),
                   item.type === 'file' && "bg-white/5 border-white/10 hover:bg-white/10",
 
@@ -1062,13 +1063,15 @@ export function FileBrowser({
                   <>
                     <div className={cn(
                       "flex items-center justify-center transition-colors",
-                      (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-400 group-hover:text-yellow-300" :
-                        (item.slideshow?.uploadCount === 1) ? "text-green-400 group-hover:text-green-300" :
-                          "text-purple-400 group-hover:text-purple-300",
+                      (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-400 group-hover:text-red-300" :
+                        (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-400 group-hover:text-yellow-300" :
+                          (item.slideshow?.uploadCount === 1) ? "text-green-400 group-hover:text-green-300" :
+                            "text-purple-400 group-hover:text-purple-300",
                       viewMode === 'list' ? (
-                        (item.slideshow?.uploadCount || 0) > 1 ? "w-10 h-10 bg-yellow-500/20 rounded-lg" :
-                          (item.slideshow?.uploadCount === 1) ? "w-10 h-10 bg-green-500/20 rounded-lg" :
-                            "w-10 h-10 bg-purple-500/20 rounded-lg"
+                        (item.slideshow?.lastUploadStatus === 'failed') ? "w-10 h-10 bg-red-500/20 rounded-lg" :
+                          (item.slideshow?.uploadCount || 0) > 1 ? "w-10 h-10 bg-yellow-500/20 rounded-lg" :
+                            (item.slideshow?.uploadCount === 1) ? "w-10 h-10 bg-green-500/20 rounded-lg" :
+                              "w-10 h-10 bg-purple-500/20 rounded-lg"
                       ) : "flex-1"
                     )}>
                       <Film className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
@@ -1076,22 +1079,25 @@ export function FileBrowser({
                     <div className={cn(
                       "flex flex-col",
                       viewMode === 'grid' && (
-                        (item.slideshow?.uploadCount || 0) > 1 ? "p-3 bg-black/40 backdrop-blur-sm border-t border-yellow-500/10" :
-                          (item.slideshow?.uploadCount === 1) ? "p-3 bg-black/40 backdrop-blur-sm border-t border-green-500/10" :
-                            "p-3 bg-black/40 backdrop-blur-sm border-t border-purple-500/10"
+                        (item.slideshow?.lastUploadStatus === 'failed') ? "p-3 bg-black/40 backdrop-blur-sm border-t border-red-500/10" :
+                          (item.slideshow?.uploadCount || 0) > 1 ? "p-3 bg-black/40 backdrop-blur-sm border-t border-yellow-500/10" :
+                            (item.slideshow?.uploadCount === 1) ? "p-3 bg-black/40 backdrop-blur-sm border-t border-green-500/10" :
+                              "p-3 bg-black/40 backdrop-blur-sm border-t border-purple-500/10"
                       )
                     )}>
                       <span className={cn(
                         "font-medium text-sm truncate group-hover:text-white",
-                        (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-100" :
-                          (item.slideshow?.uploadCount === 1) ? "text-green-100" :
-                            "text-purple-100"
+                        (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-100" :
+                          (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-100" :
+                            (item.slideshow?.uploadCount === 1) ? "text-green-100" :
+                              "text-purple-100"
                       )}>{item.name}</span>
                       <span className={cn(
                         "text-[10px]",
-                        (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-200/50" :
-                          (item.slideshow?.uploadCount === 1) ? "text-green-200/50" :
-                            "text-purple-200/50"
+                        (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-200/50" :
+                          (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-200/50" :
+                            (item.slideshow?.uploadCount === 1) ? "text-green-200/50" :
+                              "text-purple-200/50"
                       )}>Slideshow</span>
                     </div>
                   </>

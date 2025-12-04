@@ -121,6 +121,7 @@ export interface SlideshowMetadata {
   user_id: string;
   folder_id?: string | null; // Folder association for drag and drop organization
   uploadCount?: number;
+  lastUploadStatus?: 'success' | 'failed' | 'pending';
 }
 
 // Postiz integration data

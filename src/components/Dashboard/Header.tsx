@@ -232,7 +232,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                     "w-1.5 h-1.5 rounded-full animate-pulse",
                                     isPosting ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"
                                 )} />
-                                <span>{isPosting ? "Processing Bulk Schedule" : "System Online"}</span>
+                                <span>{isPosting ? "Processing Bulk Schedule" : (jobQueue.length > 0 ? "System Active" : "System Online")}</span>
                             </span>
                             <span>•</span>
 
@@ -251,7 +251,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                     )}
                                 </span>
                             ) : (
-                                <span>Ready</span>
+                                <span>{jobQueue.length > 0 ? `${jobQueue.length} Batches Scheduled` : "Ready"}</span>
                             )}
                         </motion.div>
                         <motion.div

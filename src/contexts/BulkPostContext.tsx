@@ -87,26 +87,26 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const stopProcessingRef = useRef(false);
 
     // Load initial queue and subscribe to changes
+    const fetchQueue = useCallback(async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+            .from('job_queue')
+            .select('*')
+            .eq('user_id', user.id)
+            .in('status', ['pending', 'processing', 'failed'])
+            .order('scheduled_start_time', { ascending: true });
+
+        if (error) {
+            console.error('Failed to fetch job queue:', error);
+        } else {
+            setJobQueue(data || []);
+            updateLastScheduledTime(data || []);
+        }
+    }, []);
+
     useEffect(() => {
-        const fetchQueue = async () => {
-            const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
-
-            const { data, error } = await supabase
-                .from('job_queue')
-                .select('*')
-                .eq('user_id', user.id)
-                .in('status', ['pending', 'processing'])
-                .order('scheduled_start_time', { ascending: true });
-
-            if (error) {
-                console.error('Failed to fetch job queue:', error);
-            } else {
-                setJobQueue(data || []);
-                updateLastScheduledTime(data || []);
-            }
-        };
-
         fetchQueue();
 
         const subscription = supabase
@@ -128,7 +128,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return () => {
             subscription.unsubscribe();
         };
-    }, []);
+    }, [fetchQueue]);
 
     // Calculate the projected end time of the entire queue
     const updateLastScheduledTime = (queue: JobQueueItem[]) => {
@@ -257,7 +257,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setStatusMessage(`Starting job ${job.id} (Batch ${job.batch_index}/${job.total_batches})...`);
 
             const { slideshows, profiles, strategy, settings } = job.payload;
-            const { intervalHours, postIntervalMinutes } = settings;
+            const { intervalHours, postIntervalMinutes, batchIntervalHours } = settings;
 
             // Generate Schedule for this specific job/batch
             const schedule: PostingSchedule[] = [];
@@ -303,6 +303,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             let successfulCount = 0;
             let hasError = false;
+            const failedSlideshows: SlideshowMetadata[] = [];
 
             for (let i = 0; i < schedule.length; i++) {
                 if (stopProcessingRef.current) break;
@@ -339,8 +340,10 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     ));
                     successfulCount++;
                     await slideshowService.incrementUploadCount(slideshow.id);
+                    await slideshowService.updateSlideshowStatus(slideshow.id, 'success');
                 } else {
                     hasError = true;
+                    await slideshowService.updateSlideshowStatus(slideshow.id, 'failed');
                     const isRateLimit = result.error && (
                         result.error.toLowerCase().includes('rate limit') ||
                         result.error.toLowerCase().includes('too many requests')
@@ -362,6 +365,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         setPostingSchedule(prev => prev.map((item, index) =>
                             index === i ? { ...item, status: 'error', error: result.error } : item
                         ));
+                        failedSlideshows.push(slideshow);
                     }
                 }
 
@@ -375,12 +379,43 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 }
             }
 
+            // Handle Retries for Failed Slideshows
+            if (failedSlideshows.length > 0) {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (user) {
+                    // Calculate retry time: Start of next batch or batchInterval from now
+                    const retryTime = addHours(new Date(), batchIntervalHours || 1.5);
+
+                    const retryPayload: JobPayload = {
+                        slideshows: failedSlideshows,
+                        profiles,
+                        strategy: 'batch',
+                        settings: {
+                            ...settings,
+                            startTime: retryTime.toISOString()
+                        }
+                    };
+
+                    await supabase.from('job_queue').insert({
+                        user_id: user.id,
+                        account_id: profiles[0],
+                        status: 'pending',
+                        scheduled_start_time: retryTime.toISOString(),
+                        batch_index: job.batch_index + 1, // Append to next index logically
+                        total_batches: job.total_batches,
+                        payload: retryPayload
+                    });
+
+                    toast.error(`Rescheduled ${failedSlideshows.length} failed posts for next batch slot`);
+                }
+            }
+
             // Mark job as completed or failed
             await supabase
                 .from('job_queue')
                 .update({
                     status: hasError && successfulCount < schedule.length ? 'failed' : 'completed',
-                    error: hasError ? 'Some posts failed' : null
+                    error: hasError ? 'Some posts failed (retried)' : null
                 })
                 .eq('id', job.id);
 
@@ -403,6 +438,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             stopProcessingRef.current = false;
             setPostingSchedule([]);
             setStatusMessage('');
+            fetchQueue(); // Refresh queue immediately
         }
     };
 
@@ -499,8 +535,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             toast.error('Failed to add jobs to queue');
         } else {
             toast.success(`Added ${jobsToInsert.length} batches to queue`);
+            fetchQueue();
         }
-    }, []);
+    }, [fetchQueue]);
 
     const stopBulkPost = () => {
         stopProcessingRef.current = true;

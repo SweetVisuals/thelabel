@@ -2560,6 +2560,51 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
 
     return validFormats.some(format => format.test(aspectRatio.toLowerCase()));
   }
+
+  /**
+   * Update slideshow status (success/failed)
+   */
+  async updateSlideshowStatus(slideshowId: string, status: 'success' | 'failed' | 'pending'): Promise<void> {
+    const slideshow = this.slideshows.get(slideshowId);
+    if (!slideshow) return;
+
+    const updatedSlideshow = {
+      ...slideshow,
+      lastUploadStatus: status,
+      updated_at: new Date().toISOString()
+    };
+
+    this.slideshows.set(slideshowId, updatedSlideshow);
+    this.saveToLocalStorage();
+
+    // Update in database if possible
+    try {
+      const { supabase } = await import('./supabase');
+      const { data, error: fetchError } = await supabase
+        .from('slideshows')
+        .select('metadata')
+        .eq('id', slideshowId.replace('slideshow_', ''))
+        .single();
+
+      if (!fetchError && data) {
+        const newMetadata = {
+          ...data.metadata,
+          lastUploadStatus: status
+        };
+
+        await supabase
+          .from('slideshows')
+          .update({ metadata: newMetadata })
+          .eq('id', slideshowId.replace('slideshow_', ''));
+      }
+    } catch (error) {
+      console.error('Failed to update slideshow status in DB:', error);
+    }
+
+    window.dispatchEvent(new CustomEvent('slideshowUpdated'));
+  }
+
+
 }
 
 export const slideshowService = SlideshowService.getInstance();
