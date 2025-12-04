@@ -155,7 +155,7 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                     </div>
 
                                     {/* Detailed Progress for Processing Job */}
-                                    {job.status === 'processing' && job.id === currentJobId && postingSchedule.length > 0 && (
+                                    {((job.status === 'processing' && job.id === currentJobId) || (job.id === currentJobId && postingSchedule.length > 0)) && (
                                         <div className="w-full mt-3 border-t border-white/10 pt-3">
                                             <div className="flex justify-between text-xs text-muted-foreground mb-2">
                                                 <span className="font-medium">Batch Progress</span>

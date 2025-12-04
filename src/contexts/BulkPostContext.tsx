@@ -502,6 +502,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         const jobsToInsert = [];
         let currentStartTime = new Date(settings.startTime);
+        // Zero out seconds and milliseconds to prevent drift and messy times
+        currentStartTime.setSeconds(0, 0);
 
         if (strategy === 'batch') {
             const batchSize = settings.batchSize;
@@ -577,10 +579,11 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             toast.success(`Added ${jobsToInsert.length} batches to queue`);
             await fetchQueue();
 
-            // Trigger immediate processing of first batch if scheduled for now
+            // Trigger immediate processing of first batch if scheduled for now (or close to now)
             const now = new Date();
             const firstJob = jobsToInsert[0];
-            if (firstJob && new Date(firstJob.scheduled_start_time) <= now) {
+            // Allow 1 minute buffer for "now"
+            if (firstJob && new Date(firstJob.scheduled_start_time).getTime() <= now.getTime() + 60000) {
                 // Fetch the newly inserted jobs to get their IDs
                 const { data: insertedJobs } = await supabase
                     .from('job_queue')
@@ -591,8 +594,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     .limit(jobsToInsert.length);
 
                 if (insertedJobs && insertedJobs.length > 0) {
+                    // Find the job that matches our first batch's start time (approx)
                     const jobToProcess = insertedJobs.find(j =>
-                        new Date(j.scheduled_start_time) <= now
+                        Math.abs(new Date(j.scheduled_start_time).getTime() - new Date(firstJob.scheduled_start_time).getTime()) < 10000
                     );
                     if (jobToProcess) {
                         console.log('Starting first batch immediately:', jobToProcess.id);
