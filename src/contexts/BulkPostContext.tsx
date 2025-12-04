@@ -441,7 +441,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
                     // Calculate retry time: Start of next batch or batchInterval from now
-                    const retryTime = addHours(new Date(), batchIntervalHours || 1.5);
+                    const retryMinutes = (batchIntervalHours || 1.1) * 60;
+                    const retryTime = addMinutes(new Date(), retryMinutes);
 
                     const retryPayload: JobPayload = {
                         slideshows: failedSlideshows,
@@ -652,13 +653,16 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             .select('*')
             .eq('user_id', user.id)
             .eq('status', 'pending')
-            .order('scheduled_start_time', { ascending: true });
+            .order('created_at', { ascending: true })
+            .order('batch_index', { ascending: true });
 
         if (error || !jobs || jobs.length === 0) return;
 
         let currentStartTime = new Date();
         // Add a small buffer so the first one isn't "in the past" immediately if processing takes time
         currentStartTime = addMinutes(currentStartTime, 1);
+
+        console.log(`Rescheduling ${jobs.length} jobs starting from ${currentStartTime.toISOString()}`);
 
         for (let i = 0; i < jobs.length; i++) {
             const job = jobs[i];
@@ -674,13 +678,17 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (job.payload.strategy === 'batch') {
                 const batchSize = job.payload.slideshows.length;
                 const durationMinutes = (batchSize - 1) * settings.postIntervalMinutes;
-                currentStartTime = addMinutes(currentStartTime, durationMinutes);
-                currentStartTime = addHours(currentStartTime, settings.batchIntervalHours);
+                const intervalMinutes = settings.batchIntervalHours * 60;
+
+                console.log(`Job ${job.id} (Batch ${job.batch_index}): Duration ${durationMinutes}m, Interval ${intervalMinutes}m`);
+
+                currentStartTime = addMinutes(currentStartTime, durationMinutes + intervalMinutes);
             } else {
                 // Interval strategy
-                const durationMinutes = (job.payload.slideshows.length - 1) * (settings.intervalHours * 60);
-                currentStartTime = addMinutes(currentStartTime, durationMinutes);
-                currentStartTime = addHours(currentStartTime, settings.intervalHours);
+                const intervalMinutes = settings.intervalHours * 60;
+                const durationMinutes = (job.payload.slideshows.length - 1) * intervalMinutes;
+
+                currentStartTime = addMinutes(currentStartTime, durationMinutes + intervalMinutes);
             }
         }
 
