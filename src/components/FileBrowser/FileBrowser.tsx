@@ -35,6 +35,8 @@ interface FileBrowserProps {
   onSelectionChange: (ids: string[]) => void;
   selectedSlideshows: string[];
   onSlideshowSelectionChange: (ids: string[]) => void;
+  selectedFolders: string[];
+  onFolderSelectionChange: (ids: string[]) => void;
   folders: Folder[];
   onFoldersChange: (folders: Folder[]) => void;
   currentFolderId: string | null;
@@ -62,6 +64,8 @@ export function FileBrowser({
   onSelectionChange,
   selectedSlideshows,
   onSlideshowSelectionChange,
+  selectedFolders,
+  onFolderSelectionChange,
   folders,
   onFoldersChange,
   currentFolderId,
@@ -78,6 +82,7 @@ export function FileBrowser({
   const [isLoading, setIsLoading] = useState(false);
   const [ctrlPressed, setCtrlPressed] = useState(false);
   const [shiftPressed, setShiftPressed] = useState(false);
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Drag and Drop State
@@ -563,10 +568,10 @@ export function FileBrowser({
     });
 
   const removeSelected = async () => {
-    if (selectedImages.length === 0 && selectedSlideshows.length === 0) return;
+    if (selectedImages.length === 0 && selectedSlideshows.length === 0 && selectedFolders.length === 0) return;
     if (!window.confirm('Are you sure you want to delete selected items?')) return;
 
-    const total = selectedImages.length + selectedSlideshows.length;
+    const total = selectedImages.length + selectedSlideshows.length + selectedFolders.length;
     const toastId = toast.loading(`Deleting 0/${total} items...`);
     let deletedCount = 0;
 
@@ -583,6 +588,12 @@ export function FileBrowser({
         deletedCount++;
         toast.loading(`Deleting ${deletedCount}/${total} items...`, { id: toastId });
       }
+      // Delete folders
+      for (const id of selectedFolders) {
+        await imageService.deleteFolder(id);
+        deletedCount++;
+        toast.loading(`Deleting ${deletedCount}/${total} items...`, { id: toastId });
+      }
 
       // Update UI
       // 1. Update root images
@@ -590,14 +601,18 @@ export function FileBrowser({
       onImagesUploaded(remainingImages);
 
       // 2. Update folders (remove deleted images from folders)
-      const updatedFolders = folders.map(folder => ({
-        ...folder,
-        images: folder.images.filter(img => !selectedImages.includes(img.id))
-      }));
+      // Also remove deleted folders
+      const updatedFolders = folders
+        .filter(f => !selectedFolders.includes(f.id))
+        .map(folder => ({
+          ...folder,
+          images: folder.images.filter(img => !selectedImages.includes(img.id))
+        }));
       onFoldersChange(updatedFolders);
 
       onSelectionChange([]);
       onSlideshowSelectionChange([]);
+      onFolderSelectionChange([]);
       triggerReRender();
       toast.success(`Successfully deleted ${total} items`, { id: toastId });
     } catch (error) {
@@ -607,19 +622,127 @@ export function FileBrowser({
   };
 
   const selectAll = () => {
-    const visibleItems = filteredAndSortedItems.filter(item => item.type === 'file' || item.type === 'slideshow');
+    const visibleItems = filteredAndSortedItems.filter(item => item.type === 'file' || item.type === 'slideshow' || item.type === 'folder');
     const imageIds = visibleItems.filter(item => item.type === 'file').map(item => item.id);
     const slideshowIds = visibleItems.filter(item => item.type === 'slideshow').map(item => item.id);
+    const folderIds = visibleItems.filter(item => item.type === 'folder' && item.id !== 'parent-directory').map(item => item.id);
 
-    const allVisibleImagesSelected = imageIds.every(id => selectedImages.includes(id));
-    const allVisibleSlideshowsSelected = slideshowIds.every(id => selectedSlideshows.includes(id));
+    const allVisibleImagesSelected = imageIds.length > 0 && imageIds.every(id => selectedImages.includes(id));
+    const allVisibleSlideshowsSelected = slideshowIds.length > 0 && slideshowIds.every(id => selectedSlideshows.includes(id));
+    const allVisibleFoldersSelected = folderIds.length > 0 && folderIds.every(id => selectedFolders.includes(id));
 
-    if (allVisibleImagesSelected && allVisibleSlideshowsSelected) {
+    // If everything visible is selected, deselect all
+    // Otherwise, select all visible
+    if ((imageIds.length === 0 || allVisibleImagesSelected) &&
+      (slideshowIds.length === 0 || allVisibleSlideshowsSelected) &&
+      (folderIds.length === 0 || allVisibleFoldersSelected)) {
       onSelectionChange([]);
       onSlideshowSelectionChange([]);
+      onFolderSelectionChange([]);
     } else {
       onSelectionChange(imageIds);
       onSlideshowSelectionChange(slideshowIds);
+      onFolderSelectionChange(folderIds);
+    }
+  };
+
+  const handleShiftClick = (clickedItem: FileItem) => {
+    if (!lastSelectedId || clickedItem.id === 'parent-directory') return;
+
+    const currentIndex = filteredAndSortedItems.findIndex(item => item.id === clickedItem.id);
+    const lastIndex = filteredAndSortedItems.findIndex(item => item.id === lastSelectedId);
+
+    if (currentIndex === -1 || lastIndex === -1) return;
+
+    const start = Math.min(currentIndex, lastIndex);
+    const end = Math.max(currentIndex, lastIndex);
+    const itemsInRange = filteredAndSortedItems.slice(start, end + 1);
+
+    const newSelectedImages = new Set(selectedImages);
+    const newSelectedSlideshows = new Set(selectedSlideshows);
+    const newSelectedFolders = new Set(selectedFolders);
+
+    itemsInRange.forEach(item => {
+      if (item.id === 'parent-directory') return;
+      if (item.type === 'file') newSelectedImages.add(item.id);
+      if (item.type === 'slideshow') newSelectedSlideshows.add(item.id);
+      if (item.type === 'folder') newSelectedFolders.add(item.id);
+    });
+
+    onSelectionChange(Array.from(newSelectedImages));
+    onSlideshowSelectionChange(Array.from(newSelectedSlideshows));
+    onFolderSelectionChange(Array.from(newSelectedFolders));
+  };
+
+  const handleItemClick = (item: FileItem, e: React.MouseEvent) => {
+    if (item.id === 'parent-directory') {
+      const currentFolder = folders.find(f => f.id === currentFolderId);
+      onCurrentFolderIdChange(currentFolder?.parent_id || null);
+      return;
+    }
+
+    if (e.shiftKey && lastSelectedId) {
+      handleShiftClick(item);
+      return;
+    }
+
+    // Handle Ctrl/Cmd click (toggle selection)
+    if (e.ctrlKey || e.metaKey) {
+      if (item.type === 'file') {
+        const isSelected = selectedImages.includes(item.id);
+        const newSelection = isSelected
+          ? selectedImages.filter(id => id !== item.id)
+          : [...selectedImages, item.id];
+        onSelectionChange(newSelection);
+        if (!isSelected) setLastSelectedId(item.id);
+      } else if (item.type === 'slideshow') {
+        const isSelected = selectedSlideshows.includes(item.id);
+        const newSelection = isSelected
+          ? selectedSlideshows.filter(id => id !== item.id)
+          : [...selectedSlideshows, item.id];
+        onSlideshowSelectionChange(newSelection);
+        if (!isSelected) setLastSelectedId(item.id);
+      } else if (item.type === 'folder') {
+        const isSelected = selectedFolders.includes(item.id);
+        const newSelection = isSelected
+          ? selectedFolders.filter(id => id !== item.id)
+          : [...selectedFolders, item.id];
+        onFolderSelectionChange(newSelection);
+        if (!isSelected) setLastSelectedId(item.id);
+      }
+      return;
+    }
+
+    // Handle normal click (select only this item, unless it's already selected then maybe do nothing or deselect others?)
+    // Standard behavior: Select this item, deselect others.
+
+    // For files:
+    if (item.type === 'file') {
+      onSelectionChange([item.id]);
+      onSlideshowSelectionChange([]);
+      onFolderSelectionChange([]);
+      setLastSelectedId(item.id);
+
+      // Unload slideshow if previously selected
+      if (selectedSlideshows.length > 0 && onSlideshowUnload) {
+        onSlideshowUnload();
+      }
+    }
+    // For slideshows:
+    else if (item.type === 'slideshow') {
+      onSelectionChange([]);
+      onSlideshowSelectionChange([item.id]);
+      onFolderSelectionChange([]);
+      setLastSelectedId(item.id);
+
+      if (item.slideshow) onSlideshowLoad(item.slideshow);
+    }
+    // For folders:
+    else if (item.type === 'folder') {
+      onSelectionChange([]);
+      onSlideshowSelectionChange([]);
+      onFolderSelectionChange([item.id]);
+      setLastSelectedId(item.id);
     }
   };
 
@@ -798,7 +921,7 @@ export function FileBrowser({
                     className="h-8 px-3 bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 text-red-500 hover:text-red-400 transition-all duration-300 rounded-lg gap-2 whitespace-nowrap"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium">Delete ({selectedImages.length + selectedSlideshows.length})</span>
+                    <span className="text-xs font-medium">Delete ({selectedImages.length + selectedSlideshows.length + selectedFolders.length})</span>
                   </Button>
                 </motion.div>
               )}
@@ -868,7 +991,11 @@ export function FileBrowser({
                   "group relative rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden",
                   viewMode === 'list' ? "flex items-center p-3 gap-4" : "aspect-[4/3] flex flex-col",
                   // Specific Styles based on Type
-                  item.type === 'folder' && "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/40",
+                  item.type === 'folder' && (
+                    selectedFolders.includes(item.id)
+                      ? "bg-blue-500/30 border-blue-500/50 ring-2 ring-blue-500"
+                      : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/40"
+                  ),
                   item.type === 'slideshow' && (
                     (item.slideshow?.uploadCount || 0) > 1 ? "bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/20 hover:border-yellow-500/40" :
                       (item.slideshow?.uploadCount === 1) ? "bg-green-500/10 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/40" :
@@ -903,48 +1030,12 @@ export function FileBrowser({
                     handleFolderDrop(e, item.id);
                   }
                 }}
-                onClick={() => {
-                  if (item.id === 'parent-directory') {
-                    // Go to parent folder
-                    const currentFolder = folders.find(f => f.id === currentFolderId);
-                    onCurrentFolderIdChange(currentFolder?.parent_id || null);
-                  } else if (item.type === 'folder') {
+                onDoubleClick={() => {
+                  if (item.type === 'folder' && item.id !== 'parent-directory') {
                     onCurrentFolderIdChange(item.id);
-                  } else if (item.type === 'file') {
-                    const isSelected = selectedImages.includes(item.id);
-                    const newSelection = isSelected
-                      ? selectedImages.filter(id => id !== item.id)
-                      : [...selectedImages, item.id];
-
-                    onSelectionChange(newSelection);
-
-                    // If we just selected a single image (and it wasn't selected before), 
-                    // or if we deselected the last image, we might want to update the preview
-                    // However, the Dashboard component watches selectedImages and updates the preview automatically.
-                    // The user request is "clicking an image, make sure it loads it instantly into the tiktok preview, then deselecting it unloads it from the preview."
-                    // Since Dashboard.tsx handles the preview based on selectedImages, simply updating the selection here should trigger the update.
-                    // But if we want to be explicit about "loading instantly", we can ensure the preview mode is active.
-
-                    // If we are selecting a file, we want to ensure we're not in slideshow mode
-                    if (!isSelected) {
-                      onSlideshowSelectionChange([]);
-                      if (onSlideshowUnload) onSlideshowUnload();
-                    }
-                  } else if (item.type === 'slideshow') {
-                    const newSelection = selectedSlideshows.includes(item.id)
-                      ? selectedSlideshows.filter(id => id !== item.id)
-                      : [...selectedSlideshows, item.id];
-                    onSlideshowSelectionChange(newSelection);
-
-                    // If selecting a slideshow, load it. If deselecting, unload it.
-                    if (!selectedSlideshows.includes(item.id)) {
-                      if (item.slideshow) onSlideshowLoad(item.slideshow);
-                    } else {
-                      // If we are deselecting the currently loaded slideshow, unload it
-                      if (onSlideshowUnload) onSlideshowUnload();
-                    }
                   }
                 }}
+                onClick={(e) => handleItemClick(item, e)}
                 onContextMenu={(e) => handleContextMenu(e, item.type, item.id, item.name)}
               >
                 {item.type === 'folder' ? (

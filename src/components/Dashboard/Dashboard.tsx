@@ -33,6 +33,7 @@ export const Dashboard: React.FC = () => {
   const [selectedImages, setSelectedImages] = useState<string[]>([]);
   const [selectedImagesOrdered, setSelectedImagesOrdered] = useState<string[]>([]);
   const [selectedSlideshows, setSelectedSlideshows] = useState<string[]>([]);
+  const [selectedFolders, setSelectedFolders] = useState<string[]>([]);
   const [savedTemplates, setSavedTemplates] = useState<SlideshowTemplate[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(folderId || null);
 
@@ -400,6 +401,8 @@ export const Dashboard: React.FC = () => {
               }}
               selectedSlideshows={selectedSlideshows}
               onSlideshowSelectionChange={setSelectedSlideshows}
+              selectedFolders={selectedFolders}
+              onFolderSelectionChange={setSelectedFolders}
               folders={folders}
               onFoldersChange={setFolders}
               currentFolderId={currentFolderId}

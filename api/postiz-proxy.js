@@ -15,78 +15,80 @@ export async function OPTIONS(request) {
   return new Response(null, { status: 200, headers: corsHeaders });
 }
 
-const url = new URL(request.url);
-const searchParams = url.searchParams;
-let targetPath = searchParams.get('path');
+export async function GET(request) {
+  const url = new URL(request.url);
+  const searchParams = url.searchParams;
+  let targetPath = searchParams.get('path');
 
-// Handle both query parameter format and direct path format
-if (!targetPath) {
-  // Extract path from URL path (e.g., /api/postiz-proxy/integrations)
-  const pathSegments = url.pathname.split('/').filter(Boolean);
-  if (pathSegments.length >= 3 && pathSegments[0] === 'api' && pathSegments[1] === 'postiz-proxy') {
-    targetPath = pathSegments.slice(2).join('/');
-  } else {
-    targetPath = 'posts'; // Default
+  // Handle both query parameter format and direct path format
+  if (!targetPath) {
+    // Extract path from URL path (e.g., /api/postiz-proxy/integrations)
+    const pathSegments = url.pathname.split('/').filter(Boolean);
+    if (pathSegments.length >= 3 && pathSegments[0] === 'api' && pathSegments[1] === 'postiz-proxy') {
+      targetPath = pathSegments.slice(2).join('/');
+    } else {
+      targetPath = 'posts'; // Default
+    }
   }
-}
 
-// Construct target URL with path
-let targetUrl = `${POSTIZ_API_BASE}/${targetPath}`;
+  // Construct target URL with path
+  let targetUrl = `${POSTIZ_API_BASE}/${targetPath}`;
 
-// Append all other query parameters to the target URL
-const targetUrlObj = new URL(targetUrl);
-searchParams.forEach((value, key) => {
-  if (key !== 'path') {
-    targetUrlObj.searchParams.append(key, value);
-  }
-});
-targetUrl = targetUrlObj.toString();
+  // Append all other query parameters to the target URL
+  const targetUrlObj = new URL(targetUrl);
+  searchParams.forEach((value, key) => {
+    if (key !== 'path') {
+      targetUrlObj.searchParams.append(key, value);
+    }
+  });
+  targetUrl = targetUrlObj.toString();
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-};
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  };
 
-try {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: 'Authorization header required' }), {
-      status: 401,
+  try {
+    const authHeader = request.headers.get('authorization');
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: 'Authorization header required' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    const headers = {
+      'Authorization': authHeader,
+      'Content-Type': 'application/json',
+    };
+
+    console.log(`🔄 Proxying GET to: ${targetUrl} (extracted path: ${targetPath})`);
+
+    const response = await fetch(targetUrl, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.text();
+
+    return new Response(data, {
+      status: response.status,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': response.headers.get('content-type') || 'application/json',
+      },
+    });
+
+  } catch (error) {
+    console.error('Proxy error:', error);
+    return new Response(JSON.stringify({ error: 'Proxy error', details: error.message }), {
+      status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }
-
-  const headers = {
-    'Authorization': authHeader,
-    'Content-Type': 'application/json',
-  };
-
-  console.log(`🔄 Proxying GET to: ${targetUrl} (extracted path: ${targetPath})`);
-
-  const response = await fetch(targetUrl, {
-    method: 'GET',
-    headers,
-  });
-
-  const data = await response.text();
-
-  return new Response(data, {
-    status: response.status,
-    headers: {
-      ...corsHeaders,
-      'Content-Type': response.headers.get('content-type') || 'application/json',
-    },
-  });
-
-} catch (error) {
-  console.error('Proxy error:', error);
-  return new Response(JSON.stringify({ error: 'Proxy error', details: error.message }), {
-    status: 500,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-  });
 }
-}
+
 
 export async function POST(request) {
   const url = new URL(request.url);
