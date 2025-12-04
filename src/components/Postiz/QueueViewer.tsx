@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ListOrdered, Loader2, CheckCircle, AlertCircle, Clock, Trash2, RefreshCw } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Progress } from '@/components/ui/progress';
 import { useBulkPost } from '../../contexts/BulkPostContext';
 import { cn } from '@/lib/utils';
 import { postizAPI } from '../../lib/postiz';
@@ -13,7 +14,7 @@ interface QueueViewerProps {
 }
 
 export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
-    const { jobQueue, refreshQueue } = useBulkPost();
+    const { jobQueue, refreshQueue, currentJobId, postingSchedule } = useBulkPost();
     const [profiles, setProfiles] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
@@ -102,54 +103,118 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                     ) : (
                         <div className="space-y-3">
                             {jobQueue.map((job, idx) => (
-                                <div key={job.id} className="flex items-center justify-between bg-black/40 border border-white/10 p-4 rounded-xl hover:border-white/20 transition-colors">
-                                    <div className="flex items-center gap-4">
-                                        <div className={cn(
-                                            "w-10 h-10 rounded-full flex items-center justify-center border",
-                                            job.status === 'completed' ? "bg-green-500/10 border-green-500/20 text-green-500" :
-                                                job.status === 'processing' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
-                                                    job.status === 'failed' ? "bg-red-500/10 border-red-500/20 text-red-500" :
-                                                        "bg-white/5 border-white/10 text-muted-foreground"
-                                        )}>
-                                            {job.status === 'completed' ? <CheckCircle className="w-5 h-5" /> :
-                                                job.status === 'processing' ? <Loader2 className="w-5 h-5 animate-spin" /> :
-                                                    job.status === 'failed' ? <AlertCircle className="w-5 h-5" /> :
-                                                        <Clock className="w-5 h-5" />}
-                                        </div>
-                                        <div>
-                                            <div className="font-medium text-white flex items-center gap-2">
-                                                {job.payload.slideshows.length} Posts
-                                                <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-muted-foreground border border-white/5">
-                                                    {job.payload.strategy}
-                                                </span>
+                                <div key={job.id} className="relative flex flex-col bg-black/40 border border-white/10 p-4 rounded-xl hover:border-white/20 transition-colors">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-4">
+                                            <div className={cn(
+                                                "w-10 h-10 rounded-full flex items-center justify-center border",
+                                                job.status === 'completed' ? "bg-green-500/10 border-green-500/20 text-green-500" :
+                                                    job.status === 'processing' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
+                                                        job.status === 'failed' ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                                                            "bg-white/5 border-white/10 text-muted-foreground"
+                                            )}>
+                                                {job.status === 'completed' ? <CheckCircle className="w-5 h-5" /> :
+                                                    job.status === 'processing' ? <Loader2 className="w-5 h-5 animate-spin" /> :
+                                                        job.status === 'failed' ? <AlertCircle className="w-5 h-5" /> :
+                                                            <Clock className="w-5 h-5" />}
                                             </div>
-                                            <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
-                                                <span>{getProfileName(job.payload.profiles[0])}</span>
-                                                <span>•</span>
-                                                <span>Batch {job.batch_index}/{job.total_batches}</span>
-                                                <span>•</span>
-                                                <span>Scheduled: {new Date(job.scheduled_start_time).toLocaleString()}</span>
-                                            </div>
-                                            {job.error && (
-                                                <div className="text-xs text-red-400 mt-1">
-                                                    Error: {job.error}
+                                            <div>
+                                                <div className="font-medium text-white flex items-center gap-2">
+                                                    {job.payload.slideshows.length} Posts
+                                                    <span className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-muted-foreground border border-white/5">
+                                                        {job.payload.strategy}
+                                                    </span>
                                                 </div>
+                                                <div className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+                                                    <span>{getProfileName(job.payload.profiles[0])}</span>
+                                                    <span>•</span>
+                                                    <span>Batch {job.batch_index}/{job.total_batches}</span>
+                                                    <span>•</span>
+                                                    <span>Scheduled: {new Date(job.scheduled_start_time).toLocaleString()}</span>
+                                                </div>
+                                                {job.error && (
+                                                    <div className="text-xs text-red-400 mt-1">
+                                                        Error: {job.error}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-2">
+                                            {job.status !== 'processing' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                                    onClick={() => handleDeleteJob(job.id)}
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
-                                        {job.status === 'pending' && (
-                                            <Button
-                                                variant="ghost"
-                                                size="icon"
-                                                className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                                onClick={() => handleDeleteJob(job.id)}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
-                                        )}
-                                    </div>
+                                    {/* Detailed Progress for Processing Job */}
+                                    {job.status === 'processing' && job.id === currentJobId && postingSchedule.length > 0 && (
+                                        <div className="w-full mt-3 border-t border-white/10 pt-3">
+                                            <div className="flex justify-between text-xs text-muted-foreground mb-2">
+                                                <span className="font-medium">Batch Progress</span>
+                                                <span className="font-mono">
+                                                    {postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length}/{postingSchedule.length}
+                                                </span>
+                                            </div>
+                                            <Progress
+                                                value={(postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length / Math.max(postingSchedule.length, 1)) * 100}
+                                                className="h-2 bg-white/5 mb-3"
+                                            />
+
+                                            {/* Individual Post Status */}
+                                            <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                                                {postingSchedule.map((post, postIdx) => (
+                                                    <div
+                                                        key={post.slideshowId}
+                                                        className={cn(
+                                                            "flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors",
+                                                            post.status === 'success' ? "bg-green-500/10 border border-green-500/20" :
+                                                                post.status === 'error' ? "bg-red-500/10 border border-red-500/20" :
+                                                                    post.status === 'posting' ? "bg-blue-500/10 border border-blue-500/20" :
+                                                                        "bg-white/5 border border-white/10"
+                                                        )}
+                                                    >
+                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                            <span className="text-muted-foreground font-mono">#{postIdx + 1}</span>
+                                                            <span className="truncate text-white/90">{post.slideshowTitle}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            {post.status === 'success' && (
+                                                                <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                                                            )}
+                                                            {post.status === 'error' && (
+                                                                <AlertCircle className="w-3.5 h-3.5 text-red-500" />
+                                                            )}
+                                                            {post.status === 'posting' && (
+                                                                <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+                                                            )}
+                                                            {post.status === 'pending' && (
+                                                                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+
+                                            <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/10 text-xs">
+                                                <span className="text-green-400 flex items-center gap-1">
+                                                    <CheckCircle className="w-3 h-3" />
+                                                    {postingSchedule.filter(s => s.status === 'success').length} successful
+                                                </span>
+                                                <span className="text-red-400 flex items-center gap-1">
+                                                    <AlertCircle className="w-3 h-3" />
+                                                    {postingSchedule.filter(s => s.status === 'error').length} failed
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>

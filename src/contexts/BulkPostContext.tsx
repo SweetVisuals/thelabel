@@ -50,6 +50,7 @@ interface BulkPostContextType {
     statusMessage: string;
     jobQueue: JobQueueItem[];
     lastScheduledTime: Date | null;
+    currentJobId: string | null;
     startBulkPost: (
         slideshows: SlideshowMetadata[],
         profiles: string[],
@@ -63,6 +64,7 @@ interface BulkPostContextType {
         }
     ) => Promise<void>;
     stopBulkPost: () => void;
+    refreshQueue: () => Promise<void>;
 }
 
 const BulkPostContext = createContext<BulkPostContextType | undefined>(undefined);
@@ -83,6 +85,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [statusMessage, setStatusMessage] = useState('');
     const [jobQueue, setJobQueue] = useState<JobQueueItem[]>([]);
     const [lastScheduledTime, setLastScheduledTime] = useState<Date | null>(null);
+    const [currentJobId, setCurrentJobId] = useState<string | null>(null);
 
     const stopProcessingRef = useRef(false);
 
@@ -178,7 +181,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
         };
 
-        const interval = setInterval(checkQueue, 10000); // Check every 10 seconds
+        const interval = setInterval(checkQueue, 1000); // Check every second
         return () => clearInterval(interval);
     }, [jobQueue, isPosting]);
 
@@ -253,6 +256,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
 
             setIsPosting(true);
+            setCurrentJobId(job.id);
             stopProcessingRef.current = false;
             setStatusMessage(`Starting job ${job.id} (Batch ${job.batch_index}/${job.total_batches})...`);
 
@@ -265,14 +269,22 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             const applyScheduleConstraints = (baseTime: Date): Date => {
                 const hour = baseTime.getHours();
+
+                // If post falls between 10pm (22:00) and midnight, move to 9am next day
+                if (hour >= 22) {
+                    const adjustedTime = new Date(baseTime);
+                    adjustedTime.setDate(adjustedTime.getDate() + 1);
+                    adjustedTime.setHours(9, 0, 0, 0);
+                    return adjustedTime;
+                }
+
+                // If post falls between midnight and 9am, move to 9am same day
                 if (hour >= 0 && hour < 9) {
                     const adjustedTime = new Date(baseTime);
                     adjustedTime.setHours(9, 0, 0, 0);
-                    if (adjustedTime < baseTime) {
-                        adjustedTime.setDate(adjustedTime.getDate() + 1);
-                    }
                     return adjustedTime;
                 }
+
                 return baseTime;
             };
 
@@ -433,6 +445,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             toast.error('Job failed');
         } finally {
             setIsPosting(false);
+            setCurrentJobId(null);
             setIsPaused(false);
             setNextResumeTime(null);
             stopProcessingRef.current = false;
@@ -535,7 +548,31 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             toast.error('Failed to add jobs to queue');
         } else {
             toast.success(`Added ${jobsToInsert.length} batches to queue`);
-            fetchQueue();
+            await fetchQueue();
+
+            // Trigger immediate processing of first batch if scheduled for now
+            const now = new Date();
+            const firstJob = jobsToInsert[0];
+            if (firstJob && new Date(firstJob.scheduled_start_time) <= now) {
+                // Fetch the newly inserted jobs to get their IDs
+                const { data: insertedJobs } = await supabase
+                    .from('job_queue')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('status', 'pending')
+                    .order('created_at', { ascending: false })
+                    .limit(jobsToInsert.length);
+
+                if (insertedJobs && insertedJobs.length > 0) {
+                    const jobToProcess = insertedJobs.find(j =>
+                        new Date(j.scheduled_start_time) <= now
+                    );
+                    if (jobToProcess) {
+                        console.log('Starting first batch immediately:', jobToProcess.id);
+                        processJob(jobToProcess);
+                    }
+                }
+            }
         }
     }, [fetchQueue]);
 
@@ -552,8 +589,10 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             statusMessage,
             jobQueue,
             lastScheduledTime,
+            currentJobId,
             startBulkPost,
-            stopBulkPost
+            stopBulkPost,
+            refreshQueue: fetchQueue
         }}>
             {children}
         </BulkPostContext.Provider>
