@@ -14,10 +14,11 @@ interface QueueViewerProps {
 }
 
 export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
-    const { jobQueue, refreshQueue, currentJobId, postingSchedule } = useBulkPost();
+    const { jobQueue, refreshQueue, currentJobId, postingSchedule, rescheduleQueue } = useBulkPost();
     // Force re-deploy
     const [profiles, setProfiles] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [expandedJobs, setExpandedJobs] = useState<string[]>([]);
 
     useEffect(() => {
         loadProfiles();
@@ -105,7 +106,14 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                         <div className="space-y-3">
                             {jobQueue.map((job, idx) => (
                                 <div key={job.id} className="relative flex flex-col bg-black/40 border border-white/10 p-4 rounded-xl hover:border-white/20 transition-colors">
-                                    <div className="flex items-center justify-between mb-2">
+                                    <div
+                                        className="flex items-center justify-between mb-2 cursor-pointer"
+                                        onClick={() => {
+                                            if (job.status === 'pending') {
+                                                setExpandedJobs(prev => prev.includes(job.id) ? prev.filter(id => id !== job.id) : [...prev, job.id]);
+                                            }
+                                        }}
+                                    >
                                         <div className="flex items-center gap-4">
                                             <div className={cn(
                                                 "w-10 h-10 rounded-full flex items-center justify-center border",
@@ -132,6 +140,11 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                                     <span>Batch {job.batch_index}/{job.total_batches}</span>
                                                     <span>•</span>
                                                     <span>Scheduled: {new Date(job.scheduled_start_time).toLocaleString()}</span>
+                                                    {job.status === 'pending' && new Date(job.scheduled_start_time) > new Date() && (
+                                                        <span className="text-blue-400 ml-2">
+                                                            (Starts in {Math.ceil((new Date(job.scheduled_start_time).getTime() - new Date().getTime()) / 60000)} mins)
+                                                        </span>
+                                                    )}
                                                 </div>
                                                 {job.error && (
                                                     <div className="text-xs text-red-400 mt-1">
@@ -147,13 +160,34 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                                     variant="ghost"
                                                     size="icon"
                                                     className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                                    onClick={() => handleDeleteJob(job.id)}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteJob(job.id);
+                                                    }}
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </Button>
                                             )}
                                         </div>
                                     </div>
+
+                                    {/* Expanded View for Pending Jobs */}
+                                    {job.status === 'pending' && expandedJobs.includes(job.id) && (
+                                        <div className="w-full mt-3 border-t border-white/10 pt-3">
+                                            <div className="text-xs text-muted-foreground mb-2 font-medium">Scheduled Posts</div>
+                                            <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                                                {job.payload.slideshows.map((slideshow, sIdx) => (
+                                                    <div key={slideshow.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/10">
+                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                            <span className="text-muted-foreground font-mono">#{sIdx + 1}</span>
+                                                            <span className="truncate text-white/90">{slideshow.title}</span>
+                                                        </div>
+                                                        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Detailed Progress for Processing Job */}
                                     {job.status === 'processing' && (
@@ -218,11 +252,18 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                     <div className="text-xs text-muted-foreground">
                         Background jobs run every minute. Keep your API key saved in settings.
                     </div>
-                    {jobQueue.some(j => ['completed', 'failed'].includes(j.status)) && (
-                        <Button variant="outline" size="sm" onClick={handleClearCompleted} className="border-white/10 hover:bg-white/5">
-                            Clear Completed
-                        </Button>
-                    )}
+                    <div className="flex gap-2">
+                        {jobQueue.some(j => j.status === 'pending') && (
+                            <Button variant="outline" size="sm" onClick={rescheduleQueue} className="border-white/10 hover:bg-white/5 text-blue-400 hover:text-blue-300">
+                                <Clock className="w-4 h-4 mr-2" /> Reschedule All
+                            </Button>
+                        )}
+                        {jobQueue.some(j => ['completed', 'failed'].includes(j.status)) && (
+                            <Button variant="outline" size="sm" onClick={handleClearCompleted} className="border-white/10 hover:bg-white/5">
+                                Clear Completed
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </motion.div>
         </div>

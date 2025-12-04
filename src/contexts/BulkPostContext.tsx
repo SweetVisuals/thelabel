@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect } from 'react';
+import React, { createContext, useContext, useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { SlideshowMetadata } from '../types';
 import { postizUploadService } from '../lib/postizUploadService';
 import { slideshowService } from '../lib/slideshowService';
@@ -67,6 +67,7 @@ interface BulkPostContextType {
     ) => Promise<void>;
     stopBulkPost: () => void;
     refreshQueue: () => Promise<void>;
+    rescheduleQueue: () => Promise<void>;
     nextBatchStartTime: Date | null;
 }
 
@@ -641,9 +642,63 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         stopProcessingRef.current = true;
     };
 
-    const nextBatchStartTime = jobQueue.find(j => j.status === 'pending')?.scheduled_start_time
-        ? new Date(jobQueue.find(j => j.status === 'pending')!.scheduled_start_time)
-        : null;
+    const rescheduleQueue = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        // Fetch all pending jobs
+        const { data: jobs, error } = await supabase
+            .from('job_queue')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .order('scheduled_start_time', { ascending: true });
+
+        if (error || !jobs || jobs.length === 0) return;
+
+        let currentStartTime = new Date();
+        // Add a small buffer so the first one isn't "in the past" immediately if processing takes time
+        currentStartTime = addMinutes(currentStartTime, 1);
+
+        for (let i = 0; i < jobs.length; i++) {
+            const job = jobs[i];
+            const settings = job.payload.settings;
+
+            // Update the job's scheduled time
+            await supabase
+                .from('job_queue')
+                .update({ scheduled_start_time: currentStartTime.toISOString() })
+                .eq('id', job.id);
+
+            // Calculate next start time
+            if (job.payload.strategy === 'batch') {
+                const batchSize = job.payload.slideshows.length;
+                const durationMinutes = (batchSize - 1) * settings.postIntervalMinutes;
+                currentStartTime = addMinutes(currentStartTime, durationMinutes);
+                currentStartTime = addHours(currentStartTime, settings.batchIntervalHours);
+            } else {
+                // Interval strategy
+                const durationMinutes = (job.payload.slideshows.length - 1) * (settings.intervalHours * 60);
+                currentStartTime = addMinutes(currentStartTime, durationMinutes);
+                currentStartTime = addHours(currentStartTime, settings.intervalHours);
+            }
+        }
+
+        toast.success('Queue rescheduled successfully');
+        fetchQueue();
+    };
+
+    const nextBatchStartTime = useMemo(() => {
+        const pendingJobs = jobQueue.filter(j => j.status === 'pending');
+        if (pendingJobs.length === 0) return null;
+
+        // Sort by scheduled_start_time to find the next one
+        const sorted = [...pendingJobs].sort((a, b) =>
+            new Date(a.scheduled_start_time).getTime() - new Date(b.scheduled_start_time).getTime()
+        );
+
+        return new Date(sorted[0].scheduled_start_time);
+    }, [jobQueue]);
 
     return (
         <BulkPostContext.Provider value={{
@@ -660,6 +715,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             startBulkPost,
             stopBulkPost,
             refreshQueue: fetchQueue,
+            rescheduleQueue,
             nextBatchStartTime
         }}>
             {children}
