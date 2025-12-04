@@ -22,7 +22,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
     // const { theme } = useTheme(); // Unused
-    const { statusMessage, isPosting, isPaused, jobQueue, currentJobId, postingSchedule } = useBulkPost();
+    const { statusMessage, isPosting, isPaused, jobQueue, currentJobId, postingSchedule, currentBatchIndex, totalBatches } = useBulkPost();
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     // const [rateLimitCountdown, setRateLimitCountdown] = useState<string>(''); // Unused
     // const [uploadError, setUploadError] = useState<string>(''); // Unused
@@ -238,6 +238,14 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
 
                             {isPosting && postingSchedule.length > 0 ? (
                                 <>
+                                    <span className="text-blue-400">
+                                        {totalBatches} Batches Scheduled
+                                    </span>
+                                    <span>•</span>
+                                    <span className="text-blue-400">
+                                        Batch #{currentBatchIndex}
+                                    </span>
+                                    <span>•</span>
                                     <span className="flex items-center space-x-1 text-blue-400">
                                         <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
                                         <span>
@@ -248,15 +256,11 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                     <span className="text-green-400">
                                         ✓ {postingSchedule.filter(s => s.status === 'success').length}
                                     </span>
-                                    <span>•</span>
-                                    <span className="text-red-400">
-                                        ✗ {postingSchedule.filter(s => s.status === 'error').length}
-                                    </span>
-                                    {jobQueue.length > 1 && (
+                                    {postingSchedule.filter(s => s.status === 'error').length > 0 && (
                                         <>
                                             <span>•</span>
-                                            <span className="text-muted-foreground">
-                                                {jobQueue.length - 1} batches queued
+                                            <span className="text-red-400">
+                                                ✗ {postingSchedule.filter(s => s.status === 'error').length}
                                             </span>
                                         </>
                                     )}

@@ -51,6 +51,8 @@ interface BulkPostContextType {
     jobQueue: JobQueueItem[];
     lastScheduledTime: Date | null;
     currentJobId: string | null;
+    currentBatchIndex: number;
+    totalBatches: number;
     startBulkPost: (
         slideshows: SlideshowMetadata[],
         profiles: string[],
@@ -86,6 +88,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [jobQueue, setJobQueue] = useState<JobQueueItem[]>([]);
     const [lastScheduledTime, setLastScheduledTime] = useState<Date | null>(null);
     const [currentJobId, setCurrentJobId] = useState<string | null>(null);
+    const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
+    const [totalBatches, setTotalBatches] = useState(0);
 
     const stopProcessingRef = useRef(false);
 
@@ -239,7 +243,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         }
     };
 
-    const processJob = async (job: JobQueueItem) => {
+    const processJob = useCallback(async (job: JobQueueItem) => {
         if (isPosting) return;
 
         try {
@@ -257,6 +261,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             setIsPosting(true);
             setCurrentJobId(job.id);
+            setCurrentBatchIndex(job.batch_index);
+            setTotalBatches(job.total_batches);
             stopProcessingRef.current = false;
             setStatusMessage(`Starting job ${job.id} (Batch ${job.batch_index}/${job.total_batches})...`);
 
@@ -446,6 +452,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         } finally {
             setIsPosting(false);
             setCurrentJobId(null);
+            setCurrentBatchIndex(0);
+            setTotalBatches(0);
             setIsPaused(false);
             setNextResumeTime(null);
             stopProcessingRef.current = false;
@@ -453,7 +461,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setStatusMessage('');
             fetchQueue(); // Refresh queue immediately
         }
-    };
+    }, [isPosting, fetchQueue]);
 
     const startBulkPost = useCallback(async (
         slideshows: SlideshowMetadata[],
@@ -574,7 +582,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 }
             }
         }
-    }, [fetchQueue]);
+    }, [fetchQueue, processJob]);
 
     const stopBulkPost = () => {
         stopProcessingRef.current = true;
@@ -590,6 +598,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             jobQueue,
             lastScheduledTime,
             currentJobId,
+            currentBatchIndex,
+            totalBatches,
             startBulkPost,
             stopBulkPost,
             refreshQueue: fetchQueue
