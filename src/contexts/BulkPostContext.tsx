@@ -102,7 +102,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             .from('job_queue')
             .select('*')
             .eq('user_id', user.id)
-            .in('status', ['pending', 'processing', 'failed'])
+            .in('status', ['pending', 'processing', 'failed', 'completed'])
             .order('scheduled_start_time', { ascending: true });
 
         if (error) {
@@ -176,7 +176,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             const now = new Date();
             const readyJob = jobQueue.find(job =>
-                job.status === 'pending' && new Date(job.scheduled_start_time) <= now
+                (job.status === 'pending' && new Date(job.scheduled_start_time) <= now) ||
+                job.status === 'processing' // Resume interrupted jobs
             );
 
             if (readyJob) {
@@ -269,14 +270,15 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setCurrentBatchIndex(job.batch_index);
             setTotalBatches(job.total_batches);
             stopProcessingRef.current = false;
-            setStatusMessage(`Starting job ${job.id} (Batch ${job.batch_index}/${job.total_batches})...`);
+            setStatusMessage(`Starting Batch ${job.batch_index}/${job.total_batches}...`);
 
             const { slideshows, profiles, strategy, settings } = job.payload;
             const { intervalHours, postIntervalMinutes, batchIntervalHours } = settings;
 
             // Generate Schedule for this specific job/batch
             const schedule: PostingSchedule[] = [];
-            let currentTime = new Date(); // Start processing now
+            // Use settings.startTime as base to ensure correct scheduling even if processed early
+            let currentScheduledTime = new Date(settings.startTime);
 
             const applyScheduleConstraints = (baseTime: Date): Date => {
                 const hour = baseTime.getHours();
@@ -303,8 +305,6 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             // 'interval' strategy means "post these items with intervalHours"
             // 'first-now' is handled by the first batch having start time = now, and subsequent items having interval
 
-            let currentScheduledTime = new Date(currentTime);
-
             for (let i = 0; i < slideshows.length; i++) {
                 currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
 
@@ -325,6 +325,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             setPostingSchedule(schedule);
 
             let successfulCount = 0;
+            let failedCount = 0;
             let hasError = false;
             const failedSlideshows: SlideshowMetadata[] = [];
 
@@ -336,10 +337,22 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 setPostingSchedule(prev => prev.map((item, index) =>
                     index === i ? { ...item, status: 'posting' } : item
                 ));
-                setStatusMessage(`Posting ${i + 1}/${schedule.length}: ${scheduleItem.slideshowTitle}`);
+                setStatusMessage(`Batch ${job.batch_index}/${job.total_batches} - Posting ${i + 1}/${schedule.length} (${successfulCount} Success, ${failedCount} Failed): ${scheduleItem.slideshowTitle}`);
 
                 const slideshow = slideshows.find(s => s.id === scheduleItem.slideshowId);
                 if (!slideshow) continue;
+
+                // Check if this slideshow was already successfully posted (Resume Logic)
+                // We need to fetch the fresh status because the job payload might be stale
+                const freshSlideshow = await slideshowService.loadSlideshow(slideshow.id);
+                if (freshSlideshow?.lastUploadStatus === 'success') {
+                    console.log(`Skipping already posted slideshow: ${slideshow.title}`);
+                    setPostingSchedule(prev => prev.map((item, index) =>
+                        index === i ? { ...item, status: 'success' } : item
+                    ));
+                    successfulCount++;
+                    continue;
+                }
 
                 // For 'first-now', the first item of the first batch should be immediate
                 // But since we split jobs, we need to know if this is the VERY first item of the VERY first batch
@@ -400,6 +413,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         setPostingSchedule(prev => prev.map((item, index) =>
                             index === i ? { ...item, status: 'error', error: result.error } : item
                         ));
+                        failedCount++;
                         failedSlideshows.push(slideshow);
                     }
                 }
@@ -525,6 +539,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     currentStartTime = addHours(currentStartTime, settings.batchIntervalHours);
                 }
 
+                // For the FIRST batch, we want it to be processed immediately by the app
+                const scheduledProcessingTime = (i === 0) ? new Date() : currentStartTime;
+
                 const payload: JobPayload = {
                     slideshows: batchSlideshows,
                     profiles,
@@ -539,7 +556,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     user_id: user.id,
                     account_id: profiles[0],
                     status: 'pending',
-                    scheduled_start_time: currentStartTime.toISOString(),
+                    scheduled_start_time: scheduledProcessingTime.toISOString(),
                     batch_index: i + 1,
                     total_batches: totalBatches,
                     payload
