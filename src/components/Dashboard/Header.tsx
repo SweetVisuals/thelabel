@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, LogOut, Folder, Home, ChevronRight, Sparkles, Calendar as CalendarIcon, ListOrdered, Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from "@/lib/utils";
 import { useBulkPost } from '../../contexts/BulkPostContext';
@@ -22,10 +22,32 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
     // const { theme } = useTheme(); // Unused
-    const { statusMessage, isPosting, isPaused, jobQueue, currentJobId, postingSchedule, currentBatchIndex, totalBatches } = useBulkPost();
+    const { statusMessage, isPosting, isPaused, jobQueue, postingSchedule, currentBatchIndex, totalBatches, nextBatchStartTime } = useBulkPost();
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
-    // const [rateLimitCountdown, setRateLimitCountdown] = useState<string>(''); // Unused
-    // const [uploadError, setUploadError] = useState<string>(''); // Unused
+    const [countdown, setCountdown] = useState<string>('');
+
+    // Countdown timer effect
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (nextBatchStartTime) {
+                const now = new Date();
+                const diff = nextBatchStartTime.getTime() - now.getTime();
+
+                if (diff <= 0) {
+                    setCountdown('Starting...');
+                } else {
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                    setCountdown(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+                }
+            } else {
+                setCountdown('');
+            }
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [nextBatchStartTime]);
 
     const handleSignOut = async () => {
         await signOut();
@@ -48,9 +70,6 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                 <div className="relative px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
                         {/* ... Logo, Breadcrumb, Actions ... */}
-                        {/* (Keep existing content exactly as is, just need to make sure I don't delete it) */}
-                        {/* Since I am replacing the whole file or large chunk, I should be careful. */}
-                        {/* I have the full content from view_file. I will rewrite the component to ensure I don't miss anything. */}
                         <div className="flex items-center space-x-6">
                             {/* Logo */}
                             <motion.div
@@ -287,7 +306,16 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                         <span>Processing Batch on Server...</span>
                                     </span>
                                 ) : (
-                                    <span>{jobQueue.length > 0 ? `${jobQueue.length} Batches Scheduled` : "Ready"}</span>
+                                    <span className={cn(jobQueue.length > 0 && "text-blue-400")}>
+                                        {jobQueue.length > 0 ? (
+                                            <>
+                                                {jobQueue.length} Batches Scheduled
+                                                {nextBatchStartTime && countdown && (
+                                                    <> - Waiting for next batch {countdown}</>
+                                                )}
+                                            </>
+                                        ) : "Ready"}
+                                    </span>
                                 )
                             )}
                         </motion.div>

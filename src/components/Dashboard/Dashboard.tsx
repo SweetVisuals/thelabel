@@ -626,8 +626,9 @@ export const Dashboard: React.FC = () => {
             slideshows={slideshowsForBulkPost}
             onClose={() => setShowBulkPostModal(false)}
             onPostSuccess={(postIds) => {
-              toast.success(`Successfully posted ${postIds.length} slideshows!`);
+              toast.success(`Successfully scheduled ${postIds.length} slideshows!`);
               setShowBulkPostModal(false);
+              setSelectedSlideshows([]);
             }}
           />
         )}

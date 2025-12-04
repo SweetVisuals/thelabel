@@ -185,6 +185,10 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       }
     );
 
+    if (onPostSuccess) {
+      onPostSuccess(slideshows.map(s => s.id));
+    }
+
     // Close modal immediately
     onClose();
   };

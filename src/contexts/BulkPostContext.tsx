@@ -67,6 +67,7 @@ interface BulkPostContextType {
     ) => Promise<void>;
     stopBulkPost: () => void;
     refreshQueue: () => Promise<void>;
+    nextBatchStartTime: Date | null;
 }
 
 const BulkPostContext = createContext<BulkPostContextType | undefined>(undefined);
@@ -640,6 +641,10 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         stopProcessingRef.current = true;
     };
 
+    const nextBatchStartTime = jobQueue.find(j => j.status === 'pending')?.scheduled_start_time
+        ? new Date(jobQueue.find(j => j.status === 'pending')!.scheduled_start_time)
+        : null;
+
     return (
         <BulkPostContext.Provider value={{
             isPosting,
@@ -654,7 +659,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             totalBatches,
             startBulkPost,
             stopBulkPost,
-            refreshQueue: fetchQueue
+            refreshQueue: fetchQueue,
+            nextBatchStartTime
         }}>
             {children}
         </BulkPostContext.Provider>
