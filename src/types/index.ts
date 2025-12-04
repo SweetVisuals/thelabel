@@ -120,6 +120,7 @@ export interface SlideshowMetadata {
   updated_at: string;
   user_id: string;
   folder_id?: string | null; // Folder association for drag and drop organization
+  uploadCount?: number;
 }
 
 // Postiz integration data
@@ -174,6 +175,7 @@ export const ASPECT_RATIO_PRESETS: AspectRatioPreset[] = [
   { id: '4:5', label: 'Portrait A', ratio: '4:5', description: 'Instagram post format', icon: '📱' },
   { id: '9:16', label: 'Story', ratio: '9:16', description: 'TikTok/Instagram story', icon: '📖' },
   { id: '16:9', label: 'Landscape', ratio: '16:9', description: 'Video landscape format', icon: '🎬' },
+  { id: '4:3', label: 'Standard', ratio: '4:3', description: 'Standard TV format', icon: '📺' },
   { id: '3:4', label: 'Portrait B', ratio: '3:4', description: 'Classic portrait ratio', icon: '👤' },
   { id: '2:3', label: 'Print', ratio: '2:3', description: 'Photography print ratio', icon: '🖼️' },
   { id: '21:9', label: 'Cinematic', ratio: '21:9', description: 'Ultra-wide cinematic', icon: '🎥' },
@@ -248,6 +250,7 @@ export interface BulkTemplateOptions {
     title?: string;
     caption?: string;
     hashtags?: string[];
+    randomizeHashtags?: boolean;
   };
   slideshowTitles?: string[]; // Optional custom titles for each slideshow
 }

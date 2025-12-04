@@ -23,12 +23,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({
     await onLogin(email, password);
   };
 
-  const useDemoAccount = async (demoEmail: string, demoPassword: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
-    await onLogin(demoEmail, demoPassword);
-  };
-
   return (
     <div className="w-full max-w-md mx-auto">
       <div className="bg-card rounded-2xl shadow-xl p-8">
@@ -104,34 +98,6 @@ export const LoginForm: React.FC<LoginFormProps> = ({
             {loading ? 'Signing In...' : 'Sign In'}
           </button>
         </form>
-
-        <div className="mt-6">
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-card text-muted-foreground">Or try demo accounts</span>
-            </div>
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <button
-              onClick={() => useDemoAccount('user1@example.com', 'password123')}
-              className="px-4 py-2 border border-primary/50 rounded-lg text-primary hover:bg-primary/10 transition-colors duration-200 text-sm font-medium"
-              disabled={loading}
-            >
-              Demo User 1
-            </button>
-            <button
-              onClick={() => useDemoAccount('user2@example.com', 'password123')}
-              className="px-4 py-2 border border-secondary rounded-lg text-secondary-foreground hover:bg-secondary/10 transition-colors duration-200 text-sm font-medium"
-              disabled={loading}
-            >
-              Demo User 2
-            </button>
-          </div>
-        </div>
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           Don't have an account?{' '}

@@ -10,110 +10,50 @@ class FontLoader {
    * Load TikTok fonts for canvas usage
    */
   async loadTikTokFonts(): Promise<void> {
-    const fontsToLoad = [
-      {
-        name: 'TikTok Sans Regular',
-        url: '/fonts/TikTokSans-Regular.ttf',
-        weight: '400',
-        style: 'normal'
-      },
-      {
-        name: 'TikTok Sans Medium',
-        url: '/fonts/TikTokSans-Medium.ttf',
-        weight: '500',
-        style: 'normal'
-      },
-      {
-        name: 'TikTok Sans Bold',
-        url: '/fonts/TikTokSans-Bold.ttf',
-        weight: '700',
-        style: 'normal'
-      },
-      {
-        name: 'TikTok Sans SemiBold',
-        url: '/fonts/TikTokSans-SemiBold.ttf',
-        weight: '600',
-        style: 'normal'
-      }
-    ];
+    // Instead of manually creating FontFace objects which creates a separate font instance,
+    // we will force the browser to load the fonts defined in our CSS (@font-face in index.css).
+    // This ensures consistency between the HTML preview and the Canvas.
 
-    const loadPromises = fontsToLoad.map(font => this.loadFont(font.name, font.url, font.weight, font.style));
+    const fontString = '16px "TikTok Sans"';
 
     try {
-      await Promise.all(loadPromises);
-      // Wait for fonts to be ready in the document
-      await document.fonts.ready;
-      console.log('✅ All TikTok fonts loaded successfully for canvas');
+      // Check if already loaded
+      if (document.fonts.check(fontString)) {
+        console.log('✅ TikTok Sans fonts already loaded');
+        return;
+      }
+
+      console.log('⏳ Waiting for TikTok Sans fonts to load...');
+      await document.fonts.load(fontString);
+
+      // Also load bold just in case
+      await document.fonts.load('bold 16px "TikTok Sans"');
+
+      console.log('✅ TikTok Sans fonts loaded via CSS');
     } catch (error) {
-      console.warn('⚠️ Some TikTok fonts failed to load:', error);
-      // Continue even if some fonts fail - fallbacks will work
+      console.warn('⚠️ Error waiting for TikTok fonts:', error);
     }
   }
 
   /**
    * Load a single font using FontFace API
+   * @deprecated Using CSS loading instead
    */
   private async loadFont(fontName: string, url: string, weight: string = '400', style: string = 'normal'): Promise<void> {
-    // Check if already loaded
-    if (this.loadedFonts.has(fontName)) {
-      return;
-    }
-
-    // Check if already loading
-    if (this.loadingPromises.has(fontName)) {
-      return this.loadingPromises.get(fontName);
-    }
-
-    const loadPromise = (async () => {
-      try {
-        const fontFace = new FontFace(fontName, `url(${url})`, {
-          weight: weight as any,
-          style: style as any,
-          display: 'swap'
-        });
-
-        // Load the font
-        const loadedFont = await fontFace.load();
-
-        // Add to document fonts
-        document.fonts.add(loadedFont);
-
-        // Mark as loaded
-        this.loadedFonts.add(fontName);
-
-        console.log(`✅ Font loaded: ${fontName}`);
-      } catch (error) {
-        console.warn(`⚠️ Failed to load font ${fontName}:`, error);
-        // Don't throw - allow fallbacks to work
-      }
-    })();
-
-    this.loadingPromises.set(fontName, loadPromise);
-    return loadPromise;
+    // No-op, we rely on CSS now
+    return Promise.resolve();
   }
 
   /**
    * Get the appropriate font family string for canvas
    */
   getCanvasFontFamily(fontFamily: string, fontWeight: string = '400'): string {
-    // Map common font families to loaded TikTok fonts
+    // Always return the generic family name defined in CSS
     if (fontFamily.toLowerCase().includes('tiktok')) {
-      switch (fontWeight) {
-        case '700':
-        case 'bold':
-          return '"TikTok Sans Bold", "TikTok Sans SemiBold", Arial, sans-serif';
-        case '600':
-        case 'semibold':
-          return '"TikTok Sans SemiBold", "TikTok Sans Bold", Arial, sans-serif';
-        case '500':
-        case 'medium':
-          return '"TikTok Sans Medium", "TikTok Sans Regular", Arial, sans-serif';
-        default:
-          return '"TikTok Sans Regular", Arial, sans-serif';
-      }
+      return '"TikTok Sans", Arial, sans-serif';
     }
 
-    // For other fonts, return as-is with fallbacks
+    // For other fonts, return as-is
     return `"${fontFamily}", Arial, sans-serif`;
   }
 

@@ -45,7 +45,6 @@ interface TikTokPreviewProps {
   transitionEffect?: 'fade' | 'slide' | 'zoom';
   musicEnabled?: boolean;
   aspectRatio?: string;
-  cutLength?: number;
   previewMode?: boolean;
   onTextOverlaysChange?: (overlays: TextOverlay[]) => void;
   onTitleChange?: (title: string) => void;
@@ -72,7 +71,6 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   transitionEffect = 'fade',
   musicEnabled = false,
   aspectRatio = '9:16',
-  cutLength = 5,
   previewMode = false,
   onTextOverlaysChange,
   onTitleChange,
@@ -142,20 +140,20 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       currentSlideshow: !!currentSlideshow,
       currentSlideshowHashtags: currentSlideshow?.hashtags,
       previewMode,
-      cutLength,
+      previewMode,
       hashtags: hashtags,
       firstFewImages: images.slice(0, 3).map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' }))
     });
-  }, [images, selectedImages, currentSlideshow, previewMode, cutLength, hashtags]);
+  }, [images, selectedImages, currentSlideshow, previewMode, hashtags]);
 
   const handleRemixSlides = () => {
     if (!currentSlideshow || !currentSlideshow.condensedSlides || currentSlideshow.condensedSlides.length < 2) return;
-    
-    console.log('🎲 Starting remix with slideshow slides:', currentSlideshow.condensedSlides.length, 'cutLength:', cutLength);
-    
-    // Always limit to cutLength when remixing
-    const slidesToRemix = Math.min(cutLength, currentSlideshow.condensedSlides.length);
-    const baseSlides = currentSlideshow.condensedSlides.slice(0, slidesToRemix).map((slide: any) => ({
+
+    console.log('🎲 Starting remix with slideshow slides:', currentSlideshow.condensedSlides.length);
+
+    // Use all slides when remixing
+    const slidesToRemix = currentSlideshow.condensedSlides.length;
+    const baseSlides = currentSlideshow.condensedSlides.map((slide: any) => ({
       id: slide.originalImageId || slide.id,
       condensedSlideId: slide.id,
       url: slide.condensedImageUrl,
@@ -165,21 +163,21 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       aspectRatio: slide.aspectRatio,
       file: new File([], `slide-${slide.id}.jpg`),
     }));
-    
+
     if (baseSlides.length < 2) return;
-    
+
     const shuffledImages = [...baseSlides];
     for (let i = shuffledImages.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
       [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
     }
-    
+
     console.log('🔀 Shuffled slideshow slides:', shuffledImages.map(img => img.id));
-    
+
     setRemixedSlideshowImages(shuffledImages);
     setIsRemixed(true);
     setCurrentSlide(0);
-    
+
     console.log('🎉 Slideshow remix completed! New order:', shuffledImages.map(img => img.id));
   };
 
@@ -189,10 +187,9 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
       selectedImagesCount: selectedImages.length,
       selectedImageIds: selectedImages,
       currentSlideshow: !!currentSlideshow,
-      previewMode,
-      cutLength
+      previewMode
     });
-    
+
     // Always apply cut length limit - it should override the preview
     let imagesToProcess: any[] = [];
     let originalCount = 0;
@@ -200,7 +197,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
     if (currentSlideshow && currentSlideshow.condensedSlides && currentSlideshow.condensedSlides.length > 0) {
       console.log('📱 Using loaded slideshow (preview mode)');
       originalCount = currentSlideshow.condensedSlides.length;
-      
+
       // Get all available slides but limit by cutLength
       const availableSlides = currentSlideshow.condensedSlides.map((slide: any) => ({
         id: slide.originalImageId || slide.id,
@@ -212,32 +209,31 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
         aspectRatio: slide.aspectRatio,
         file: new File([], `slide-${slide.id}.jpg`),
       }));
-      
+
       // Apply remix if active, but still respect cutLength
       if (isRemixed && remixedSlideshowImages.length > 0) {
-        const remixedLimited = remixedSlideshowImages.slice(0, cutLength);
-        imagesToProcess = remixedLimited;
+        imagesToProcess = remixedSlideshowImages;
       } else {
-        // Limit by cutLength regardless of remix state
-        imagesToProcess = availableSlides.slice(0, cutLength);
+        // Use all available slides
+        imagesToProcess = availableSlides;
       }
     }
     else if (selectedImages.length > 0) {
       console.log('🖼️ Creating slideshow from selected images');
-      
+
       const imagesMap = new Map(images.map(img => [img.id, img]));
-      
+
       console.log('🔍 Images map debug:', {
         totalImagesInMap: imagesMap.size,
         sampleImageIds: Array.from(imagesMap.keys()).slice(0, 5),
         selectedIds: selectedImages,
         mapHasSelectedIds: selectedImages.map(id => imagesMap.has(id))
       });
-      
+
       const orderedImages = selectedImages
         .map(id => imagesMap.get(id))
         .filter(img => img !== undefined) as UploadedImage[];
-      
+
       console.log('🎬 TikTokPreview: Creating slideshow from selected images:', {
         selectedImageIds: selectedImages,
         availableImagesCount: images.length,
@@ -245,25 +241,24 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
         missingImageIds: selectedImages.filter(id => !imagesMap.has(id)),
         foundImageDetails: orderedImages.map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' }))
       });
-      
+
       if (orderedImages.length === 0) {
         console.warn('⚠️ TikTokPreview: No matching images found for selected IDs in current folder');
         console.log('🔍 Debug - Available images:', images.map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' })));
       }
 
-      // Apply cut length limit to selected images
-      imagesToProcess = orderedImages.slice(0, cutLength);
+      // Use all selected images
+      imagesToProcess = orderedImages;
       originalCount = orderedImages.length;
     }
 
-    console.log('🎬 Final slideshow images after cut length filtering:', {
-      cutLength,
+    console.log('🎬 Final slideshow images:', {
       imagesToProcessCount: imagesToProcess.length,
       originalCount
     });
 
     return { slideshowImages: imagesToProcess, originalSlidesCount: originalCount };
-  }, [images, selectedImages, currentSlideshow, isRemixed, remixedSlideshowImages, cutLength]);
+  }, [images, selectedImages, currentSlideshow, isRemixed, remixedSlideshowImages]);
 
   // Synchronize currentSlide with external changes and ensure it stays within bounds
   useEffect(() => {
@@ -314,7 +309,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   // Render the TikTok preview interface
   const renderTikTokPreview = () => {
     const hasContent = slideshowImages.length > 0;
-    
+
     if (!hasContent) {
       return (
         <div className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500/20 via-pink-500/10 to-purple-500/5 border border-purple-500/20 rounded-2xl p-6">
@@ -386,7 +381,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
         overflow: 'hidden'
       };
     };
-    
+
     return (
       <div className={`w-full max-w-md mx-auto bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-purple-500/10 border border-purple-500/20 rounded-2xl overflow-hidden relative aspect-[9/16]`}>
         {/* TikTok-style header */}
@@ -437,7 +432,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                   <div className="absolute top-1/2 left-0 right-0 h-px bg-blue-500/50 z-10 pointer-events-none" />
                 </>
               )}
-              
+
               {/* Text overlays on current slide - show for both saved slideshows and edit settings */}
               {(textOverlays || [])
                 .filter(overlay => overlay.slideIndex === currentSlide)
@@ -547,20 +542,20 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                             textAlign: overlay.alignment,
                             lineHeight: '1.2',
                             whiteSpace: 'pre', // Prevent automatic line breaks, preserve explicit newlines
-                            overflow: 'hidden', // Hide overflow instead of wrapping
-                            textOverflow: 'ellipsis', // Show ellipsis if text is too long
+                            overflow: 'visible',
+
                             textShadow: overlay.outline
                               ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
                               : overlay.glow
-                              ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
-                              : 'none',
+                                ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
+                                : 'none',
                           }}
                           autoFocus
                         />
                       ) : (
                         <div
                           className={cn(
-                            "w-full h-full flex items-center justify-center text-center p-1 overflow-hidden select-none",
+                            "w-full h-full flex items-center justify-center text-center p-1 select-none",
                             overlay.bold && "font-bold",
                             overlay.italic && "italic",
                             !previewMode && "cursor-text"
@@ -572,13 +567,13 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                             textAlign: overlay.alignment,
                             lineHeight: '1.2',
                             whiteSpace: 'pre', // Changed from 'pre-wrap' to 'pre' to prevent automatic line breaks
-                            overflow: 'hidden', // Hide overflow instead of wrapping
-                            textOverflow: 'ellipsis', // Show ellipsis if text is too long
+                            overflow: 'visible',
+
                             textShadow: overlay.outline
                               ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
                               : overlay.glow
-                              ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
-                              : 'none',
+                                ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
+                                : 'none',
                           }}
                         >
                           {overlay.text || 'Sample Text'}
@@ -588,27 +583,6 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                   );
                 })
               }
-
-              {/* Caption and hashtags overlay for saved slideshows */}
-              {currentSlideshow && (
-                <div className="absolute top-4 left-4 right-16 z-10 bg-black/50 p-2 rounded">
-                  <p className="text-white text-sm font-medium mb-1 truncate">
-                    {currentSlideshow.title || title}
-                  </p>
-                  <p className="text-white text-xs mb-1 line-clamp-2">
-                    {currentSlideshow.caption || caption}
-                  </p>
-                  {(currentSlideshow.hashtags || hashtags) && (currentSlideshow.hashtags || hashtags).length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {(currentSlideshow.hashtags || hashtags).map((tag: string, index: number) => (
-                        <span key={index} className="text-xs text-blue-400">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
 
               {/* TikTok-style side panel - positioned within video container */}
               <div className="absolute right-6 bottom-24 flex flex-col space-y-5 z-10">
@@ -707,12 +681,6 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                     #{tag}
                   </span>
                 ))}
-              </div>
-            )}
-            {/* Debug: Show hashtags when slideshow is loaded */}
-            {currentSlideshow && currentSlideshow.hashtags && currentSlideshow.hashtags.length > 0 && (
-              <div className="mt-1 text-xs text-green-400">
-                Loaded hashtags: {currentSlideshow.hashtags.join(', ')}
               </div>
             )}
           </div>

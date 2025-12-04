@@ -30,10 +30,20 @@ export default defineConfig({
           if (path.includes('path=')) {
             const url = new URL(`http://localhost${path}`);
             const pathParam = url.searchParams.get('path');
-            return pathParam || 'posts'; // Default to posts endpoint
+
+            // Reconstruct other query parameters
+            const otherParams = new URLSearchParams();
+            url.searchParams.forEach((value, key) => {
+              if (key !== 'path') {
+                otherParams.append(key, value);
+              }
+            });
+            const queryString = otherParams.toString();
+
+            return (pathParam || 'posts') + (queryString ? `?${queryString}` : '');
           }
           // If it's direct path like '/api/postiz-proxy/integrations'
-          const cleanPath = path.replace('/api/postiz-proxy/', '');
+          const cleanPath = path.replace(/^\/api\/postiz-proxy\/?/, '');
           return cleanPath || 'posts'; // Default to posts endpoint
         },
       },

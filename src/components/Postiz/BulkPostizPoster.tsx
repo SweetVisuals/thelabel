@@ -1,282 +1,70 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Calendar, Clock, AlertCircle, CheckCircle, Loader2, Send, Settings, Layers, CalendarDays, User, Play } from 'lucide-react';
 import { Button } from '../ui/button';
-import { Separator } from '../ui/separator';
-import {
-  Calendar,
-  Clock,
-  Send,
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  User,
-  CalendarDays,
-  Image,
-  FileText,
-  Hash,
-  Eye,
-  Settings,
-  Plus,
-  Minus,
-  Play
-} from 'lucide-react';
+import { SlideshowMetadata, PostizProfile } from '../../types';
 import { cn } from '@/lib/utils';
-import {
-  PostizProfile,
-  PostizSlideshowData,
-  SlideshowMetadata
-} from '../../types';
 import { postizAPI } from '../../lib/postiz';
-import { slideshowService } from '../../lib/slideshowService';
-import { postizUploadService } from '../../lib/postizUploadService';
-import { useAuth } from '../../hooks/useAuth';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { addHours, addMinutes } from 'date-fns';
+import { DateTimePicker } from '../ui/datetime-picker';
+import { useBulkPost } from '../../contexts/BulkPostContext';
 
 interface BulkPostizPosterProps {
   slideshows: SlideshowMetadata[];
+  onClose: () => void;
   onPostSuccess?: (postIds: string[]) => void;
-  onClose?: () => void;
-}
-
-interface PostingSchedule {
-  slideshowId: string;
-  slideshowTitle: string;
-  scheduledTime: Date;
-  status: 'pending' | 'posting' | 'success' | 'error';
-  postId?: string;
-  error?: string;
 }
 
 export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   slideshows,
-  onPostSuccess,
   onClose
 }) => {
-  const { user } = useAuth();
-  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+  const { startBulkPost, isPosting: isGlobalPosting } = useBulkPost();
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [profiles, setProfiles] = useState<PostizProfile[]>([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
-  const [isPosting, setIsPosting] = useState(false);
-  
-  // Posting strategy state
-  const [postingStrategy, setPostingStrategy] = useState<'interval' | 'first-now'>('interval');
-  const [intervalHours, setIntervalHours] = useState(1);
-  const [startTime, setStartTime] = useState(() => {
-    // Default to 1 hour from now
-    const now = new Date();
-    now.setHours(now.getHours() + 1);
-    return now.toISOString().slice(0, 16); // Format for datetime-local input
-  });
 
-  // Posting schedule state
-  const [postingSchedule, setPostingSchedule] = useState<PostingSchedule[]>([]);
-  const [currentPostIndex, setCurrentPostIndex] = useState(0);
+  // Strategy State
+  const [postingStrategy, setPostingStrategy] = useState<'interval' | 'first-now' | 'batch'>('interval');
+  const [intervalHours, setIntervalHours] = useState(1.5);
+  const [startTime, setStartTime] = useState<Date>(new Date());
 
-  // Auto-hide notifications
-  const [postResult, setPostResult] = useState<{
-    success: boolean;
-    message: string;
-    completedPosts: number;
-    totalPosts: number;
-  } | null>(null);
+  // Batch State
+  const [batchSize, setBatchSize] = useState(10);
+  const [batchIntervalHours, setBatchIntervalHours] = useState(1.5);
+  const [postIntervalMinutes, setPostIntervalMinutes] = useState(1);
 
-  // Rate limit state
-  const [rateLimitResetTime, setRateLimitResetTime] = useState<Date | null>(null);
-  const [countdown, setCountdown] = useState('');
+  // Validation State
+  const [validationError, setValidationError] = useState<string | null>(null);
 
+  // Load Profiles
   useEffect(() => {
     loadProfiles();
-    generatePostingSchedule();
-    loadRateLimitState();
-  }, [slideshows, postingStrategy, intervalHours, startTime]);
-
-  // Countdown effect for rate limit
-  useEffect(() => {
-    if (!rateLimitResetTime) return;
-
-    const interval = setInterval(async () => {
-      const now = new Date();
-      const timeLeft = rateLimitResetTime.getTime() - now.getTime();
-
-      if (timeLeft <= 0) {
-        setCountdown('');
-        setRateLimitResetTime(null);
-        // Clear rate limit from database when it expires
-        if (user?.id) {
-          const { rateLimitService } = await import('../../lib/supabase');
-          await rateLimitService.clearRateLimit(user.id, 'tiktok');
-        }
-        // Dispatch event to clear header countdown
-        window.dispatchEvent(new CustomEvent('rateLimitUpdate', { detail: { countdown: '' } }));
-        clearInterval(interval);
-      } else {
-        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
-        const countdownStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        setCountdown(countdownStr);
-        // Dispatch event to update header countdown
-        window.dispatchEvent(new CustomEvent('rateLimitUpdate', { detail: { countdown: countdownStr } }));
-      }
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [rateLimitResetTime, user?.id]);
-
-  const loadRateLimitState = async () => {
-    if (!user?.id) return;
-
-    try {
-      const { rateLimitService } = await import('../../lib/supabase');
-      const rateLimitState = await rateLimitService.getRateLimit(user.id, 'tiktok');
-
-      if (rateLimitState.isLimited && rateLimitState.resetAt) {
-        setRateLimitResetTime(rateLimitState.resetAt);
-      } else {
-        setRateLimitResetTime(null);
-      }
-    } catch (error) {
-      console.error('Failed to load rate limit state:', error);
-    }
-  };
+  }, []);
 
   const loadProfiles = async () => {
-    setIsLoadingProfiles(true);
     try {
-      const loadedProfiles = await postizAPI.getProfiles();
-      
-      // Filter for TikTok profiles
-      const tiktokProfiles = loadedProfiles.filter(profile => {
-        const provider = profile.provider?.toLowerCase() || '';
-        const displayName = profile.displayName?.toLowerCase() || '';
-        const username = profile.username?.toLowerCase() || '';
-        
-        const isTikTok = provider.includes('tiktok') ||
-                        displayName.includes('tiktok') ||
-                        username.includes('tiktok') ||
-                        provider === 'tt' ||
-                        displayName.includes('tt') ||
-                        provider === 'social';
-        
-        return isTikTok;
-      });
-      
-      const finalProfiles = tiktokProfiles.length > 0 ? tiktokProfiles : loadedProfiles;
-      
-      if (finalProfiles.length === 0) {
-        setPostResult({
-          success: false,
-          message: 'No accounts found. Please check your Postiz API key and ensure accounts are connected.',
-          completedPosts: 0,
-          totalPosts: 0
-        });
-      }
-      
-      setProfiles(finalProfiles);
-      
-      // Auto-select first profile if only one exists
-      if (finalProfiles.length === 1) {
-        setSelectedProfiles([finalProfiles[0].id]);
+      const connectedProfiles = await postizAPI.getProfiles();
+      const tiktokProfiles = connectedProfiles.filter(p => p.provider === 'tiktok');
+      setProfiles(tiktokProfiles);
+      if (tiktokProfiles.length > 0) {
+        setSelectedProfiles([tiktokProfiles[0].id]);
       }
     } catch (error) {
-      setPostResult({
-        success: false,
-        message: (error instanceof Error && error.message.includes('CORS'))
-          ? 'CORS issue detected. The browser was blocking requests to Postiz API. This has been fixed with a proxy solution.'
-          : 'Failed to load TikTok profiles. Please check your API key.',
-        completedPosts: 0,
-        totalPosts: 0
-      });
+      console.error('Failed to load profiles:', error);
     } finally {
       setIsLoadingProfiles(false);
     }
   };
 
-  const generatePostingSchedule = () => {
-    if (!startTime) return;
-
-    const schedule: PostingSchedule[] = [];
-
-    if (postingStrategy === 'first-now') {
-      // First post now, rest at intervals from first post time
-      const now = new Date();
-      schedule.push({
-        slideshowId: slideshows[0].id,
-        slideshowTitle: slideshows[0].title,
-        scheduledTime: now,
-        status: 'pending'
-      });
-
-      // Generate subsequent posts from first post time (now)
-      let currentTime = new Date(now);
-
-      for (let i = 1; i < slideshows.length; i++) {
-        // Move to next interval
-        currentTime = new Date(currentTime.getTime() + (intervalHours * 60 * 60 * 1000));
-
-        // Apply time constraints and continue from adjusted time
-        currentTime = applyScheduleConstraints(currentTime);
-
-        // If after 10pm, move to next day at 9am
-        if (currentTime.getHours() > 22) {
-          currentTime.setDate(currentTime.getDate() + 1);
-          currentTime.setHours(9, 0, 0, 0);
-        }
-
-        schedule.push({
-          slideshowId: slideshows[i].id,
-          slideshowTitle: slideshows[i].title,
-          scheduledTime: currentTime,
-          status: 'pending'
-        });
-      }
-    } else {
-      // All posts scheduled at intervals from start time
-      let currentTime = new Date(startTime);
-
-      for (let i = 0; i < slideshows.length; i++) {
-        // Apply time constraints and continue from adjusted time
-        currentTime = applyScheduleConstraints(currentTime);
-
-        // If after 10pm, move to next day at 9am
-        if (currentTime.getHours() > 22) {
-          currentTime.setDate(currentTime.getDate() + 1);
-          currentTime.setHours(9, 0, 0, 0);
-        }
-
-        schedule.push({
-          slideshowId: slideshows[i].id,
-          slideshowTitle: slideshows[i].title,
-          scheduledTime: currentTime,
-          status: 'pending'
-        });
-
-        // Move to next interval
-        currentTime = new Date(currentTime.getTime() + (intervalHours * 60 * 60 * 1000));
-      }
-    }
-
-    setPostingSchedule(schedule);
-  };
-
-  const applyScheduleConstraints = (baseTime: Date): Date => {
-    const hour = baseTime.getHours();
-    
-    // If scheduled time falls in the forbidden window (12am-9am)
-    if (hour >= 0 && hour < 9) {
-      // Move to 9am on the same day
-      const adjustedTime = new Date(baseTime);
-      adjustedTime.setHours(9, 0, 0, 0);
-      return adjustedTime;
-    }
-    
-    return baseTime;
-  };
-
   const handleProfileToggle = (profileId: string) => {
-    setSelectedProfiles(prev => 
-      prev.includes(profileId) 
-        ? prev.filter(id => id !== profileId)
-        : [...prev, profileId]
-    );
+    setSelectedProfiles(prev => {
+      if (prev.includes(profileId)) {
+        return prev.filter(id => id !== profileId);
+      }
+      return [...prev, profileId];
+    });
   };
 
   const handleSelectAll = () => {
@@ -287,730 +75,430 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     }
   };
 
-  const validateForm = (): string | null => {
-    if (slideshows.length === 0) return 'No slideshows selected';
-    
+  // Generate Schedule Preview (Local only)
+  const previewSchedule = useMemo(() => {
+    const schedule: any[] = [];
+    let currentTime = new Date(startTime);
+
+    const applyScheduleConstraints = (baseTime: Date): Date => {
+      const hour = baseTime.getHours();
+      if (hour >= 0 && hour < 9) {
+        const adjustedTime = new Date(baseTime);
+        adjustedTime.setHours(9, 0, 0, 0);
+        return adjustedTime;
+      }
+      return baseTime;
+    };
+
+    if (postingStrategy === 'first-now') {
+      schedule.push({
+        slideshowTitle: slideshows[0]?.title || 'Slideshow 1',
+        scheduledTime: new Date(),
+        isImmediate: true
+      });
+      for (let i = 1; i < slideshows.length; i++) {
+        currentTime = addHours(currentTime, intervalHours);
+        currentTime = applyScheduleConstraints(currentTime);
+        schedule.push({
+          slideshowTitle: slideshows[i]?.title || `Slideshow ${i + 1}`,
+          scheduledTime: new Date(currentTime),
+          isImmediate: false
+        });
+      }
+    } else if (postingStrategy === 'batch') {
+      // Continuous scheduling logic
+      let currentScheduledTime = new Date(startTime);
+
+      for (let i = 0; i < slideshows.length; i++) {
+        const batchIndex = Math.floor(i / batchSize);
+        const indexInBatch = i % batchSize;
+
+        // Calculate batch info for display
+        let batchInfo = null;
+        if (indexInBatch === 0) {
+          // Calculate when this batch will actually be sent to Postiz
+          // First batch is sent immediately (startTime), subsequent batches wait batchIntervalHours
+          const batchSendTime = addMinutes(startTime, batchIndex * (batchIntervalHours * 60));
+          batchInfo = { number: batchIndex + 1, time: batchSendTime };
+        }
+
+        // Apply constraints to the current scheduled time
+        currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
+
+        schedule.push({
+          slideshowTitle: slideshows[i]?.title || `Slideshow ${i + 1}`,
+          scheduledTime: new Date(currentScheduledTime),
+          isImmediate: false,
+          batchInfo
+        });
+
+        // Advance time for the next post
+        currentScheduledTime = addMinutes(currentScheduledTime, postIntervalMinutes);
+      }
+    } else {
+      for (let i = 0; i < slideshows.length; i++) {
+        currentTime = applyScheduleConstraints(currentTime);
+        schedule.push({
+          slideshowTitle: slideshows[i]?.title || `Slideshow ${i + 1}`,
+          scheduledTime: new Date(currentTime),
+          isImmediate: false
+        });
+        currentTime = addHours(currentTime, intervalHours);
+      }
+    }
+    return schedule;
+  }, [slideshows, postingStrategy, intervalHours, startTime, batchSize, batchIntervalHours, postIntervalMinutes]);
+
+  const handleSchedule = () => {
     if (selectedProfiles.length === 0) {
-      return 'Please select at least one TikTok account';
-    }
-
-    // Check if all slideshows have condensed slides
-    const invalidSlideshows = slideshows.filter(s => !s.condensedSlides || s.condensedSlides.length === 0);
-    if (invalidSlideshows.length > 0) {
-      return `${invalidSlideshows.length} slideshow(s) have no images to post`;
-    }
-
-    // Validate start time for interval scheduling
-    if (postingStrategy === 'interval') {
-      const startDate = new Date(startTime);
-      if (startDate <= new Date()) {
-        return 'Start time must be in the future for scheduled posting';
-      }
-    }
-
-    return null;
-  };
-
-  const postSingleSlideshow = async (
-    slideshow: SlideshowMetadata,
-    scheduledAt?: Date,
-    postNow: boolean = false
-  ): Promise<{ success: boolean; postId?: string; error?: string }> => {
-    try {
-      console.log(`📤 Posting slideshow: ${slideshow.title}`, {
-        scheduledAt: scheduledAt?.toISOString(),
-        postNow,
-        profiles: selectedProfiles,
-        originalCaption: slideshow.caption // Log original for debugging
-      });
-
-      const captionText = slideshowService.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags);
-
-      // Upload images to Postiz storage
-      const postizMedia = await postizUploadService.uploadImagesToPostizStorage(slideshow);
-
-      if (postizMedia.length === 0) {
-        throw new Error('No images were successfully uploaded to Postiz storage');
-      }
-
-      // Log slideshow preparation for debugging
-      console.log(`🎬 Posting slideshow: ${slideshow.title}`, {
-        aspectRatio: slideshow.aspectRatio,
-        slidesCount: slideshow.condensedSlides.length,
-        captionLength: captionText.length,
-        uploadedImages: postizMedia.length
-      });
-
-      // Create the post using Postiz image gallery URLs
-      const result = await postizUploadService.createPostWithUploadedImages(
-        captionText,
-        selectedProfiles[0], // Use first selected profile
-        postizMedia,
-        scheduledAt,
-        postNow
-      );
-
-      console.log(`✅ Successfully posted slideshow: ${slideshow.title}`, {
-        postId: result.postId,
-        aspectRatio: slideshow.aspectRatio
-      });
-
-      return {
-        success: true,
-        postId: result.postId
-      };
-
-    } catch (error) {
-      console.error(`Failed to post slideshow ${slideshow.title}:`, error);
-
-      // Check if it's a rate limit error
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (errorMessage.toLowerCase().includes('rate limit') || errorMessage.toLowerCase().includes('too many requests')) {
-        // Store rate limit in database and set local state
-        if (user?.id) {
-          const { rateLimitService } = await import('../../lib/supabase');
-          await rateLimitService.setRateLimit(user.id, 'tiktok', 60); // 60 minutes = 1 hour
-        }
-
-        // Set rate limit reset time to 1 hour from now
-        const resetTime = new Date();
-        resetTime.setHours(resetTime.getHours() + 1);
-        setRateLimitResetTime(resetTime);
-      }
-
-      return {
-        success: false,
-        error: errorMessage
-      };
-    }
-  };
-
-  const handleBulkPost = async () => {
-    const validationError = validateForm();
-    if (validationError) {
-      setPostResult({
-        success: false,
-        message: validationError,
-        completedPosts: 0,
-        totalPosts: slideshows.length
-      });
+      setValidationError('Please select at least one profile');
       return;
     }
 
-    // Check if rate limit is active
-    if (rateLimitResetTime && countdown) {
-      setPostResult({
-        success: false,
-        message: `Rate limit active. Please wait ${countdown} before posting again.`,
-        completedPosts: 0,
-        totalPosts: slideshows.length
-      });
-      return;
-    }
-
-    setIsPosting(true);
-    setCurrentPostIndex(0);
-
-    try {
-      let successfulCount = 0;
-      const postIds: string[] = [];
-
-      for (let i = 0; i < postingSchedule.length; i++) {
-        const scheduleItem = postingSchedule[i];
-        setCurrentPostIndex(i);
-
-        // Update status to posting
-        setPostingSchedule(prev => prev.map((item, index) =>
-          index === i ? { ...item, status: 'posting' as const } : item
-        ));
-
-        // Find the slideshow
-        const slideshow = slideshows.find(s => s.id === scheduleItem.slideshowId);
-        if (!slideshow) {
-          throw new Error(`Slideshow not found: ${scheduleItem.slideshowId}`);
-        }
-
-        // Determine if this should be posted now or scheduled
-        const shouldPostNow = postingStrategy === 'first-now' && i === 0;
-        const scheduledAt = shouldPostNow ? undefined : scheduleItem.scheduledTime;
-
-        // Post the slideshow
-        const result = await postSingleSlideshow(slideshow, scheduledAt, shouldPostNow);
-
-        if (result.success) {
-          // Update status to success
-          setPostingSchedule(prev => prev.map((item, index) =>
-            index === i ? {
-              ...item,
-              status: 'success' as const,
-              postId: result.postId
-            } : item
-          ));
-          postIds.push(result.postId!);
-          successfulCount++;
-        } else {
-          // Update status to error
-          setPostingSchedule(prev => prev.map((item, index) =>
-            index === i ? {
-              ...item,
-              status: 'error' as const,
-              error: result.error
-            } : item
-          ));
-
-          // If rate limit error, stop the bulk posting
-          if (result.error && (result.error.toLowerCase().includes('rate limit') || result.error.toLowerCase().includes('too many requests'))) {
-            setPostResult({
-              success: false,
-              message: `Rate limit hit during posting. ${successfulCount} posts completed.`,
-              completedPosts: successfulCount,
-              totalPosts: slideshows.length
-            });
-            return;
-          }
-        }
+    // Start background process
+    startBulkPost(
+      slideshows,
+      selectedProfiles,
+      postingStrategy,
+      {
+        intervalHours,
+        startTime,
+        batchSize,
+        batchIntervalHours,
+        postIntervalMinutes
       }
-
-      // Set final result only if all posts were attempted
-      if (successfulCount === postingSchedule.length) {
-        setPostResult({
-          success: true,
-          message: `🎉 Successfully posted all ${successfulCount} slideshow(s)!`,
-          completedPosts: successfulCount,
-          totalPosts: slideshows.length
-        });
-      } else if (successfulCount > 0) {
-        setPostResult({
-          success: false,
-          message: `📤 Posted ${successfulCount}/${postingSchedule.length} slideshow(s)...`,
-          completedPosts: successfulCount,
-          totalPosts: slideshows.length
-        });
-      }
-
-      if (onPostSuccess && postIds.length > 0) {
-        onPostSuccess(postIds);
-      }
-
-    } catch (error: any) {
-      console.error('Bulk posting failed:', error);
-      setPostResult({
-        success: false,
-        message: `❌ Bulk posting failed: ${error.message}`,
-        completedPosts: currentPostIndex,
-        totalPosts: slideshows.length
-      });
-    } finally {
-      setIsPosting(false);
-    }
-  };
-
-  const getSchedulePreview = () => {
-    return postingSchedule.map((item, index) => {
-      const isNow = postingStrategy === 'first-now' && index === 0;
-      const timeStr = isNow ? 'Now' : item.scheduledTime.toLocaleString();
-      
-      return {
-        ...item,
-        displayTime: timeStr,
-        isImmediate: isNow
-      };
-    });
-  };
-
-  if (slideshows.length === 0) {
-    return (
-      <div className="p-6 text-center">
-        <AlertCircle className="w-8 h-8 mx-auto text-yellow-500 mb-2" />
-        <p className="text-muted-foreground">No slideshows selected</p>
-      </div>
     );
-  }
+
+    // Close modal immediately
+    onClose();
+  };
 
   return (
-    <div className="max-h-[80vh] overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between sticky top-0 bg-card/95 backdrop-blur-sm border-b border-border/50 pb-2 -mx-4 px-4 py-2 z-10 shadow-lg">
-        <h3 className="text-lg font-semibold text-foreground flex items-center">
-          <Send className="w-5 h-5 mr-2 text-primary" />
-          Bulk Post to TikTok ({slideshows.length})
-        </h3>
-        {onClose && (
-          <Button variant="ghost" size="sm" onClick={onClose} className="hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-all duration-200">
-            ×
-          </Button>
-        )}
-      </div>
-
-      {/* Slideshows Overview */}
-      <div className="bg-card/80 backdrop-blur-sm rounded-xl border border-border/50 shadow-xl overflow-hidden mb-4 hover-lift">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <motion.div
+        className="bg-[#09090b] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+      >
         {/* Header */}
-        <div className="bg-card/50 px-4 py-3 border-b border-border/30">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="flex items-center justify-center w-8 h-8 bg-primary/20 rounded-lg">
-                <Image className="w-4 h-4 text-primary" />
-              </div>
-              <div>
-                <h4 className="text-base font-semibold text-foreground">Bulk Posts ({slideshows.length})</h4>
-                <p className="text-xs text-muted-foreground">
-                  Ready for scheduling
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2">
-              <CheckCircle className="w-4 h-4 text-emerald-500" />
-              <span className="text-xs text-emerald-500">Captions Preserved</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Slideshows Grid */}
-        <div className="p-4">
-          <div className="grid grid-cols-1 gap-2">
-            {slideshows.map((slideshow, index) => (
-              <div key={slideshow.id} className="bg-accent/20 rounded-lg border border-border/30 p-3 hover:bg-accent/30 transition-all duration-200 hover-lift">
-                <div className="flex items-center space-x-3">
-                  {/* Image Preview */}
-                  <div className="flex-shrink-0">
-                    <div className="w-10 h-10 rounded-lg bg-accent/30 border border-border/50 flex items-center justify-center overflow-hidden">
-                      {slideshow.condensedSlides && slideshow.condensedSlides[0] ? (
-                        <img
-                          src={slideshow.condensedSlides[0].condensedImageUrl || slideshow.condensedSlides[0].originalImageUrl}
-                          alt="Slide preview"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Play className="w-4 h-4 text-muted-foreground" />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h5 className="font-medium text-foreground truncate text-sm" title={slideshow.title}>
-                          {slideshow.title}
-                        </h5>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="text-xs text-muted-foreground">
-                            {slideshow.condensedSlides?.length || 0} slides
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {slideshow.aspectRatio}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs text-muted-foreground">#{index + 1}</span>
-                        <div className="w-2 h-2 bg-emerald-500 rounded-full pulse-glow"></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Summary Footer */}
-        <div className="bg-accent/20 px-4 py-3 border-t border-border/30">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-3 text-muted-foreground">
-              <span>Total Slides: {slideshows.reduce((sum, s) => sum + (s.condensedSlides?.length || 0), 0)}</span>
-              <span>•</span>
-              <span>Aspect Ratios: {Array.from(new Set(slideshows.map(s => s.aspectRatio))).join(', ')}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* TikTok Profiles Selection */}
-      <div className="space-y-3 mb-4">
-        <div className="flex items-center justify-between">
-          <h4 className="font-medium text-foreground flex items-center">
-            <User className="w-4 h-4 mr-2 text-primary" />
-            TikTok Accounts ({profiles.length})
-          </h4>
-          {profiles.length > 1 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSelectAll}
-              className="border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground hover-lift transition-all duration-200"
-            >
-              {selectedProfiles.length === profiles.length ? 'Deselect All' : 'Select All'}
-            </Button>
-          )}
-        </div>
-
-        {isLoadingProfiles ? (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="w-4 h-4 animate-spin mr-2 text-primary" />
-            <span className="text-sm text-muted-foreground">Loading accounts...</span>
-          </div>
-        ) : profiles.length === 0 ? (
-          <div className="text-center py-4">
-            <AlertCircle className="w-6 h-6 mx-auto text-muted-foreground mb-2" />
-            <p className="text-sm text-muted-foreground mb-2">
-              No accounts found
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Connect accounts in Postiz dashboard
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-40 overflow-y-auto">
-            {profiles.map((profile) => (
-              <label
-                key={profile.id}
-                className={cn(
-                  "flex items-center space-x-3 p-3 rounded-lg border cursor-pointer transition-all duration-200 hover-lift",
-                  selectedProfiles.includes(profile.id)
-                    ? "border-primary bg-primary/10 shadow-lg shadow-primary/25"
-                    : "border-border/50 hover:border-primary/50 hover:bg-accent/30"
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedProfiles.includes(profile.id)}
-                  onChange={() => handleProfileToggle(profile.id)}
-                  className="w-4 h-4 text-primary border-border rounded focus:ring-primary focus:ring-2"
-                />
-                <div className="flex items-center space-x-3 flex-1">
-                  {profile.avatar && (
-                    <img
-                      src={profile.avatar}
-                      alt={profile.displayName}
-                      className="w-6 h-6 rounded-full border border-border/50"
-                    />
-                  )}
-                  <div className="flex-1">
-                    <div className="font-medium text-foreground text-sm">{profile.displayName}</div>
-                    <div className="text-xs text-muted-foreground">
-                      @{profile.username}
-                    </div>
-                  </div>
-                </div>
-              </label>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Posting Strategy */}
-      <div className="space-y-3 mb-4">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-8 h-8 bg-primary/20 rounded-lg">
-            <Settings className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h4 className="text-base font-semibold text-foreground">Posting Strategy</h4>
-            <p className="text-xs text-muted-foreground">Choose how to schedule posts</p>
-          </div>
-        </div>
-        
-        {/* Strategy Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <button
-            onClick={() => setPostingStrategy('interval')}
-            className={cn(
-              "p-4 rounded-lg border-2 text-left transition-all duration-200 hover-lift",
-              postingStrategy === 'interval'
-                ? "border-primary bg-primary/10 shadow-lg shadow-primary/25"
-                : "border-border/50 hover:border-primary/50 hover:bg-accent/30"
-            )}
-          >
-            <div className="flex items-center space-x-2 mb-2">
-              <div className={cn(
-                "flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
-                postingStrategy === 'interval'
-                  ? "bg-primary shadow-lg"
-                  : "bg-accent/50 group-hover:bg-primary/20"
-              )}>
-                <Calendar className={cn(
-                  "w-4 h-4 transition-colors duration-200",
-                  postingStrategy === 'interval' ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
-                )} />
-              </div>
-              <div>
-                <h5 className="font-medium text-foreground text-sm">Schedule All</h5>
-                <p className="text-xs text-muted-foreground">Time intervals from start</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-              <CheckCircle className="w-3 h-3 text-emerald-500" />
-              <span>Automated scheduling</span>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setPostingStrategy('first-now')}
-            className={cn(
-              "p-4 rounded-lg border-2 text-left transition-all duration-200 hover-lift",
-              postingStrategy === 'first-now'
-                ? "border-primary bg-primary/10 shadow-lg shadow-primary/25"
-                : "border-border/50 hover:border-primary/50 hover:bg-accent/30"
-            )}
-          >
-            <div className="flex items-center space-x-2 mb-2">
-              <div className={cn(
-                "flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-200",
-                postingStrategy === 'first-now'
-                  ? "bg-primary shadow-lg"
-                  : "bg-accent/50 group-hover:bg-primary/20"
-              )}>
-                <Play className={cn(
-                  "w-4 h-4 transition-colors duration-200",
-                  postingStrategy === 'first-now' ? "text-primary-foreground" : "text-muted-foreground group-hover:text-primary"
-                )} />
-              </div>
-              <div>
-                <h5 className="font-medium text-foreground text-sm">Post 1 Now</h5>
-                <p className="text-xs text-muted-foreground">Immediate + schedule rest</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-              <CheckCircle className="w-3 h-3 text-emerald-500" />
-              <span>Instant engagement</span>
-            </div>
-          </button>
-        </div>
-
-        {/* Interval Settings */}
-        <div className="bg-accent/20 rounded-lg border border-border/50 p-4 hover-lift">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-foreground">Interval Between Posts</label>
-              <select
-                value={intervalHours}
-                onChange={(e) => setIntervalHours(Number(e.target.value))}
-                className="w-full px-3 py-2 bg-card border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm input-modern"
-              >
-                <option value={0.5}>30 minutes</option>
-                <option value={1}>1 hour</option>
-                <option value={1.5}>1.5 hours</option>
-                <option value={2}>2 hours</option>
-                <option value={2.5}>2.5 hours</option>
-                <option value={3}>3 hours</option>
-                <option value={4}>4 hours</option>
-                <option value={6}>6 hours</option>
-                <option value={12}>12 hours</option>
-                <option value={24}>24 hours</option>
-              </select>
-              <p className="text-xs text-muted-foreground">
-                Optimal: 3-6 hours
-              </p>
-            </div>
-
-            {postingStrategy === 'interval' && (
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-foreground">Start Time</label>
-                <input
-                  type="datetime-local"
-                  value={startTime}
-                  onChange={(e) => setStartTime(e.target.value)}
-                  min={new Date().toISOString().slice(0, 16)}
-                  className="w-full px-3 py-2 bg-card border border-border rounded-lg focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition-all text-sm input-modern"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Schedule start time
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Schedule Preview */}
-      <div className="space-y-3">
-        <div className="flex items-center space-x-3">
-          <div className="flex items-center justify-center w-8 h-8 bg-primary/20 rounded-lg">
-            <Eye className="w-4 h-4 text-primary" />
-          </div>
-          <div>
-            <h4 className="text-base font-semibold text-foreground">Schedule Preview</h4>
-            <p className="text-xs text-muted-foreground">Review timeline before posting</p>
-          </div>
-        </div>
-        
-        {/* Schedule Constraints Notice */}
-        <div className="bg-accent/20 border border-border/50 rounded-lg p-3 hover-lift">
-          <div className="flex items-start space-x-3">
-            <div className="flex-shrink-0 w-6 h-6 bg-primary/20 rounded-lg flex items-center justify-center">
-              <Clock className="w-3 h-3 text-primary" />
-            </div>
-            <div>
-              <div className="font-medium text-foreground mb-2 text-sm">Schedule Rules</div>
-              <div className="space-y-1 text-xs text-muted-foreground">
-                <div>• Posts every {intervalHours} hours (9am-10pm)</div>
-                <div>• Posts after 10pm → next day at 9am</div>
-                <div>• No posts 12am-9am</div>
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        {/* Schedule Timeline */}
-        <div className="bg-accent/20 rounded-lg border border-border/50 p-4 hover-lift">
-          {getSchedulePreview().length === 0 ? (
-            <div className="text-center py-6">
-              <AlertCircle className="w-6 h-6 text-muted-foreground mx-auto mb-2" />
-              <h5 className="font-medium text-foreground mb-2 text-sm">No Posts Scheduled</h5>
-              <p className="text-xs text-muted-foreground">
-                Adjust settings to schedule posts
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {getSchedulePreview().map((item, index) => (
-                <div key={item.slideshowId} className="bg-card/50 rounded-lg border border-border/30 p-3 hover:bg-accent/20 transition-all duration-200 hover-lift">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <div className="flex items-center justify-center w-6 h-6 bg-primary/20 rounded-lg">
-                        <span className="text-xs font-medium text-primary">{index + 1}</span>
-                      </div>
-                      <div>
-                        <h6 className="font-medium text-foreground text-xs">{item.slideshowTitle}</h6>
-                        <div className="flex items-center space-x-1 mt-1">
-                          <Clock className="w-3 h-3 text-muted-foreground" />
-                          <span className="text-xs text-muted-foreground">
-                            {item.isImmediate ? 'Post now' : item.displayTime}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      {item.status === 'pending' && (
-                        <div className="flex items-center space-x-1 text-emerald-500">
-                          <div className="w-2 h-2 bg-emerald-500 rounded-full pulse-glow"></div>
-                          <span className="text-xs">Pending</span>
-                        </div>
-                      )}
-                      {item.status === 'posting' && (
-                        <div className="flex items-center space-x-1 text-primary">
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          <span className="text-xs">Posting</span>
-                        </div>
-                      )}
-                      {item.status === 'success' && (
-                        <div className="flex items-center space-x-1 text-emerald-500">
-                          <CheckCircle className="w-3 h-3" />
-                          <span className="text-xs">Success</span>
-                        </div>
-                      )}
-                      {item.status === 'error' && (
-                        <div className="flex items-center space-x-1 text-destructive">
-                          <AlertCircle className="w-3 h-3" />
-                          <span className="text-xs">Error</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        
-        {/* Skipped Posts Notice */}
-        {slideshows.length > postingSchedule.length && (
-          <div className="bg-accent/20 border border-border/50 rounded-lg p-3 hover-lift">
-            <div className="flex items-center space-x-3">
-              <AlertCircle className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <div className="font-medium text-foreground text-sm">Posts Adjusted</div>
-                <div className="text-xs text-muted-foreground">
-                  {slideshows.length - postingSchedule.length} post(s) moved to next day 9am
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Post Result */}
-      {postResult && (
-        <div className={cn(
-          "p-3 rounded-lg border space-y-2",
-          postResult.success
-            ? "bg-green-900/20 border-green-700 text-green-200"
-            : "bg-red-900/20 border-red-700 text-red-200"
-        )}>
-          <div className="flex items-center space-x-2">
-            {postResult.success ? (
-              <CheckCircle className="w-4 h-4" />
-            ) : (
-              <AlertCircle className="w-4 h-4" />
-            )}
-            <span className="text-sm font-medium">
-              {postResult.success ? 'Success!' : 'Error'}
-            </span>
-          </div>
-
-          <div className="text-sm">
-            {postResult.message}
-          </div>
-
-          {postResult.completedPosts > 0 && postResult.totalPosts > 0 && (
-            <div className="text-xs text-slate-400">
-              Progress: {postResult.completedPosts}/{postResult.totalPosts} completed
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Rate Limit Alert */}
-      {rateLimitResetTime && countdown && (
-        <div className="p-3 rounded-lg border bg-yellow-900/20 border-yellow-700 text-yellow-200 space-y-2">
-          <div className="flex items-center space-x-2">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm font-medium">
-              Rate limit hit - try again in {countdown}
-            </span>
-          </div>
-          <div className="text-sm">
-            TikTok rate limit reached. Please wait for the countdown to complete before posting again.
-          </div>
-        </div>
-      )}
-
-      <Separator />
-
-      {/* Action Buttons - Sticky at bottom */}
-      <div className="sticky bottom-0 bg-card/95 backdrop-blur-sm border-t border-border/50 pt-4 -mx-4 px-4 shadow-xl">
-        <div className="flex gap-3">
-          <Button
-            onClick={handleBulkPost}
-            disabled={isPosting || selectedProfiles.length === 0 || slideshows.length === 0 || !!(rateLimitResetTime && countdown)}
-            className="flex-1 btn-modern bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 text-primary-foreground font-medium py-2 shadow-lg hover:shadow-xl transition-all duration-300"
-          >
-            {isPosting ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Posting ({currentPostIndex + 1}/{slideshows.length})...
-              </>
-            ) : rateLimitResetTime && countdown ? (
-              <>
-                <Clock className="w-4 h-4 mr-2" />
-                Rate Limited ({countdown})
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4 mr-2" />
-                {postingStrategy === 'first-now' ? 'Post & Schedule' : 'Schedule All Posts'}
-              </>
-            )}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
+          <h3 className="text-xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent flex items-center">
+            <Send className="w-5 h-5 mr-3 text-primary" />
+            Bulk Post to TikTok ({slideshows.length})
+          </h3>
+          <Button variant="ghost" size="icon" onClick={onClose} className="hover:bg-white/10 rounded-full">
+            <X className="w-5 h-5 text-muted-foreground" />
           </Button>
+        </div>
 
-          {onClose && (
-            <Button variant="outline" onClick={onClose} className="px-4 border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground hover-lift transition-all duration-200">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+            {/* LEFT COLUMN: Strategy & Preview (4 cols) */}
+            <div className="lg:col-span-4 space-y-6">
+
+              {/* Strategy Section */}
+              <div className="space-y-4">
+                <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider flex items-center">
+                  <Settings className="w-3 h-3 mr-2" />
+                  Strategy
+                </h4>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setPostingStrategy('interval')}
+                    className={cn(
+                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-20",
+                      postingStrategy === 'interval'
+                        ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
+                        : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
+                    )}
+                  >
+                    <Calendar className={cn(
+                      "w-4 h-4 mb-1.5 transition-colors",
+                      postingStrategy === 'interval' ? "text-primary" : "text-muted-foreground"
+                    )} />
+                    <span className="font-medium text-xs">Interval</span>
+                    {postingStrategy === 'interval' && (
+                      <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setPostingStrategy('batch')}
+                    className={cn(
+                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-20",
+                      postingStrategy === 'batch'
+                        ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
+                        : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
+                    )}
+                  >
+                    <Layers className={cn(
+                      "w-4 h-4 mb-1.5 transition-colors",
+                      postingStrategy === 'batch' ? "text-primary" : "text-muted-foreground"
+                    )} />
+                    <span className="font-medium text-xs">Batch</span>
+                    {postingStrategy === 'batch' && (
+                      <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => setPostingStrategy('first-now')}
+                    className={cn(
+                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-20",
+                      postingStrategy === 'first-now'
+                        ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
+                        : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
+                    )}
+                  >
+                    <Play className={cn(
+                      "w-4 h-4 mb-1.5 transition-colors",
+                      postingStrategy === 'first-now' ? "text-primary" : "text-muted-foreground"
+                    )} />
+                    <span className="font-medium text-xs">1 Now</span>
+                    {postingStrategy === 'first-now' && (
+                      <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Settings Panel */}
+                <div className="bg-white/5 rounded-xl border border-white/10 p-4 space-y-4">
+                  {postingStrategy === 'batch' ? (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground block ml-1">Batch Size</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={batchSize}
+                            onChange={(e) => setBatchSize(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm text-center"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-xs text-muted-foreground block ml-1">Batch Interval (Hrs)</label>
+                          <input
+                            type="number"
+                            min={0.1}
+                            step={0.1}
+                            value={batchIntervalHours}
+                            onChange={(e) => setBatchIntervalHours(Math.max(0.1, parseFloat(e.target.value) || 1))}
+                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm text-center"
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs text-muted-foreground block ml-1">Post Interval (Mins)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={postIntervalMinutes}
+                          onChange={(e) => setPostIntervalMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                          className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm"
+                        />
+                        <p className="text-[10px] text-muted-foreground ml-1">Time between posts within a batch</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground block ml-1">Interval Between Posts</label>
+                      <Select
+                        value={intervalHours.toString()}
+                        onValueChange={(value) => setIntervalHours(Number(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select interval" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0.5">30 minutes</SelectItem>
+                          <SelectItem value="1">1 hour</SelectItem>
+                          <SelectItem value="1.5">1.5 hours</SelectItem>
+                          <SelectItem value="2">2 hours</SelectItem>
+                          <SelectItem value="3">3 hours</SelectItem>
+                          <SelectItem value="4">4 hours</SelectItem>
+                          <SelectItem value="6">6 hours</SelectItem>
+                          <SelectItem value="12">12 hours</SelectItem>
+                          <SelectItem value="24">24 hours</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs text-muted-foreground block ml-1">Start Date & Time</label>
+                    <DateTimePicker date={startTime} setDate={setStartTime} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Schedule Preview */}
+              <div className="space-y-2">
+                <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider flex items-center">
+                  <CalendarDays className="w-3 h-3 mr-2" />
+                  Schedule Preview
+                </h4>
+                <div className="bg-black/40 rounded-xl border border-white/10 overflow-hidden shadow-inner max-h-60 overflow-y-auto custom-scrollbar">
+                  <div className="p-3 space-y-2">
+                    {previewSchedule.map((item, index) => (
+                      <React.Fragment key={index}>
+                        {item.batchInfo && (
+                          <div className="flex items-center text-xs font-semibold text-primary/70 mt-4 mb-2 first:mt-0 sticky top-0 bg-black/90 backdrop-blur py-1 z-10 border-b border-white/5">
+                            <Layers className="w-3 h-3 mr-1.5" />
+                            Batch {item.batchInfo.number}
+                            <span className="mx-2 text-muted-foreground/50">•</span>
+                            <span className="text-muted-foreground font-normal">
+                              Starts {item.batchInfo.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        )}
+                        <div
+                          className="flex items-center p-2 rounded-lg border text-xs transition-all duration-300 bg-white/5 border-white/5"
+                        >
+                          <span className="font-mono text-muted-foreground mr-2">#{index + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate font-medium">{item.slideshowTitle}</div>
+                            <div className="text-muted-foreground flex items-center mt-0.5">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {item.isImmediate ? 'Now' : item.scheduledTime.toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN: Accounts (8 cols) */}
+            <div className="lg:col-span-8 space-y-4 flex flex-col">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider flex items-center">
+                  <User className="w-3 h-3 mr-2" />
+                  Select Accounts ({selectedProfiles.length}/{profiles.length})
+                </h4>
+                {profiles.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleSelectAll}
+                    className="h-7 text-xs hover:bg-white/10"
+                  >
+                    {selectedProfiles.length === profiles.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                )}
+              </div>
+
+              <div className="flex-1 bg-white/5 rounded-xl border border-white/10 p-4 min-h-[400px]">
+                {isLoadingProfiles ? (
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
+                    <Loader2 className="w-8 h-8 animate-spin mb-3 text-primary" />
+                    <p>Loading accounts...</p>
+                  </div>
+                ) : profiles.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-muted-foreground border-2 border-dashed border-white/10 rounded-lg">
+                    <AlertCircle className="w-10 h-10 text-yellow-500 mb-3 opacity-50" />
+                    <p>No TikTok accounts found</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {profiles.map((profile) => (
+                      <motion.label
+                        key={profile.id}
+                        className={cn(
+                          "flex items-center space-x-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 relative overflow-hidden group",
+                          selectedProfiles.includes(profile.id)
+                            ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
+                            : "border-white/10 bg-black/20 hover:bg-white/5 hover:border-white/20"
+                        )}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                      >
+                        <div className={cn(
+                          "w-5 h-5 rounded border flex items-center justify-center transition-colors flex-shrink-0",
+                          selectedProfiles.includes(profile.id)
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-muted-foreground/50 group-hover:border-white/50"
+                        )}>
+                          {selectedProfiles.includes(profile.id) && <CheckCircle className="w-3.5 h-3.5" />}
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={selectedProfiles.includes(profile.id)}
+                          onChange={() => handleProfileToggle(profile.id)}
+                          className="hidden"
+                        />
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          {profile.avatar ? (
+                            <img
+                              src={profile.avatar}
+                              alt={profile.displayName}
+                              className="w-8 h-8 rounded-full ring-2 ring-white/10 flex-shrink-0"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center ring-2 ring-white/10 flex-shrink-0">
+                              <User className="w-4 h-4 text-white/70" />
+                            </div>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm text-foreground truncate">{profile.displayName}</div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              @{profile.username}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-white/10 bg-white/5 flex flex-col gap-4">
+          <AnimatePresence>
+            {validationError && (
+              <motion.div
+                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                className="p-4 rounded-xl border bg-red-500/10 border-red-500/30 text-red-200 flex items-center space-x-3"
+              >
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span className="font-medium">{validationError}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex gap-4">
+            <Button
+              onClick={handleSchedule}
+              disabled={isGlobalPosting || selectedProfiles.length === 0}
+              className="flex-1 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-lg shadow-primary/25 h-12 text-base font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Send className="w-5 h-5 mr-2" />
+              {isGlobalPosting ? 'Add to Schedule (Busy)' : `Schedule ${slideshows.length} Posts`}
+            </Button>
+
+            <Button
+              variant="ghost"
+              onClick={onClose}
+              className="h-12 px-8 rounded-xl hover:bg-white/10 border border-transparent hover:border-white/10"
+            >
               Cancel
             </Button>
-          )}
+          </div>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };

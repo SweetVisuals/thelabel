@@ -1,16 +1,35 @@
 import React from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthPage } from './components/Auth/AuthPage';
 import { Dashboard } from './components/Dashboard/Dashboard';
+import { CalendarPage } from './components/Calendar/CalendarPage';
 import { useAuth } from './hooks/useAuth';
 import { Toaster } from 'sonner';
+import { BulkPostProvider } from './contexts/BulkPostContext';
 
 import { ensureTikTokFontsLoaded } from '@/lib/fontUtils';
+import { userService } from './lib/userService';
+import { postizAPI } from './lib/postiz';
+
 function App() {
   const { user, loading } = useAuth();
   // Load TikTok fonts on app startup
   React.useEffect(() => {
     ensureTikTokFontsLoaded().catch(console.warn);
   }, []);
+
+  // Load user settings (API Key) from DB globally
+  React.useEffect(() => {
+    const loadUserSettings = async () => {
+      if (user) {
+        const apiKey = await userService.getPostizApiKey(user.id);
+        if (apiKey) {
+          postizAPI.setApiKey(apiKey);
+        }
+      }
+    };
+    loadUserSettings();
+  }, [user]);
 
   if (loading) {
     return (
@@ -24,10 +43,27 @@ function App() {
   }
 
   return (
-    <>
-      {user ? <Dashboard /> : <AuthPage />}
+    <Router>
+      <BulkPostProvider>
+        <Routes>
+          <Route path="/" element={
+            user ? (
+              <Dashboard />
+            ) : (
+              <AuthPage />
+            )
+          } />
+          <Route path="/calendar" element={
+            user ? (
+              <CalendarPage />
+            ) : (
+              <AuthPage />
+            )
+          } />
+        </Routes>
+      </BulkPostProvider>
       <Toaster />
-    </>
+    </Router>
   );
 }
 
