@@ -15,6 +15,7 @@ interface QueueViewerProps {
 
 export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
     const { jobQueue, refreshQueue, currentJobId, postingSchedule } = useBulkPost();
+    // Force re-deploy
     const [profiles, setProfiles] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
