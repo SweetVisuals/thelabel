@@ -666,26 +666,53 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         for (let i = 0; i < jobs.length; i++) {
             const job = jobs[i];
-            const settings = job.payload.settings;
+            // Create a deep copy of settings to avoid reference issues
+            let settings = { ...job.payload.settings };
+            let settingsChanged = false;
 
-            // Update the job's scheduled time
-            await supabase
+            // Sanitize settings only if missing or invalid
+            if (!settings.batchIntervalHours || isNaN(settings.batchIntervalHours) || settings.batchIntervalHours <= 0) {
+                console.warn(`Job ${job.id}: batchIntervalHours invalid. Defaulting to 1.1.`);
+                settings.batchIntervalHours = 1.1;
+                settingsChanged = true;
+            }
+            if (!settings.postIntervalMinutes || isNaN(settings.postIntervalMinutes) || settings.postIntervalMinutes < 0) {
+                console.warn(`Job ${job.id}: postIntervalMinutes invalid. Defaulting to 1.`);
+                settings.postIntervalMinutes = 1;
+                settingsChanged = true;
+            }
+
+            // Update the job's scheduled time and settings if changed
+            const updatePayload: any = { scheduled_start_time: currentStartTime.toISOString() };
+            if (settingsChanged) {
+                updatePayload.payload = {
+                    ...job.payload,
+                    settings
+                };
+            }
+
+            const { error: updateError } = await supabase
                 .from('job_queue')
-                .update({ scheduled_start_time: currentStartTime.toISOString() })
+                .update(updatePayload)
                 .eq('id', job.id);
 
-            // Calculate next start time
+            if (updateError) {
+                console.error(`Failed to update job ${job.id}:`, updateError);
+            }
+
+            // Calculate next start time using the (possibly updated) settings
             if (job.payload.strategy === 'batch') {
                 const batchSize = job.payload.slideshows.length;
                 const durationMinutes = (batchSize - 1) * settings.postIntervalMinutes;
+                // Ensure we use the sanitized value
                 const intervalMinutes = settings.batchIntervalHours * 60;
 
-                console.log(`Job ${job.id} (Batch ${job.batch_index}): Duration ${durationMinutes}m, Interval ${intervalMinutes}m`);
+                console.log(`Job ${job.id} (Batch ${job.batch_index}): Duration ${durationMinutes}m, Interval ${intervalMinutes}m, Next Start: +${durationMinutes + intervalMinutes}m`);
 
                 currentStartTime = addMinutes(currentStartTime, durationMinutes + intervalMinutes);
             } else {
                 // Interval strategy
-                const intervalMinutes = settings.intervalHours * 60;
+                const intervalMinutes = (settings.intervalHours || 1.1) * 60;
                 const durationMinutes = (job.payload.slideshows.length - 1) * intervalMinutes;
 
                 currentStartTime = addMinutes(currentStartTime, durationMinutes + intervalMinutes);
