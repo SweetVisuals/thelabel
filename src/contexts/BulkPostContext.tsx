@@ -350,7 +350,19 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 // And "We can't schedule future posts immedietly because it still requires the postiz API".
                 // So we are acting as the scheduler. We tell Postiz to post NOW.
 
-                const result = await postSingleSlideshow(slideshow, profiles[0], undefined, true);
+                // Use the calculated schedule time for this item
+                // If the time is in the past or very close to now (within 1 min), we can post immediately
+                // Otherwise we schedule it
+                const now = new Date();
+                const scheduledTime = scheduleItem.scheduledTime;
+                const shouldPostNow = scheduledTime.getTime() <= now.getTime() + 60000; // 1 min buffer
+
+                const result = await postSingleSlideshow(
+                    slideshow,
+                    profiles[0],
+                    shouldPostNow ? undefined : scheduledTime,
+                    shouldPostNow
+                );
 
                 if (result.success) {
                     setPostingSchedule(prev => prev.map((item, index) =>
@@ -387,14 +399,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     }
                 }
 
-                // Wait for next item if not last
-                if (i < schedule.length - 1) {
-                    const nextItem = schedule[i + 1];
-                    const waitTime = nextItem.scheduledTime.getTime() - new Date().getTime();
-                    if (waitTime > 0) {
-                        await waitWithFeedback(waitTime);
-                    }
-                }
+                // No waiting between items - we are scheduling them all at once
+                // The only delay is the upload time itself
             }
 
             // Handle Retries for Failed Slideshows
