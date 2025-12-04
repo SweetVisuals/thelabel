@@ -544,19 +544,41 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 // Previous Batch Start + (ItemsInPrevBatch * PostInterval) + BatchInterval
 
                 // Add 66 minutes (1.1 hours) for the next batch
+
+
+                // For the FIRST batch, we want it to be processed immediately by the app
+                const scheduledProcessingTime = (i === 0) ? new Date() : currentStartTime;
+
+                const payload: JobPayload = {
+                    slideshows: batchSlideshows,
+                    profiles,
+                    strategy: 'batch', // Keep as batch so processor knows to use postIntervalMinutes
+                    settings: {
+                        ...settings,
+                        startTime: currentStartTime.toISOString()
+                    }
+                };
+
+                jobsToInsert.push({
+                    user_id: user.id,
+                    account_id: profiles[0],
+                    status: 'pending',
+                    scheduled_start_time: scheduledProcessingTime.toISOString(),
+                    batch_index: i + 1,
+                    total_batches: totalBatches,
+                    payload
+                });
                 currentStartTime = addMinutes(currentStartTime, 66);
             }
-
-            // For the FIRST batch, we want it to be processed immediately by the app
-            const scheduledProcessingTime = (i === 0) ? new Date() : currentStartTime;
-
+        } else {
+            // Interval or First-Now strategy - treat as single job
             const payload: JobPayload = {
-                slideshows: batchSlideshows,
+                slideshows,
                 profiles,
-                strategy: 'batch', // Keep as batch so processor knows to use postIntervalMinutes
+                strategy,
                 settings: {
                     ...settings,
-                    startTime: currentStartTime.toISOString()
+                    startTime: settings.startTime.toISOString()
                 }
             };
 
@@ -564,164 +586,142 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 user_id: user.id,
                 account_id: profiles[0],
                 status: 'pending',
-                scheduled_start_time: scheduledProcessingTime.toISOString(),
-                batch_index: i + 1,
-                total_batches: totalBatches,
+                scheduled_start_time: settings.startTime.toISOString(),
+                batch_index: 1,
+                total_batches: 1,
                 payload
             });
         }
-    } else {
-        // Interval or First-Now strategy - treat as single job
-        const payload: JobPayload = {
-            slideshows,
-            profiles,
-            strategy,
-            settings: {
-                ...settings,
-                startTime: settings.startTime.toISOString()
-            }
-        };
-
-        jobsToInsert.push({
-            user_id: user.id,
-            account_id: profiles[0],
-            status: 'pending',
-            scheduled_start_time: settings.startTime.toISOString(),
-            batch_index: 1,
-            total_batches: 1,
-            payload
-        });
-    }
 
         const { error } = await supabase
-        .from('job_queue')
-        .insert(jobsToInsert);
+            .from('job_queue')
+            .insert(jobsToInsert);
 
-    if (error) {
-        console.error('Failed to queue jobs:', error);
-        toast.error('Failed to add jobs to queue');
-    } else {
-        toast.success(`Added ${jobsToInsert.length} batches to queue`);
-        await fetchQueue();
+        if (error) {
+            console.error('Failed to queue jobs:', error);
+            toast.error('Failed to add jobs to queue');
+        } else {
+            toast.success(`Added ${jobsToInsert.length} batches to queue`);
+            await fetchQueue();
 
-        // Trigger immediate processing of first batch if scheduled for now (or close to now)
-        const now = new Date();
-        const firstJob = jobsToInsert[0];
-        // Allow 1 minute buffer for "now"
-        if (firstJob && new Date(firstJob.scheduled_start_time).getTime() <= now.getTime() + 60000) {
-            // Fetch the newly inserted jobs to get their IDs
-            const { data: insertedJobs } = await supabase
-                .from('job_queue')
-                .select('*')
-                .eq('user_id', user.id)
-                .eq('status', 'pending')
-                .order('created_at', { ascending: false })
-                .limit(jobsToInsert.length);
+            // Trigger immediate processing of first batch if scheduled for now (or close to now)
+            const now = new Date();
+            const firstJob = jobsToInsert[0];
+            // Allow 1 minute buffer for "now"
+            if (firstJob && new Date(firstJob.scheduled_start_time).getTime() <= now.getTime() + 60000) {
+                // Fetch the newly inserted jobs to get their IDs
+                const { data: insertedJobs } = await supabase
+                    .from('job_queue')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('status', 'pending')
+                    .order('created_at', { ascending: false })
+                    .limit(jobsToInsert.length);
 
-            if (insertedJobs && insertedJobs.length > 0) {
-                // Find the job that matches our first batch's start time (approx)
-                const jobToProcess = insertedJobs.find(j =>
-                    Math.abs(new Date(j.scheduled_start_time).getTime() - new Date(firstJob.scheduled_start_time).getTime()) < 10000
-                );
-                if (jobToProcess) {
-                    console.log('Starting first batch immediately:', jobToProcess.id);
-                    processJob(jobToProcess);
+                if (insertedJobs && insertedJobs.length > 0) {
+                    // Find the job that matches our first batch's start time (approx)
+                    const jobToProcess = insertedJobs.find(j =>
+                        Math.abs(new Date(j.scheduled_start_time).getTime() - new Date(firstJob.scheduled_start_time).getTime()) < 10000
+                    );
+                    if (jobToProcess) {
+                        console.log('Starting first batch immediately:', jobToProcess.id);
+                        processJob(jobToProcess);
+                    }
                 }
             }
         }
-    }
-}, [fetchQueue, processJob]);
+    }, [fetchQueue, processJob]);
 
-const stopBulkPost = () => {
-    stopProcessingRef.current = true;
-};
-
-const rescheduleQueue = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    // Fetch all pending jobs
-    const { data: jobs, error } = await supabase
-        .from('job_queue')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('status', 'pending')
-        .order('created_at', { ascending: true })
-        .order('batch_index', { ascending: true });
-
-    if (error || !jobs || jobs.length === 0) return;
-
-    let currentStartTime = new Date();
-    // Add a small buffer so the first one isn't "in the past" immediately if processing takes time
-    currentStartTime = addMinutes(currentStartTime, 1);
-
-    console.log(`Rescheduling ${jobs.length} jobs starting from ${currentStartTime.toISOString()}`);
-
-    for (let i = 0; i < jobs.length; i++) {
-        const job = jobs[i];
-        // Create a deep copy of settings to avoid reference issues
-        let settings = { ...job.payload.settings };
-        let settingsChanged = false;
-
-        if (!settings.postIntervalMinutes || isNaN(settings.postIntervalMinutes) || settings.postIntervalMinutes > 5) {
-            console.warn(`Job ${job.id}: postIntervalMinutes ${settings.postIntervalMinutes} is invalid/high. Resetting to 1.`);
-            settings.postIntervalMinutes = 1;
-            settingsChanged = true;
-        }
-
-        // Update the job's scheduled time and settings if changed
-        const updatePayload: any = { scheduled_start_time: currentStartTime.toISOString() };
-        if (settingsChanged) {
-            updatePayload.payload = {
-                ...job.payload,
-                settings
-            };
-        }
-
-        const { error: updateError } = await supabase
-            .from('job_queue')
-            .update(updatePayload)
-            .eq('id', job.id);
-
-        // Increment time for next job (66 minutes)
-        currentStartTime = addMinutes(currentStartTime, 66);
+    const stopBulkPost = () => {
+        stopProcessingRef.current = true;
     };
 
-    toast.success('Queue rescheduled successfully');
-    fetchQueue();
-};
+    const rescheduleQueue = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-const nextBatchStartTime = useMemo(() => {
-    const pendingJobs = jobQueue.filter(j => j.status === 'pending');
-    if (pendingJobs.length === 0) return null;
+        // Fetch all pending jobs
+        const { data: jobs, error } = await supabase
+            .from('job_queue')
+            .select('*')
+            .eq('user_id', user.id)
+            .eq('status', 'pending')
+            .order('created_at', { ascending: true })
+            .order('batch_index', { ascending: true });
 
-    // Sort by scheduled_start_time to find the next one
-    const sorted = [...pendingJobs].sort((a, b) =>
-        new Date(a.scheduled_start_time).getTime() - new Date(b.scheduled_start_time).getTime()
+        if (error || !jobs || jobs.length === 0) return;
+
+        let currentStartTime = new Date();
+        // Add a small buffer so the first one isn't "in the past" immediately if processing takes time
+        currentStartTime = addMinutes(currentStartTime, 1);
+
+        console.log(`Rescheduling ${jobs.length} jobs starting from ${currentStartTime.toISOString()}`);
+
+        for (let i = 0; i < jobs.length; i++) {
+            const job = jobs[i];
+            // Create a deep copy of settings to avoid reference issues
+            let settings = { ...job.payload.settings };
+            let settingsChanged = false;
+
+            if (!settings.postIntervalMinutes || isNaN(settings.postIntervalMinutes) || settings.postIntervalMinutes > 5) {
+                console.warn(`Job ${job.id}: postIntervalMinutes ${settings.postIntervalMinutes} is invalid/high. Resetting to 1.`);
+                settings.postIntervalMinutes = 1;
+                settingsChanged = true;
+            }
+
+            // Update the job's scheduled time and settings if changed
+            const updatePayload: any = { scheduled_start_time: currentStartTime.toISOString() };
+            if (settingsChanged) {
+                updatePayload.payload = {
+                    ...job.payload,
+                    settings
+                };
+            }
+
+            const { error: updateError } = await supabase
+                .from('job_queue')
+                .update(updatePayload)
+                .eq('id', job.id);
+
+            // Increment time for next job (66 minutes)
+            currentStartTime = addMinutes(currentStartTime, 66);
+        };
+
+        toast.success('Queue rescheduled successfully');
+        fetchQueue();
+    };
+
+    const nextBatchStartTime = useMemo(() => {
+        const pendingJobs = jobQueue.filter(j => j.status === 'pending');
+        if (pendingJobs.length === 0) return null;
+
+        // Sort by scheduled_start_time to find the next one
+        const sorted = [...pendingJobs].sort((a, b) =>
+            new Date(a.scheduled_start_time).getTime() - new Date(b.scheduled_start_time).getTime()
+        );
+
+        return new Date(sorted[0].scheduled_start_time);
+    }, [jobQueue]);
+
+    return (
+        <BulkPostContext.Provider value={{
+            isPosting,
+            isPaused,
+            nextResumeTime,
+            postingSchedule,
+            statusMessage,
+            jobQueue,
+            lastScheduledTime,
+            currentJobId,
+            currentBatchIndex,
+            totalBatches,
+            startBulkPost,
+            stopBulkPost,
+            refreshQueue: fetchQueue,
+            rescheduleQueue,
+            nextBatchStartTime
+        }}>
+            {children}
+        </BulkPostContext.Provider>
     );
-
-    return new Date(sorted[0].scheduled_start_time);
-}, [jobQueue]);
-
-return (
-    <BulkPostContext.Provider value={{
-        isPosting,
-        isPaused,
-        nextResumeTime,
-        postingSchedule,
-        statusMessage,
-        jobQueue,
-        lastScheduledTime,
-        currentJobId,
-        currentBatchIndex,
-        totalBatches,
-        startBulkPost,
-        stopBulkPost,
-        refreshQueue: fetchQueue,
-        rescheduleQueue,
-        nextBatchStartTime
-    }}>
-        {children}
-    </BulkPostContext.Provider>
-);
 };
