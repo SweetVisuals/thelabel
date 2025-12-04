@@ -549,6 +549,11 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 // For the FIRST batch, we want it to be processed immediately by the app
                 const scheduledProcessingTime = (i === 0) ? new Date() : currentStartTime;
 
+                // Ensure the sequence follows the actual start time of the first batch
+                if (i === 0) {
+                    currentStartTime = scheduledProcessingTime;
+                }
+
                 const payload: JobPayload = {
                     slideshows: batchSlideshows,
                     profiles,
