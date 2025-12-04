@@ -155,64 +155,55 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                     </div>
 
                                     {/* Detailed Progress for Processing Job */}
-                                    {((job.status === 'processing' && job.id === currentJobId) || (job.id === currentJobId && postingSchedule.length > 0)) && (
+                                    {job.status === 'processing' && (
                                         <div className="w-full mt-3 border-t border-white/10 pt-3">
-                                            <div className="flex justify-between text-xs text-muted-foreground mb-2">
-                                                <span className="font-medium">Batch Progress</span>
-                                                <span className="font-mono">
-                                                    {postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length}/{postingSchedule.length}
-                                                </span>
-                                            </div>
-                                            <Progress
-                                                value={(postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length / Math.max(postingSchedule.length, 1)) * 100}
-                                                className="h-2 bg-white/5 mb-3"
-                                            />
-
-                                            {/* Individual Post Status */}
-                                            <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
-                                                {postingSchedule.map((post, postIdx) => (
-                                                    <div
-                                                        key={post.slideshowId}
-                                                        className={cn(
-                                                            "flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors",
-                                                            post.status === 'success' ? "bg-green-500/10 border border-green-500/20" :
-                                                                post.status === 'error' ? "bg-red-500/10 border border-red-500/20" :
-                                                                    post.status === 'posting' ? "bg-blue-500/10 border border-blue-500/20" :
-                                                                        "bg-white/5 border border-white/10"
-                                                        )}
-                                                    >
-                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                            <span className="text-muted-foreground font-mono">#{postIdx + 1}</span>
-                                                            <span className="truncate text-white/90">{post.slideshowTitle}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            {post.status === 'success' && (
-                                                                <CheckCircle className="w-3.5 h-3.5 text-green-500" />
-                                                            )}
-                                                            {post.status === 'error' && (
-                                                                <AlertCircle className="w-3.5 h-3.5 text-red-500" />
-                                                            )}
-                                                            {post.status === 'posting' && (
-                                                                <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
-                                                            )}
-                                                            {post.status === 'pending' && (
-                                                                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                                                            )}
-                                                        </div>
+                                            {/* Check if this is being processed locally (we have a schedule) or remotely */}
+                                            {job.id === currentJobId && postingSchedule.length > 0 ? (
+                                                <>
+                                                    <div className="flex justify-between text-xs text-muted-foreground mb-2">
+                                                        <span className="font-medium">Batch Progress (Local)</span>
+                                                        <span className="font-mono">
+                                                            {postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length}/{postingSchedule.length}
+                                                        </span>
                                                     </div>
-                                                ))}
-                                            </div>
-
-                                            <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/10 text-xs">
-                                                <span className="text-green-400 flex items-center gap-1">
-                                                    <CheckCircle className="w-3 h-3" />
-                                                    {postingSchedule.filter(s => s.status === 'success').length} successful
-                                                </span>
-                                                <span className="text-red-400 flex items-center gap-1">
-                                                    <AlertCircle className="w-3 h-3" />
-                                                    {postingSchedule.filter(s => s.status === 'error').length} failed
-                                                </span>
-                                            </div>
+                                                    <Progress
+                                                        value={(postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length / Math.max(postingSchedule.length, 1)) * 100}
+                                                        className="h-2 bg-white/5 mb-3"
+                                                    />
+                                                    {/* Individual Post Status */}
+                                                    <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar">
+                                                        {postingSchedule.map((post, postIdx) => (
+                                                            <div
+                                                                key={post.slideshowId}
+                                                                className={cn(
+                                                                    "flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors",
+                                                                    post.status === 'success' ? "bg-green-500/10 border border-green-500/20" :
+                                                                        post.status === 'error' ? "bg-red-500/10 border border-red-500/20" :
+                                                                            post.status === 'posting' ? "bg-blue-500/10 border border-blue-500/20" :
+                                                                                "bg-white/5 border border-white/10"
+                                                                )}
+                                                            >
+                                                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                    <span className="text-muted-foreground font-mono">#{postIdx + 1}</span>
+                                                                    <span className="truncate text-white/90">{post.slideshowTitle}</span>
+                                                                </div>
+                                                                <div className="flex items-center gap-2">
+                                                                    {post.status === 'success' && <CheckCircle className="w-3.5 h-3.5 text-green-500" />}
+                                                                    {post.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-red-500" />}
+                                                                    {post.status === 'posting' && <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />}
+                                                                    {post.status === 'pending' && <Clock className="w-3.5 h-3.5 text-muted-foreground" />}
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className="flex flex-col items-center justify-center py-4 text-muted-foreground space-y-2">
+                                                    <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                                                    <span className="text-xs">Processing in background (Server)...</span>
+                                                    <span className="text-[10px] opacity-70">Progress will update on completion</span>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>

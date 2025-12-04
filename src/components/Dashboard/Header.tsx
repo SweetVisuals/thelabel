@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, LogOut, Folder, Home, ChevronRight, Sparkles, Calendar as CalendarIcon, ListOrdered } from "lucide-react";
+import { Menu, X, LogOut, Folder, Home, ChevronRight, Sparkles, Calendar as CalendarIcon, ListOrdered, Loader2 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from "@/lib/utils";
@@ -280,7 +280,15 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                     )}
                                 </span>
                             ) : (
-                                <span>{jobQueue.length > 0 ? `${jobQueue.length} Batches Scheduled` : "Ready"}</span>
+                                // Check if there's a job processing on server (not local)
+                                jobQueue.some(j => j.status === 'processing') ? (
+                                    <span className="flex items-center space-x-1 text-blue-400">
+                                        <Loader2 className="w-3 h-3 animate-spin" />
+                                        <span>Processing Batch on Server...</span>
+                                    </span>
+                                ) : (
+                                    <span>{jobQueue.length > 0 ? `${jobQueue.length} Batches Scheduled` : "Ready"}</span>
+                                )
                             )}
                         </motion.div>
                         <motion.div
