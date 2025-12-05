@@ -440,7 +440,14 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 if (user) {
                     // Calculate retry time: Start of next batch or 66 mins from now
                     const retryMinutes = 66;
-                    const retryTime = addMinutes(new Date(), retryMinutes);
+                    const retryJobStartTime = addMinutes(new Date(), retryMinutes);
+
+                    // Find the scheduled time of the first failed slideshow to preserve the sequence
+                    const firstFailedSlideshowId = failedSlideshows[0].id;
+                    const firstFailedScheduleItem = schedule.find(s => s.slideshowId === firstFailedSlideshowId);
+
+                    // If we found the original schedule item, use its time. Otherwise fallback to retryJobStartTime
+                    const retryPostStartTime = firstFailedScheduleItem ? firstFailedScheduleItem.scheduledTime : retryJobStartTime;
 
                     const retryPayload: JobPayload = {
                         slideshows: failedSlideshows,
@@ -448,7 +455,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         strategy: 'batch',
                         settings: {
                             ...settings,
-                            startTime: retryTime.toISOString()
+                            startTime: retryPostStartTime.toISOString()
                         }
                     };
 
@@ -456,7 +463,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         user_id: user.id,
                         account_id: profiles[0],
                         status: 'pending',
-                        scheduled_start_time: retryTime.toISOString(),
+                        scheduled_start_time: retryJobStartTime.toISOString(),
                         batch_index: job.batch_index + 1, // Append to next index logically
                         total_batches: job.total_batches,
                         payload: retryPayload
