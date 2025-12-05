@@ -6,6 +6,27 @@ import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { addMinutes, addHours } from 'date-fns';
 
+const applyScheduleConstraints = (baseTime: Date): Date => {
+    const hour = baseTime.getHours();
+
+    // If post falls between 10pm (22:00) and midnight, move to 9am next day
+    if (hour >= 22) {
+        const adjustedTime = new Date(baseTime);
+        adjustedTime.setDate(adjustedTime.getDate() + 1);
+        adjustedTime.setHours(9, 0, 0, 0);
+        return adjustedTime;
+    }
+
+    // If post falls between midnight and 9am, move to 9am same day
+    if (hour >= 0 && hour < 9) {
+        const adjustedTime = new Date(baseTime);
+        adjustedTime.setHours(9, 0, 0, 0);
+        return adjustedTime;
+    }
+
+    return baseTime;
+};
+
 interface JobPayload {
     slideshows: SlideshowMetadata[];
     profiles: string[];
@@ -280,27 +301,6 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             // Use settings.startTime as base to ensure correct scheduling even if processed early
             let currentScheduledTime = new Date(settings.startTime);
 
-            const applyScheduleConstraints = (baseTime: Date): Date => {
-                const hour = baseTime.getHours();
-
-                // If post falls between 10pm (22:00) and midnight, move to 9am next day
-                if (hour >= 22) {
-                    const adjustedTime = new Date(baseTime);
-                    adjustedTime.setDate(adjustedTime.getDate() + 1);
-                    adjustedTime.setHours(9, 0, 0, 0);
-                    return adjustedTime;
-                }
-
-                // If post falls between midnight and 9am, move to 9am same day
-                if (hour >= 0 && hour < 9) {
-                    const adjustedTime = new Date(baseTime);
-                    adjustedTime.setHours(9, 0, 0, 0);
-                    return adjustedTime;
-                }
-
-                return baseTime;
-            };
-
             // Since we've split batches, 'batch' strategy here just means "post these items with postIntervalMinutes"
             // 'interval' strategy means "post these items with intervalHours"
             // 'first-now' is handled by the first batch having start time = now, and subsequent items having interval
@@ -535,23 +535,28 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const batchSize = settings.batchSize;
             const totalBatches = Math.ceil(slideshows.length / batchSize);
 
+            // Track the scheduled time for posts across batches
+            let currentPostTime = new Date(settings.startTime);
+            currentPostTime.setSeconds(0, 0);
+
+            // Base time for JOB PROCESSING
+            // We want batches to process every 66 minutes starting from now
+            const baseProcessingTime = new Date();
+
             for (let i = 0; i < totalBatches; i++) {
                 const batchSlideshows = slideshows.slice(i * batchSize, (i + 1) * batchSize);
 
-                // Calculate start time for this batch
-                // First batch starts at startTime
-                // Subsequent batches start after:
-                // Previous Batch Start + (ItemsInPrevBatch * PostInterval) + BatchInterval
+                // Job Processing Time
+                // First batch processes immediately (or as close as possible), subsequent ones wait 66 mins * index
+                const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 66);
 
-                // Add 66 minutes (1.1 hours) for the next batch
+                // Post Start Time for this batch
+                const batchPostStartTime = new Date(currentPostTime);
 
-
-                // For the FIRST batch, we want it to be processed immediately by the app
-                const scheduledProcessingTime = (i === 0) ? new Date() : currentStartTime;
-
-                // Ensure the sequence follows the actual start time of the first batch
-                if (i === 0) {
-                    currentStartTime = scheduledProcessingTime;
+                // Advance currentPostTime for the next batch by simulating this batch's posts
+                for (let j = 0; j < batchSlideshows.length; j++) {
+                    currentPostTime = applyScheduleConstraints(currentPostTime);
+                    currentPostTime = addMinutes(currentPostTime, settings.postIntervalMinutes);
                 }
 
                 const payload: JobPayload = {
@@ -560,7 +565,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     strategy: 'batch', // Keep as batch so processor knows to use postIntervalMinutes
                     settings: {
                         ...settings,
-                        startTime: currentStartTime.toISOString()
+                        startTime: batchPostStartTime.toISOString()
                     }
                 };
 
@@ -573,7 +578,6 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     total_batches: totalBatches,
                     payload
                 });
-                currentStartTime = addMinutes(currentStartTime, 66);
             }
         } else {
             // Interval or First-Now strategy - treat as single job
@@ -656,40 +660,66 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         if (error || !jobs || jobs.length === 0) return;
 
-        let currentStartTime = new Date();
+        let currentProcessingTime = new Date();
         // Add a small buffer so the first one isn't "in the past" immediately if processing takes time
-        currentStartTime = addMinutes(currentStartTime, 1);
+        currentProcessingTime = addMinutes(currentProcessingTime, 1);
 
-        console.log(`Rescheduling ${jobs.length} jobs starting from ${currentStartTime.toISOString()}`);
+        // Also track post time
+        let currentPostTime = new Date(currentProcessingTime);
+        currentPostTime.setSeconds(0, 0);
+
+        console.log(`Rescheduling ${jobs.length} jobs starting from ${currentProcessingTime.toISOString()}`);
 
         for (let i = 0; i < jobs.length; i++) {
             const job = jobs[i];
             // Create a deep copy of settings to avoid reference issues
             let settings = { ...job.payload.settings };
-            let settingsChanged = false;
 
             if (!settings.postIntervalMinutes || isNaN(settings.postIntervalMinutes) || settings.postIntervalMinutes > 5) {
                 console.warn(`Job ${job.id}: postIntervalMinutes ${settings.postIntervalMinutes} is invalid/high. Resetting to 1.`);
                 settings.postIntervalMinutes = 1;
-                settingsChanged = true;
             }
 
-            // Update the job's scheduled time and settings if changed
-            const updatePayload: any = { scheduled_start_time: currentStartTime.toISOString() };
-            if (settingsChanged) {
-                updatePayload.payload = {
+            // Capture start time for this batch's posts
+            const batchPostStartTime = new Date(currentPostTime);
+
+            // Update settings with new start time
+            settings.startTime = batchPostStartTime.toISOString();
+
+            // Simulate schedule to advance currentPostTime
+            const slideshows = job.payload.slideshows || [];
+            const strategy = job.payload.strategy;
+
+            for (let j = 0; j < slideshows.length; j++) {
+                currentPostTime = applyScheduleConstraints(currentPostTime);
+                if (strategy === 'batch') {
+                    currentPostTime = addMinutes(currentPostTime, settings.postIntervalMinutes);
+                } else {
+                    // Interval strategy
+                    currentPostTime = addHours(currentPostTime, settings.intervalHours || 1);
+                }
+            }
+
+            // Update the job
+            const updatePayload = {
+                scheduled_start_time: currentProcessingTime.toISOString(),
+                payload: {
                     ...job.payload,
                     settings
-                };
-            }
+                }
+            };
 
             const { error: updateError } = await supabase
                 .from('job_queue')
                 .update(updatePayload)
                 .eq('id', job.id);
 
-            // Increment time for next job (66 minutes)
-            currentStartTime = addMinutes(currentStartTime, 66);
+            if (updateError) {
+                console.error(`Failed to reschedule job ${job.id}:`, updateError);
+            }
+
+            // Increment time for next job processing (66 minutes)
+            currentProcessingTime = addMinutes(currentProcessingTime, 66);
         };
 
         toast.success('Queue rescheduled successfully');
