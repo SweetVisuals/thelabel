@@ -1266,12 +1266,17 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
         console.log('📊 Slideshows loaded:', newCount);
       }
 
+      // AUTHORITATIVE SYNC: Create a set of IDs from the database
+      const dbSlideshowIds = new Set<string>();
+
       // Convert database format to SlideshowMetadata
       slideshows?.forEach(dbSlideshow => {
         try {
           const metadata = dbSlideshow.metadata || {};
           // Add slideshow prefix for internal compatibility
           const slideshowId = `slideshow_${dbSlideshow.id}`;
+          dbSlideshowIds.add(slideshowId); // Track valid DB ID
+
           const slideshow: SlideshowMetadata = {
             id: slideshowId, // Add prefix for internal compatibility
             title: dbSlideshow.title,
@@ -1288,22 +1293,36 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
             folder_id: metadata.folder_id || null,
             // Ensure postTitle exists - fallback to title if not in metadata
             postTitle: metadata.postTitle || dbSlideshow.title,
-            uploadCount: metadata.uploadCount || 0
+            uploadCount: metadata.uploadCount || 0,
+            lastUploadStatus: metadata.lastUploadStatus // Restore upload status
           };
 
-          // Store in memory - IMPORTANT: Don't create separate image files for condensed slides
+          // Store in memory
           this.slideshows.set(slideshow.id, slideshow);
         } catch (parseError) {
           console.error('Failed to parse slideshow metadata:', parseError);
         }
       });
 
-      // Save to localStorage for faster access
+      // AUTHORITATIVE SYNC: Remove any local slideshows for this user that are NOT in the database
+      // This handles the case where a slideshow was deleted on another device
+      for (const [id, slideshow] of this.slideshows.entries()) {
+        if (slideshow.user_id === userId && !dbSlideshowIds.has(id)) {
+          console.log(`🗑️ Sync: Removing local slideshow ${id} as it was deleted on server`);
+          this.slideshows.delete(id);
+
+          // Also cleanup file entry if it exists
+          const fileKey = `slideshow_file_${id}`;
+          localStorage.removeItem(fileKey);
+        }
+      }
+
+      // Save to localStorage for faster access and persistence of the correct state
       this.saveToLocalStorage();
 
       // Only log total count if changed
       if (currentCount !== this.slideshows.size) {
-        console.log('📊 Total slideshows after database load:', this.slideshows.size);
+        console.log('📊 Total slideshows after database load (authoritative sync):', this.slideshows.size);
       }
     } catch (error) {
       console.error('Failed to load slideshows from database:', error);
@@ -1822,7 +1841,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       aspectRatio: finalAspectRatio, // Ensure aspect ratio is always set
       transitionEffect: slideshow.transitionEffect || 'fade',
       musicEnabled: slideshow.musicEnabled || false,
-      slideCount: slideshow.condensedSlides.length,
+      slideCount: Math.max(1, slideshow.condensedSlides.length),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

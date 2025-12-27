@@ -14,7 +14,7 @@ interface QueueViewerProps {
 }
 
 export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
-    const { jobQueue, refreshQueue, currentJobId, postingSchedule, rescheduleQueue } = useBulkPost();
+    const { jobQueue, refreshQueue, currentJobId, postingSchedule, rescheduleQueue, stopBulkPost } = useBulkPost();
     // Force re-deploy
     const [profiles, setProfiles] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -201,11 +201,24 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                             {/* Check if this is being processed locally (we have a schedule) or remotely */}
                                             {job.id === currentJobId && postingSchedule.length > 0 ? (
                                                 <>
-                                                    <div className="flex justify-between text-xs text-muted-foreground mb-2">
-                                                        <span className="font-medium">Batch Progress (Local)</span>
-                                                        <span className="font-mono">
-                                                            {postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length}/{postingSchedule.length}
-                                                        </span>
+                                                    <div className="flex justify-between items-center text-xs text-muted-foreground mb-2">
+                                                        <div className="flex gap-2 items-center">
+                                                            <span className="font-medium">Batch Progress (Local)</span>
+                                                            <span className="font-mono">
+                                                                {postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length}/{postingSchedule.length}
+                                                            </span>
+                                                        </div>
+                                                        <Button
+                                                            variant="destructive"
+                                                            size="icon"
+                                                            className="h-6 w-6 rounded-full"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                stopBulkPost();
+                                                            }}
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </Button>
                                                     </div>
                                                     <Progress
                                                         value={(postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length / Math.max(postingSchedule.length, 1)) * 100}

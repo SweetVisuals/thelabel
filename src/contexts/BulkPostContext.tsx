@@ -417,17 +417,25 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         failedSlideshows.push(slideshow);
 
                         // Stop processing immediately and reschedule remaining posts
-                        console.log('Batch failure detected. Rescheduling remaining posts...');
-                        for (let j = i + 1; j < slideshows.length; j++) {
-                            failedSlideshows.push(slideshows[j]);
-                            // Update UI to show these are being skipped/rescheduled
-                            setPostingSchedule(prev => prev.map((item, index) =>
-                                index === j ? { ...item, status: 'pending', error: 'Rescheduled' } : item
-                            ));
+                        if (!stopProcessingRef.current) {
+                            console.log('Batch failure detected. Rescheduling remaining posts...');
+                            for (let j = i + 1; j < slideshows.length; j++) {
+                                failedSlideshows.push(slideshows[j]);
+                                // Update UI to show these are being skipped/rescheduled
+                                setPostingSchedule(prev => prev.map((item, index) =>
+                                    index === j ? { ...item, status: 'pending', error: 'Rescheduled' } : item
+                                ));
+                            }
+                            toast.error(`Batch interrupted. Rescheduling ${failedSlideshows.length} posts for next interval.`);
+                            // Break the loop
+                            break;
                         }
-                        toast.error(`Batch interrupted. Rescheduling ${failedSlideshows.length} posts for next interval.`);
-                        break;
                     }
+                }
+
+                if (stopProcessingRef.current) {
+                    toast.info('Processing cancelled by user');
+                    break;
                 }
 
                 // No waiting between items - we are scheduling them all at once
@@ -477,8 +485,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             await supabase
                 .from('job_queue')
                 .update({
-                    status: hasError && successfulCount < schedule.length ? 'failed' : 'completed',
-                    error: hasError ? 'Some posts failed (retried)' : null
+                    status: stopProcessingRef.current ? 'failed' : (hasError && successfulCount < schedule.length ? 'failed' : 'completed'),
+                    error: stopProcessingRef.current ? 'Cancelled by user' : (hasError ? 'Some posts failed (retried)' : null)
                 })
                 .eq('id', job.id);
 

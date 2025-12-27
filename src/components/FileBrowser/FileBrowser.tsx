@@ -14,7 +14,8 @@ import {
   Edit,
   RefreshCw,
   UploadCloud,
-  CornerLeftUp
+  CornerLeftUp,
+  MousePointer2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -104,6 +105,9 @@ export function FileBrowser({
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renameItemName, setRenameItemName] = useState('');
   const [renameItemId, setRenameItemId] = useState('');
+
+  // Multi-select state
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
 
   // Load initial data
   // Load data function
@@ -686,8 +690,8 @@ export function FileBrowser({
       return;
     }
 
-    // Handle Ctrl/Cmd click (toggle selection)
-    if (e.ctrlKey || e.metaKey) {
+    // Handle Ctrl/Cmd click or Multi-Select Mode (toggle selection)
+    if (e.ctrlKey || e.metaKey || isMultiSelectMode) {
       if (item.type === 'file') {
         const isSelected = selectedImages.includes(item.id);
         const newSelection = isSelected
@@ -904,6 +908,23 @@ export function FileBrowser({
             <span className="text-xs font-medium text-white/80 group-hover:text-white">Select All</span>
           </Button>
 
+          <Button
+            variant={isMultiSelectMode ? "default" : "outline"}
+            onClick={() => setIsMultiSelectMode(!isMultiSelectMode)}
+            className={cn(
+              "h-8 px-3 transition-all duration-300 rounded-lg gap-2 group",
+              isMultiSelectMode
+                ? "bg-primary border-primary text-white hover:bg-primary/90"
+                : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary"
+            )}
+            title="Toggle click-to-select mode"
+          >
+            <MousePointer2 className={cn("w-3.5 h-3.5 transition-colors", isMultiSelectMode ? "text-white" : "text-white/60 group-hover:text-primary")} />
+            <span className={cn("text-xs font-medium", isMultiSelectMode ? "text-white" : "text-white/80 group-hover:text-white")}>
+              {isMultiSelectMode ? 'Multi-Select On' : 'Multi-Select'}
+            </span>
+          </Button>
+
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
             {/* Delete Button */}
@@ -981,169 +1002,173 @@ export function FileBrowser({
             "grid gap-4 transition-all duration-300",
             viewMode === 'grid' ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-1"
           )}>
-            {filteredAndSortedItems.map(item => (
-              <motion.div
-                key={item.id}
-                layout
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className={cn(
-                  "group relative rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden",
-                  viewMode === 'list' ? "flex items-center p-3 gap-4" : "aspect-[4/3] flex flex-col",
-                  // Specific Styles based on Type
-                  item.type === 'folder' && (
-                    selectedFolders.includes(item.id)
-                      ? "bg-blue-500/30 border-blue-500/50 ring-2 ring-blue-500"
-                      : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/40"
-                  ),
-                  item.type === 'slideshow' && (
-                    (item.slideshow?.lastUploadStatus === 'failed') ? "bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40" :
-                      (item.slideshow?.uploadCount || 0) > 1 ? "bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/20 hover:border-yellow-500/40" :
-                        (item.slideshow?.uploadCount === 1) ? "bg-green-500/10 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/40" :
-                          "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/40"
-                  ),
-                  item.type === 'file' && "bg-white/5 border-white/10 hover:bg-white/10",
+            <AnimatePresence mode="popLayout">
+              {filteredAndSortedItems.map(item => (
+                <motion.div
+                  key={item.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
+                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
+                  className={cn(
+                    "group relative rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden",
+                    viewMode === 'list' ? "flex items-center p-3 gap-4" : "aspect-[4/3] flex flex-col",
+                    // Specific Styles based on Type
+                    item.type === 'folder' && (
+                      selectedFolders.includes(item.id)
+                        ? "bg-blue-500/30 border-blue-500/50 ring-2 ring-blue-500"
+                        : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/40"
+                    ),
+                    item.type === 'slideshow' && (
+                      (item.slideshow?.lastUploadStatus === 'failed') ? "bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40" :
+                        (item.slideshow?.uploadCount || 0) > 1 ? "bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/20 hover:border-yellow-500/40" :
+                          (item.slideshow?.uploadCount === 1) ? "bg-green-500/10 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/40" :
+                            "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/40"
+                    ),
+                    item.type === 'file' && "bg-white/5 border-white/10 hover:bg-white/10",
 
-                  // Selection Styles
-                  (item.type === 'file' && selectedImages.includes(item.id)) && "ring-2 ring-primary border-primary/50",
-                  (item.type === 'slideshow' && selectedSlideshows.includes(item.id)) && "ring-2 ring-primary border-primary/50",
-                  // Drop Target Styles
-                  (item.id === 'parent-directory' || item.type === 'folder') && "hover:ring-2 hover:ring-blue-500/50 hover:bg-blue-500/20"
-                )}
-                draggable={item.id !== 'parent-directory'}
-                onDragStart={(e) => handleItemDragStart(e, item)}
-                onDragOver={(e: any) => {
-                  if (item.type === 'folder' || item.id === 'parent-directory') {
-                    e.preventDefault(); // Allow drop
-                    e.currentTarget.classList.add('ring-2', 'ring-blue-500', 'bg-blue-500/30');
-                  }
-                }}
-                onDragLeave={(e) => {
-                  if (item.type === 'folder' || item.id === 'parent-directory') {
+                    // Selection Styles
+                    (item.type === 'file' && selectedImages.includes(item.id)) && "ring-2 ring-primary border-primary/50",
+                    (item.type === 'slideshow' && selectedSlideshows.includes(item.id)) && "ring-2 ring-primary border-primary/50",
+                    // Drop Target Styles
+                    (item.id === 'parent-directory' || item.type === 'folder') && "hover:ring-2 hover:ring-blue-500/50 hover:bg-blue-500/20"
+                  )}
+                  draggable={item.id !== 'parent-directory'}
+                  onDragStart={(e) => handleItemDragStart(e, item)}
+                  onDragOver={(e: any) => {
+                    if (item.type === 'folder' || item.id === 'parent-directory') {
+                      e.preventDefault(); // Allow drop
+                      e.currentTarget.classList.add('ring-2', 'ring-blue-500', 'bg-blue-500/30');
+                    }
+                  }}
+                  onDragLeave={(e) => {
+                    if (item.type === 'folder' || item.id === 'parent-directory') {
+                      e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/30');
+                    }
+                  }}
+                  onDrop={(e) => {
                     e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/30');
-                  }
-                }}
-                onDrop={(e) => {
-                  e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/30');
-                  if (item.id === 'parent-directory') {
-                    handleParentDrop(e);
-                  } else if (item.type === 'folder') {
-                    handleFolderDrop(e, item.id);
-                  }
-                }}
-                onDoubleClick={() => {
-                  if (item.type === 'folder' && item.id !== 'parent-directory') {
-                    onCurrentFolderIdChange(item.id);
-                  }
-                }}
-                onClick={(e) => handleItemClick(item, e)}
-                onContextMenu={(e) => handleContextMenu(e, item.type, item.id, item.name)}
-              >
-                {item.type === 'folder' ? (
-                  <>
-                    <div className={cn(
-                      "flex items-center justify-center text-blue-400 group-hover:text-blue-300 transition-colors",
-                      viewMode === 'list' ? "w-10 h-10 bg-blue-500/20 rounded-lg" : "flex-1"
-                    )}>
-                      {item.id === 'parent-directory' ? (
-                        <CornerLeftUp className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
-                      ) : (
-                        <FolderIcon className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
-                      )}
-                    </div>
-                    <div className={cn(
-                      "flex flex-col",
-                      viewMode === 'grid' && "p-3 bg-black/40 backdrop-blur-sm border-t border-blue-500/10"
-                    )}>
-                      <span className="font-medium text-sm truncate text-blue-100 group-hover:text-white">{item.name}</span>
-                      <span className="text-[10px] text-blue-200/50">Folder</span>
-                    </div>
-                  </>
-                ) : item.type === 'slideshow' ? (
-                  <>
-                    <div className={cn(
-                      "flex items-center justify-center transition-colors",
-                      (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-400 group-hover:text-red-300" :
-                        (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-400 group-hover:text-yellow-300" :
-                          (item.slideshow?.uploadCount === 1) ? "text-green-400 group-hover:text-green-300" :
-                            "text-purple-400 group-hover:text-purple-300",
-                      viewMode === 'list' ? (
-                        (item.slideshow?.lastUploadStatus === 'failed') ? "w-10 h-10 bg-red-500/20 rounded-lg" :
-                          (item.slideshow?.uploadCount || 0) > 1 ? "w-10 h-10 bg-yellow-500/20 rounded-lg" :
-                            (item.slideshow?.uploadCount === 1) ? "w-10 h-10 bg-green-500/20 rounded-lg" :
-                              "w-10 h-10 bg-purple-500/20 rounded-lg"
-                      ) : "flex-1"
-                    )}>
-                      <Film className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
-                    </div>
-                    <div className={cn(
-                      "flex flex-col",
-                      viewMode === 'grid' && (
-                        (item.slideshow?.lastUploadStatus === 'failed') ? "p-3 bg-black/40 backdrop-blur-sm border-t border-red-500/10" :
-                          (item.slideshow?.uploadCount || 0) > 1 ? "p-3 bg-black/40 backdrop-blur-sm border-t border-yellow-500/10" :
-                            (item.slideshow?.uploadCount === 1) ? "p-3 bg-black/40 backdrop-blur-sm border-t border-green-500/10" :
-                              "p-3 bg-black/40 backdrop-blur-sm border-t border-purple-500/10"
-                      )
-                    )}>
-                      <span className={cn(
-                        "font-medium text-sm truncate group-hover:text-white",
-                        (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-100" :
-                          (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-100" :
-                            (item.slideshow?.uploadCount === 1) ? "text-green-100" :
-                              "text-purple-100"
-                      )}>{item.name}</span>
-                      <span className={cn(
-                        "text-[10px]",
-                        (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-200/50" :
-                          (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-200/50" :
-                            (item.slideshow?.uploadCount === 1) ? "text-green-200/50" :
-                              "text-purple-200/50"
-                      )}>Slideshow</span>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className={cn(
-                      "relative overflow-hidden",
-                      viewMode === 'list' ? "w-12 h-12 rounded-lg shrink-0" : "w-full h-full"
-                    )}>
-                      <img
-                        src={item.image?.url}
-                        alt={item.name}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
-
-                      {/* Selection Indicator */}
+                    if (item.id === 'parent-directory') {
+                      handleParentDrop(e);
+                    } else if (item.type === 'folder') {
+                      handleFolderDrop(e, item.id);
+                    }
+                  }}
+                  onDoubleClick={() => {
+                    if (item.type === 'folder' && item.id !== 'parent-directory') {
+                      onCurrentFolderIdChange(item.id);
+                    }
+                  }}
+                  onClick={(e) => handleItemClick(item, e)}
+                  onContextMenu={(e) => handleContextMenu(e, item.type, item.id, item.name)}
+                >
+                  {item.type === 'folder' ? (
+                    <>
                       <div className={cn(
-                        "absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-white/50 transition-all duration-200 flex items-center justify-center",
-                        selectedImages.includes(item.id) ? "bg-primary border-primary scale-100" : "scale-0 group-hover:scale-100 bg-black/50"
+                        "flex items-center justify-center text-blue-400 group-hover:text-blue-300 transition-colors",
+                        viewMode === 'list' ? "w-10 h-10 bg-blue-500/20 rounded-lg" : "flex-1"
                       )}>
-                        {selectedImages.includes(item.id) && <div className="w-2 h-2 bg-white rounded-full" />}
+                        {item.id === 'parent-directory' ? (
+                          <CornerLeftUp className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
+                        ) : (
+                          <FolderIcon className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
+                        )}
                       </div>
-                    </div>
-
-                    {viewMode === 'grid' && (
-                      <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                        <p className="text-xs font-medium text-white truncate">{item.name}</p>
-                        <p className="text-[10px] text-white/60">{formatFileSize(item.size || 0)}</p>
+                      <div className={cn(
+                        "flex flex-col",
+                        viewMode === 'grid' && "p-3 bg-black/40 backdrop-blur-sm border-t border-blue-500/10"
+                      )}>
+                        <span className="font-medium text-sm truncate text-blue-100 group-hover:text-white">{item.name}</span>
+                        <span className="text-[10px] text-blue-200/50">Folder</span>
                       </div>
-                    )}
+                    </>
+                  ) : item.type === 'slideshow' ? (
+                    <>
+                      <div className={cn(
+                        "flex items-center justify-center transition-colors",
+                        (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-400 group-hover:text-red-300" :
+                          (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-400 group-hover:text-yellow-300" :
+                            (item.slideshow?.uploadCount === 1) ? "text-green-400 group-hover:text-green-300" :
+                              "text-purple-400 group-hover:text-purple-300",
+                        viewMode === 'list' ? (
+                          (item.slideshow?.lastUploadStatus === 'failed') ? "w-10 h-10 bg-red-500/20 rounded-lg" :
+                            (item.slideshow?.uploadCount || 0) > 1 ? "w-10 h-10 bg-yellow-500/20 rounded-lg" :
+                              (item.slideshow?.uploadCount === 1) ? "w-10 h-10 bg-green-500/20 rounded-lg" :
+                                "w-10 h-10 bg-purple-500/20 rounded-lg"
+                        ) : "flex-1"
+                      )}>
+                        <Film className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
+                      </div>
+                      <div className={cn(
+                        "flex flex-col",
+                        viewMode === 'grid' && (
+                          (item.slideshow?.lastUploadStatus === 'failed') ? "p-3 bg-black/40 backdrop-blur-sm border-t border-red-500/10" :
+                            (item.slideshow?.uploadCount || 0) > 1 ? "p-3 bg-black/40 backdrop-blur-sm border-t border-yellow-500/10" :
+                              (item.slideshow?.uploadCount === 1) ? "p-3 bg-black/40 backdrop-blur-sm border-t border-green-500/10" :
+                                "p-3 bg-black/40 backdrop-blur-sm border-t border-purple-500/10"
+                        )
+                      )}>
+                        <span className={cn(
+                          "font-medium text-sm truncate group-hover:text-white",
+                          (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-100" :
+                            (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-100" :
+                              (item.slideshow?.uploadCount === 1) ? "text-green-100" :
+                                "text-purple-100"
+                        )}>{item.name}</span>
+                        <span className={cn(
+                          "text-[10px]",
+                          (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-200/50" :
+                            (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-200/50" :
+                              (item.slideshow?.uploadCount === 1) ? "text-green-200/50" :
+                                "text-purple-200/50"
+                        )}>Slideshow</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className={cn(
+                        "relative overflow-hidden",
+                        viewMode === 'list' ? "w-12 h-12 rounded-lg shrink-0" : "w-full h-full"
+                      )}>
+                        <img
+                          src={item.image?.url}
+                          alt={item.name}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
 
-                    {viewMode === 'list' && (
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white/90 truncate">{item.name}</p>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>{formatFileSize(item.size || 0)}</span>
-                          <span>•</span>
-                          <span>{format(new Date(), 'MMM d, yyyy')}</span>
+                        {/* Selection Indicator */}
+                        <div className={cn(
+                          "absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-white/50 transition-all duration-200 flex items-center justify-center",
+                          selectedImages.includes(item.id) ? "bg-primary border-primary scale-100" : "scale-0 group-hover:scale-100 bg-black/50"
+                        )}>
+                          {selectedImages.includes(item.id) && <div className="w-2 h-2 bg-white rounded-full" />}
                         </div>
                       </div>
-                    )}
-                  </>
-                )}
-              </motion.div>
-            ))}
+
+                      {viewMode === 'grid' && (
+                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                          <p className="text-xs font-medium text-white truncate">{item.name}</p>
+                          <p className="text-[10px] text-white/60">{formatFileSize(item.size || 0)}</p>
+                        </div>
+                      )}
+
+                      {viewMode === 'list' && (
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-white/90 truncate">{item.name}</p>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span>{formatFileSize(item.size || 0)}</span>
+                            <span>•</span>
+                            <span>{format(new Date(), 'MMM d, yyyy')}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         )}
       </div>
