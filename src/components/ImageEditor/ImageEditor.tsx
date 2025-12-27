@@ -134,7 +134,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
     if (!ctx) return;
 
     const img = new Image();
-    img.onload = async function() {
+    img.onload = async function () {
       // Set canvas size
       canvas.width = img.width;
       canvas.height = img.height;
@@ -182,18 +182,25 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
 
-        // Draw outline using stroke for clean outside outline
-        if (overlay.outlineWidth > 0) {
-          ctx.strokeStyle = overlay.outlineColor;
-          ctx.lineWidth = overlay.outlineWidth;
-          ctx.lineJoin = 'round';
-          ctx.miterLimit = 2;
-          ctx.strokeText(overlay.text, overlay.x, overlay.y);
-        }
+        const lines = overlay.text.split('\n');
+        const lineHeight = overlay.fontSize * 1.2;
 
-        // Draw the main text fill on top
-        ctx.fillStyle = overlay.color;
-        ctx.fillText(overlay.text, overlay.x, overlay.y);
+        lines.forEach((line, index) => {
+          const y = overlay.y + (index * lineHeight);
+
+          // Draw outline using stroke for clean outside outline
+          if (overlay.outlineWidth > 0) {
+            ctx.strokeStyle = overlay.outlineColor;
+            ctx.lineWidth = overlay.outlineWidth;
+            ctx.lineJoin = 'round';
+            ctx.miterLimit = 2;
+            ctx.strokeText(line, overlay.x, y);
+          }
+
+          // Draw the main text fill on top
+          ctx.fillStyle = overlay.color;
+          ctx.fillText(line, overlay.x, y);
+        });
       }
 
       ctx.restore();
@@ -709,11 +716,11 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                 <h4 className="font-medium text-white">Text Overlays</h4>
                 {editState.textOverlays.map(overlay => (
                   <div key={overlay.id} className="border border-gray-600 rounded p-2 space-y-2 bg-gray-700">
-                    <input
-                      type="text"
+                    <textarea
                       value={overlay.text}
                       onChange={(e) => updateTextOverlay(overlay.id, { text: e.target.value })}
-                      className="w-full text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white"
+                      className="w-full text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white resize-y min-h-[60px]"
+                      rows={3}
                     />
                     <div className="flex space-x-2">
                       <select
