@@ -968,7 +968,7 @@ export function FileBrowser({
               <span className="text-xs font-medium text-white/80 group-hover:text-white">Bulk Post</span>
             </Button>
 
-            <div className="relative">
+            <div className="relative hidden sm:block">
               <input
                 type="file"
                 multiple
@@ -982,6 +982,23 @@ export function FileBrowser({
               </Button>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Mobile Upload FAB */}
+      <div className="absolute bottom-6 right-6 z-50 sm:hidden">
+        <div className="relative group">
+          <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-50 group-hover:opacity-100 transition-opacity" />
+          <input
+            type="file"
+            multiple
+            accept="image/*,.slideshow"
+            onChange={handleFileSelect}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          />
+          <Button className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/20 border-0 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95">
+            <ImagePlus className="w-6 h-6" />
+          </Button>
         </div>
       </div>
 
