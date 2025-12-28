@@ -101,6 +101,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   const [isDraggingText, setIsDraggingText] = useState(false);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingTextValue, setEditingTextValue] = useState('');
+  const [snapLines, setSnapLines] = useState({ x: false, y: false });
 
   // Check if any text overlay is near center
   const isTextNearCenter = textOverlays.some(overlay =>
@@ -424,12 +425,31 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
               </div>
 
               {/* Snap lines - only show during active dragging */}
-              {!previewMode && isDraggingText && (
+              {!previewMode && (isDraggingText || snapLines.x || snapLines.y) && (
                 <>
                   {/* Vertical center line */}
-                  <div className="absolute left-1/2 top-0 bottom-0 w-px bg-blue-500/50 z-10 pointer-events-none" />
+                  <AnimatePresence>
+                    {snapLines.x && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: '100%' }}
+                        exit={{ opacity: 0 }}
+                        className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-blue-500 z-30 pointer-events-none shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                      />
+                    )}
+                  </AnimatePresence>
+
                   {/* Horizontal center line */}
-                  <div className="absolute top-1/2 left-0 right-0 h-px bg-blue-500/50 z-10 pointer-events-none" />
+                  <AnimatePresence>
+                    {snapLines.y && (
+                      <motion.div
+                        initial={{ opacity: 0, width: 0 }}
+                        animate={{ opacity: 1, width: '100%' }}
+                        exit={{ opacity: 0 }}
+                        className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-500 z-30 pointer-events-none shadow-[0_0_10px_rgba(59,130,246,0.5)]"
+                      />
+                    )}
+                  </AnimatePresence>
                 </>
               )}
 
@@ -437,22 +457,13 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
               {(textOverlays || [])
                 .filter(overlay => overlay.slideIndex === currentSlide)
                 .map((overlay) => {
-                  console.log('🎨 Rendering text overlay:', {
-                    id: overlay.id,
-                    text: overlay.text,
-                    slideIndex: overlay.slideIndex,
-                    currentSlide,
-                    x: overlay.x,
-                    y: overlay.y,
-                    color: overlay.color,
-                    outline: overlay.outline,
-                    outlineWidth: overlay.outlineWidth
-                  });
-
                   return (
                     <div
                       key={overlay.id}
-                      className="absolute cursor-grab z-20"
+                      className={cn(
+                        "absolute group z-20 transition-all duration-200",
+                        previewMode ? "" : "cursor-grab active:cursor-grabbing hover:ring-2 hover:ring-blue-500/50 rounded-lg"
+                      )}
                       style={{
                         left: `${overlay.x}%`,
                         top: `${overlay.y}%`,
@@ -465,7 +476,12 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         e.preventDefault();
                         e.stopPropagation();
 
+                        // Select this text for editing immediately on click
+                        setEditingTextId(overlay.id);
+                        setEditingTextValue(overlay.text);
+
                         setIsDraggingText(true);
+                        setSnapLines({ x: false, y: false });
 
                         const startX = e.clientX;
                         const startY = e.clientY;
@@ -473,9 +489,13 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         const startTop = overlay.y;
                         const container = dragContainerRef.current;
 
+                        // Track if it was a click or drag
+                        let isDrag = false;
+
                         if (!container) return;
 
                         const handleMouseMove = (e: MouseEvent) => {
+                          isDrag = true;
                           const deltaX = e.clientX - startX;
                           const deltaY = e.clientY - startY;
 
@@ -483,8 +503,25 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                           const deltaXPercent = (deltaX / containerRect.width) * 100;
                           const deltaYPercent = (deltaY / containerRect.height) * 100;
 
-                          const newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
-                          const newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
+                          let newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
+                          let newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
+
+                          // Snap logic (Snap to 50%)
+                          const SNAP_THRESHOLD = 3; // %
+                          let snappedX = false;
+                          let snappedY = false;
+
+                          if (Math.abs(newLeft - 50) < SNAP_THRESHOLD) {
+                            newLeft = 50;
+                            snappedX = true;
+                          }
+
+                          if (Math.abs(newTop - 50) < SNAP_THRESHOLD) {
+                            newTop = 50;
+                            snappedY = true;
+                          }
+
+                          setSnapLines({ x: snappedX, y: snappedY });
 
                           const updatedOverlays = textOverlays.map(o =>
                             o.id === overlay.id
@@ -496,6 +533,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
 
                         const handleMouseUp = () => {
                           setIsDraggingText(false);
+                          setSnapLines({ x: false, y: false });
                           document.removeEventListener('mousemove', handleMouseMove);
                           document.removeEventListener('mouseup', handleMouseUp);
                         };
@@ -503,71 +541,148 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         document.addEventListener('mousemove', handleMouseMove);
                         document.addEventListener('mouseup', handleMouseUp);
                       }}
-                      onDoubleClick={(e) => {
+                      onTouchStart={(e) => {
+                        // Mobile Touch Handling for Dragging
                         if (previewMode) return;
-                        e.preventDefault();
                         e.stopPropagation();
 
+                        // Select this text for editing immediately on click
                         setEditingTextId(overlay.id);
                         setEditingTextValue(overlay.text);
+
+                        setIsDraggingText(true);
+                        setSnapLines({ x: false, y: false });
+
+                        const touch = e.touches[0];
+                        const startX = touch.clientX;
+                        const startY = touch.clientY;
+                        const startLeft = overlay.x;
+                        const startTop = overlay.y;
+                        const container = dragContainerRef.current;
+
+                        if (!container) return;
+
+                        const handleTouchMove = (e: TouchEvent) => {
+                          e.preventDefault(); // Prevent scrolling while dragging text
+                          const touch = e.touches[0];
+                          const deltaX = touch.clientX - startX;
+                          const deltaY = touch.clientY - startY;
+
+                          const containerRect = container.getBoundingClientRect();
+                          const deltaXPercent = (deltaX / containerRect.width) * 100;
+                          const deltaYPercent = (deltaY / containerRect.height) * 100;
+
+                          let newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
+                          let newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
+
+                          // Snap logic (Snap to 50%)
+                          const SNAP_THRESHOLD = 3; // %
+                          let snappedX = false;
+                          let snappedY = false;
+
+                          if (Math.abs(newLeft - 50) < SNAP_THRESHOLD) {
+                            newLeft = 50;
+                            snappedX = true;
+                          }
+
+                          if (Math.abs(newTop - 50) < SNAP_THRESHOLD) {
+                            newTop = 50;
+                            snappedY = true;
+                          }
+
+                          setSnapLines({ x: snappedX, y: snappedY });
+
+                          const updatedOverlays = textOverlays.map(o =>
+                            o.id === overlay.id
+                              ? { ...o, x: newLeft, y: newTop }
+                              : o
+                          );
+                          onTextOverlaysChange?.(updatedOverlays);
+                        };
+
+                        const handleTouchEnd = () => {
+                          setIsDraggingText(false);
+                          setSnapLines({ x: false, y: false });
+                          document.removeEventListener('touchmove', handleTouchMove);
+                          document.removeEventListener('touchend', handleTouchEnd);
+                        };
+
+                        document.addEventListener('touchmove', handleTouchMove, { passive: false });
+                        document.addEventListener('touchend', handleTouchEnd);
                       }}
                     >
                       {editingTextId === overlay.id ? (
-                        <input
-                          type="text"
-                          value={editingTextValue}
-                          onChange={(e) => setEditingTextValue(e.target.value)}
-                          onBlur={() => {
-                            const updatedOverlays = textOverlays.map(o =>
-                              o.id === overlay.id
-                                ? { ...o, text: editingTextValue }
-                                : o
-                            );
-                            onTextOverlaysChange?.(updatedOverlays);
-                            setEditingTextId(null);
-                          }}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.currentTarget.blur();
-                            } else if (e.key === 'Escape') {
-                              setEditingTextId(null);
-                              setEditingTextValue('');
-                            }
-                          }}
-                          className="w-full h-full bg-transparent border-none outline-none text-center p-1"
-                          style={{
-                            color: overlay.color || '#ffffff',
-                            fontSize: `${Math.max(10, Math.min(overlay.fontSize, 24))}px`,
-                            fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-                            textAlign: overlay.alignment,
-                            lineHeight: '1.2',
-                            whiteSpace: 'pre', // Prevent automatic line breaks, preserve explicit newlines
-                            overflow: 'visible',
+                        <div className="relative w-full h-full">
+                          <input
+                            type="text"
+                            value={editingTextValue}
+                            onChange={(e) => setEditingTextValue(e.target.value)}
+                            onBlur={() => {
+                              // Save on blur
+                              const updatedOverlays = textOverlays.map(o =>
+                                o.id === overlay.id
+                                  ? { ...o, text: editingTextValue }
+                                  : o
+                              );
+                              onTextOverlaysChange?.(updatedOverlays);
+                              // Keep selection active but stop editing mode if needed?
+                              // For now, let's keep it simple.
+                              // setEditingTextId(null); 
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.currentTarget.blur();
+                                setEditingTextId(null);
+                              } else if (e.key === 'Escape') {
+                                setEditingTextId(null);
+                                setEditingTextValue(overlay.text); // Revert
+                              }
+                            }}
+                            className="w-[200%] h-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent border-none outline-none text-center p-1 z-30"
+                            style={{
+                              color: overlay.color || '#ffffff',
+                              fontSize: `${Math.max(10, Math.min(overlay.fontSize, 50))}px`,
+                              fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+                              textAlign: overlay.alignment,
+                              lineHeight: '1.2',
+                              whiteSpace: 'nowrap',
 
-                            textShadow: overlay.outline
-                              ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
-                              : overlay.glow
-                                ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
-                                : 'none',
-                          }}
-                          autoFocus
-                        />
+                              textShadow: overlay.outline
+                                ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
+                                : overlay.glow
+                                  ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
+                                  : 'none',
+                            }}
+                            autoFocus
+                          />
+                          {/* Close/Done Button for Mobile */}
+                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex gap-2 z-40 bg-black/80 rounded-full px-3 py-1.5 backdrop-blur-md border border-white/20">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingTextId(null);
+                                const updatedOverlays = textOverlays.map(o => o.id === overlay.id ? { ...o, text: editingTextValue } : o);
+                                onTextOverlaysChange?.(updatedOverlays);
+                              }}
+                              className="text-xs font-bold text-white flex items-center gap-1"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        </div>
                       ) : (
                         <div
                           className={cn(
-                            "w-full h-full flex items-center justify-center text-center p-1 select-none",
+                            "w-full h-full flex items-center justify-center text-center p-1 select-none whitespace-nowrap",
                             overlay.bold && "font-bold",
                             overlay.italic && "italic",
-                            !previewMode && "cursor-text"
                           )}
                           style={{
                             color: overlay.color || '#ffffff',
-                            fontSize: `${Math.max(10, Math.min(overlay.fontSize, 24))}px`,
+                            fontSize: `${Math.max(10, Math.min(overlay.fontSize, 50))}px`,
                             fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
                             textAlign: overlay.alignment,
                             lineHeight: '1.2',
-                            whiteSpace: 'pre', // Changed from 'pre-wrap' to 'pre' to prevent automatic line breaks
-                            overflow: 'visible',
 
                             textShadow: overlay.outline
                               ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
@@ -578,6 +693,14 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         >
                           {overlay.text || 'Sample Text'}
                         </div>
+                      )}
+
+                      {/* Visual Guide Box when hovering/dragging */}
+                      {!previewMode && (
+                        <div className={cn(
+                          "absolute inset-0 border-2 border-transparent group-hover:border-white/30 rounded-lg pointer-events-none transition-colors",
+                          editingTextId === overlay.id && "border-blue-500 bg-blue-500/10"
+                        )} />
                       )}
                     </div>
                   );

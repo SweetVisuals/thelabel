@@ -898,32 +898,34 @@ export function FileBrowser({
 
       <div className="flex flex-col gap-2 bg-black/40 backdrop-blur-xl border-b border-white/10 p-2 z-20">
         <div className="flex items-center justify-between gap-2">
-          {/* Left: Select All */}
-          <Button
-            variant="outline"
-            onClick={selectAll}
-            className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
-          >
-            <CheckSquare className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
-            <span className="text-xs font-medium text-white/80 group-hover:text-white">Select All</span>
-          </Button>
+          {/* Left: Select All & Multi-Select Group */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={selectAll}
+              className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
+            >
+              <CheckSquare className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+              <span className="text-xs font-medium text-white/80 group-hover:text-white">Select All</span>
+            </Button>
 
-          <Button
-            variant={isMultiSelectMode ? "default" : "outline"}
-            onClick={() => setIsMultiSelectMode(!isMultiSelectMode)}
-            className={cn(
-              "h-8 px-3 transition-all duration-300 rounded-lg gap-2 group",
-              isMultiSelectMode
-                ? "bg-primary border-primary text-white hover:bg-primary/90"
-                : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary"
-            )}
-            title="Toggle click-to-select mode"
-          >
-            <MousePointer2 className={cn("w-3.5 h-3.5 transition-colors", isMultiSelectMode ? "text-white" : "text-white/60 group-hover:text-primary")} />
-            <span className={cn("text-xs font-medium", isMultiSelectMode ? "text-white" : "text-white/80 group-hover:text-white")}>
-              {isMultiSelectMode ? 'Multi-Select On' : 'Multi-Select'}
-            </span>
-          </Button>
+            <Button
+              variant={isMultiSelectMode ? "default" : "outline"}
+              onClick={() => setIsMultiSelectMode(!isMultiSelectMode)}
+              className={cn(
+                "h-8 px-3 transition-all duration-300 rounded-lg gap-2 group",
+                isMultiSelectMode
+                  ? "bg-primary border-primary text-white hover:bg-primary/90"
+                  : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary"
+              )}
+              title="Toggle click-to-select mode"
+            >
+              <MousePointer2 className={cn("w-3.5 h-3.5 transition-colors", isMultiSelectMode ? "text-white" : "text-white/60 group-hover:text-primary")} />
+              <span className={cn("text-xs font-medium", isMultiSelectMode ? "text-white" : "text-white/80 group-hover:text-white")}>
+                {isMultiSelectMode ? 'Multi-Select On' : 'Multi-Select'}
+              </span>
+            </Button>
+          </div>
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
