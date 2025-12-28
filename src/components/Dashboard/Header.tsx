@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, LogOut, Folder, Home, ChevronRight, Sparkles, Calendar as CalendarIcon, ListOrdered, Loader2 } from "lucide-react";
+import { Menu, X, LogOut, Folder, Home, ChevronRight, Calendar as CalendarIcon, ListOrdered, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from "@/lib/utils";
@@ -78,12 +78,11 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                 transition={{ type: "spring", stiffness: 400 }}
                                 onClick={() => onNavigateToFolder?.(null)}
                             >
-                                <div className="w-8 h-8 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center shadow-lg shadow-purple-500/20">
-                                    <Sparkles className="w-4 h-4 text-white" />
-                                </div>
-                                <span className="text-lg font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent">
-                                    TikTok Bulk
-                                </span>
+                                <img
+                                    src="/Movement.png"
+                                    alt="Movement"
+                                    className="h-10 w-auto object-contain"
+                                />
                             </motion.div>
 
                             {/* Breadcrumb */}

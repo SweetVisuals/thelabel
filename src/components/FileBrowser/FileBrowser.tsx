@@ -742,11 +742,15 @@ export function FileBrowser({
       if (item.slideshow) onSlideshowLoad(item.slideshow);
     }
     // For folders:
+    // For folders:
     else if (item.type === 'folder') {
+      // Single click to open folder immediately
+      onCurrentFolderIdChange(item.id);
+
+      // Clear selections as we are navigating away from current view context essentially
       onSelectionChange([]);
       onSlideshowSelectionChange([]);
-      onFolderSelectionChange([item.id]);
-      setLastSelectedId(item.id);
+      onFolderSelectionChange([]);
     }
   };
 
@@ -850,6 +854,12 @@ export function FileBrowser({
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
+      onDoubleClick={(e) => {
+        // Prevent if clicking on an item (handled by item's handlers usually, but double check target)
+        if (e.target === e.currentTarget) {
+          setShowNewFolderDialog(true);
+        }
+      }}
     >
       {/* Drag Overlay */}
       <AnimatePresence>
