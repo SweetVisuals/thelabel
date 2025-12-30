@@ -90,6 +90,8 @@ export function FileBrowser({
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const dragCounter = useRef(0);
+  const lastTapRef = useRef(0);
+  const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{
@@ -860,6 +862,15 @@ export function FileBrowser({
           setShowNewFolderDialog(true);
         }
       }}
+      onTouchEnd={(e) => {
+        if (e.target === e.currentTarget) {
+          const now = Date.now();
+          if (now - lastTapRef.current < 300) {
+            setShowNewFolderDialog(true);
+          }
+          lastTapRef.current = now;
+        }
+      }}
     >
       {/* Drag Overlay */}
       <AnimatePresence>
@@ -907,7 +918,7 @@ export function FileBrowser({
       </AnimatePresence>
 
       <div className="flex flex-col gap-2 bg-black/40 backdrop-blur-xl border-b border-white/10 p-2 z-20">
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
           {/* Left: Select All & Multi-Select Group */}
           <div className="flex items-center gap-2">
             <Button
@@ -1013,7 +1024,23 @@ export function FileBrowser({
       </div>
 
       {/* Content Area */}
-      <div className="flex-1 p-4 overflow-auto">
+      <div
+        className="flex-1 p-4 overflow-auto min-h-0"
+        onDoubleClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setShowNewFolderDialog(true);
+          }
+        }}
+        onTouchEnd={(e) => {
+          if (e.target === e.currentTarget) {
+            const now = Date.now();
+            if (now - lastTapRef.current < 300) {
+              setShowNewFolderDialog(true);
+            }
+            lastTapRef.current = now;
+          }
+        }}
+      >
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -1091,6 +1118,31 @@ export function FileBrowser({
                   }}
                   onClick={(e) => handleItemClick(item, e)}
                   onContextMenu={(e) => handleContextMenu(e, item.type, item.id, item.name)}
+                  onTouchStart={(e) => {
+                    const touch = e.touches[0];
+                    const clientX = touch.clientX;
+                    const clientY = touch.clientY;
+                    longPressTimer.current = setTimeout(() => {
+                      handleContextMenu({
+                        preventDefault: () => { },
+                        stopPropagation: () => { },
+                        clientX,
+                        clientY,
+                      } as React.MouseEvent, item.type, item.id, item.name);
+                    }, 500);
+                  }}
+                  onTouchEnd={() => {
+                    if (longPressTimer.current) {
+                      clearTimeout(longPressTimer.current);
+                      longPressTimer.current = null;
+                    }
+                  }}
+                  onTouchMove={() => {
+                    if (longPressTimer.current) {
+                      clearTimeout(longPressTimer.current);
+                      longPressTimer.current = null;
+                    }
+                  }}
                 >
                   {item.type === 'folder' ? (
                     <>

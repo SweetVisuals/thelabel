@@ -416,7 +416,7 @@ export const Dashboard: React.FC = () => {
           {/* Middle: TikTok Preview */}
           <div className={cn(
             "flex flex-col min-w-0 bg-black/40 backdrop-blur-sm border-r border-white/10",
-            "w-full xl:w-[500px]",
+            "w-full xl:w-[500px] flex-1 h-full",
             activeMobileTab === 'preview' ? 'flex' : 'hidden xl:flex'
           )}>
             <TikTokPreview
