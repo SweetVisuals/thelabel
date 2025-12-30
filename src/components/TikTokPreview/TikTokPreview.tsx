@@ -792,65 +792,64 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </>
-                </>
+              )}
+            </>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center text-white text-center">
+              <p>No content to display</p>
+            </div>
           )}
-        </>
-        ) : (
-        <div className="absolute inset-0 flex items-center justify-center text-white text-center">
-          <p>No content to display</p>
         </div>
-          )}
-      </div>
 
-        {/* Bottom content area - fixed positioning */ }
-    <div className="absolute bottom-0 left-0 right-0 z-10 p-3 pb-12 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-      <div className="text-white">
-        <p className="font-medium mb-1 text-sm truncate">{title}</p>
-        <p className="text-xs text-gray-200 mb-2 line-clamp-2">{caption}</p>
-        {hashtags && hashtags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {hashtags.map((tag, index) => (
-              <span key={index} className="text-xs text-blue-400">
-                #{tag}
-              </span>
-            ))}
+        {/* Bottom content area - fixed positioning */}
+        <div className="absolute bottom-0 left-0 right-0 z-10 p-3 pb-12 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
+          <div className="text-white">
+            <p className="font-medium mb-1 text-sm truncate">{title}</p>
+            <p className="text-xs text-gray-200 mb-2 line-clamp-2">{caption}</p>
+            {hashtags && hashtags.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {hashtags.map((tag, index) => (
+                  <span key={index} className="text-xs text-blue-400">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
+        </div>
 
-    {/* Playback controls - positioned above bottom content */ }
-    <div className="absolute bottom-4 left-4 flex items-center space-x-2 z-20">
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => setIsPlaying(!isPlaying)}
-        className="text-white hover:bg-white/10 h-8 w-8 p-0"
-      >
-        {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-      </Button>
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => setIsMuted(!isMuted)}
-        className="text-white hover:bg-white/10 h-8 w-8 p-0"
-      >
-        {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-      </Button>
-      <span className="text-white text-xs bg-black/50 px-2 py-1 rounded">
-        {currentSlide + 1}/{slideshowImages.length}
-      </span>
-    </div>
+        {/* Playback controls - positioned above bottom content */}
+        <div className="absolute bottom-4 left-4 flex items-center space-x-2 z-20">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setIsPlaying(!isPlaying)}
+            className="text-white hover:bg-white/10 h-8 w-8 p-0"
+          >
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => setIsMuted(!isMuted)}
+            className="text-white hover:bg-white/10 h-8 w-8 p-0"
+          >
+            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </Button>
+          <span className="text-white text-xs bg-black/50 px-2 py-1 rounded">
+            {currentSlide + 1}/{slideshowImages.length}
+          </span>
+        </div>
       </div >
     );
   };
 
-return (
-  <div className="h-full w-full flex flex-col items-center justify-center bg-black/20 rounded-2xl p-6">
-    {/* Main preview container */}
-    <div className="relative">
-      {renderTikTokPreview()}
+  return (
+    <div className="h-full w-full flex flex-col items-center justify-center bg-black/20 rounded-2xl p-6">
+      {/* Main preview container */}
+      <div className="relative">
+        {renderTikTokPreview()}
+      </div>
     </div>
-  </div>
-);
+  );
 };
