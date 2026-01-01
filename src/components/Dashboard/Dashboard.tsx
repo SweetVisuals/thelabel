@@ -430,7 +430,7 @@ export const Dashboard: React.FC = () => {
               transitionEffect={transitionEffect}
               musicEnabled={musicEnabled}
               aspectRatio={aspectRatio}
-              previewMode={!!currentSlideshow}
+              previewMode={false}
               onTextOverlaysChange={setTextOverlays}
               onTitleChange={setTitle}
               onPostTitleChange={setPostTitle}
