@@ -694,7 +694,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                       ) : (
                         <div
                           className={cn(
-                            "w-full h-full flex items-center justify-center text-center p-1 select-none whitespace-pre-wrap break-words",
+                            "w-full h-full flex items-center justify-center text-center p-1 select-none whitespace-pre-wrap",
                             overlay.bold && "font-bold",
                             overlay.italic && "italic",
                           )}
@@ -714,7 +714,8 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         >
                           {overlay.text || 'Sample Text'}
                         </div>
-                      )}
+                      )
+                      }
 
                       {/* Visual Guide Box when hovering/dragging */}
                       {!previewMode && (
