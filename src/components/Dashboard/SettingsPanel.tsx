@@ -404,7 +404,7 @@ export function SettingsPanel({
                                                 <Slider
                                                     value={[overlay.fontSize]}
                                                     min={12}
-                                                    max={72}
+                                                    max={100}
                                                     step={1}
                                                     onValueChange={([v]) => onUpdateTextOverlay(overlay.id, { fontSize: v })}
                                                     className="py-1"
@@ -418,6 +418,17 @@ export function SettingsPanel({
                                                     max={100}
                                                     step={1}
                                                     onValueChange={([v]) => onUpdateTextOverlay(overlay.id, { y: v })}
+                                                    className="py-1"
+                                                />
+                                            </div>
+                                            <div className="space-y-1 col-span-2">
+                                                <Label className="text-[10px] text-muted-foreground">Width: {overlay.width || 95}%</Label>
+                                                <Slider
+                                                    value={[overlay.width || 95]}
+                                                    min={20}
+                                                    max={100}
+                                                    step={1}
+                                                    onValueChange={([v]) => onUpdateTextOverlay(overlay.id, { width: v })}
                                                     className="py-1"
                                                 />
                                             </div>
