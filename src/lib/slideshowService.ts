@@ -1900,6 +1900,15 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
         template = this.templates.get(`template_${templateId}`);
       }
     }
+
+    // Auto-fix legacy width: Ensure text overlays have width=90 if missing or old default (60)
+    if (template && template.textOverlays) {
+      template.textOverlays = template.textOverlays.map(overlay => ({
+        ...overlay,
+        width: (!overlay.width || overlay.width === 60) ? 90 : overlay.width
+      }));
+    }
+
     return template || null;
   }
 
