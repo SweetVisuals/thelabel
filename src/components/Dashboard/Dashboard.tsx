@@ -153,7 +153,24 @@ export const Dashboard: React.FC = () => {
     if (!user) return;
     try {
       if (currentSlideshow) {
-        await slideshowService.createTemplateFromSlideshow(name, description, currentSlideshow, user.id);
+        // [FIX] merged current editor state into slideshow for template creation
+        const slideshowToUse: SlideshowMetadata = {
+          ...currentSlideshow,
+          // Use current editor state
+          title: title,
+          postTitle: postTitle || title,
+          caption: caption,
+          hashtags: hashtags,
+          // IMPORTANT: If we have condensed slides, we keep them BUT we also need to ensure
+          // text overlays are correct for the template.
+          // Templates use textOverlays to apply creating new slides.
+          textOverlays: textOverlays || [],
+          aspectRatio: aspectRatio || '9:16',
+          transitionEffect: transitionEffect || 'fade',
+          musicEnabled: musicEnabled || false,
+          updated_at: new Date().toISOString()
+        };
+        await slideshowService.createTemplateFromSlideshow(name, description, slideshowToUse, user.id);
       } else {
         const tempSlideshow: SlideshowMetadata = {
           id: `temp_${Date.now()}`,
@@ -179,6 +196,63 @@ export const Dashboard: React.FC = () => {
     } catch (error) {
       console.error('Failed to create template:', error);
       toast.error('Failed to create template');
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    try {
+      await slideshowService.deleteTemplate(templateId);
+      toast.success('Template deleted successfully');
+      await loadUserSlideshows(); // Reload templates
+    } catch (error) {
+      console.error('Failed to delete template:', error);
+      toast.error('Failed to delete template');
+    }
+  };
+
+  const handleUpdateTemplateMetadata = async (templateId: string, name: string, description: string) => {
+    try {
+      const template = await slideshowService.loadTemplate(templateId);
+      if (!template) throw new Error('Template not found');
+
+      const updatedTemplate = { ...template, name, description, updated_at: new Date().toISOString() };
+      await slideshowService.saveTemplate(updatedTemplate);
+
+      toast.success('Template updated successfully');
+      await loadUserSlideshows(); // Reload templates
+    } catch (error) {
+      console.error('Failed to update template:', error);
+      toast.error('Failed to update template');
+    }
+  };
+
+  const handleOverwriteTemplate = async (templateId: string) => {
+    if (!user) return;
+    try {
+      const template = await slideshowService.loadTemplate(templateId);
+      if (!template) throw new Error('Template not found');
+
+      // Use current editor state to overwrite template
+      const updatedTemplate: SlideshowTemplate = {
+        ...template,
+        title: title, // Update defaults
+        postTitle: postTitle || title,
+        caption: caption,
+        hashtags: hashtags,
+        textOverlays: textOverlays || [],
+        aspectRatio: aspectRatio || '9:16',
+        transitionEffect: transitionEffect || 'fade',
+        musicEnabled: musicEnabled || false,
+        updated_at: new Date().toISOString()
+      };
+
+      await slideshowService.saveTemplate(updatedTemplate);
+
+      toast.success('Template overwritten with current settings');
+      await loadUserSlideshows(); // Reload templates
+    } catch (error) {
+      console.error('Failed to overwrite template:', error);
+      toast.error('Failed to overwrite template');
     }
   };
 
@@ -514,6 +588,9 @@ export const Dashboard: React.FC = () => {
                 setSelectedTemplate(template.id);
               }}
               onSaveTemplate={() => setShowCreateTemplateModal(true)}
+              onDeleteTemplate={handleDeleteTemplate}
+              onUpdateTemplateMetadata={handleUpdateTemplateMetadata}
+              onOverwriteTemplate={handleOverwriteTemplate}
             />
           </div>
         </div>

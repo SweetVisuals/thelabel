@@ -17,7 +17,11 @@ import {
     Wand2,
     Palette,
     LayoutTemplate,
-    Key
+    Key,
+    Trash2,
+    Pencil,
+    RefreshCw,
+    Check
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -85,6 +89,9 @@ interface SettingsPanelProps {
     savedTemplates: SlideshowTemplate[];
     onLoadTemplate: (template: SlideshowTemplate) => void;
     onSaveTemplate: () => void;
+    onDeleteTemplate: (templateId: string) => void;
+    onUpdateTemplateMetadata: (templateId: string, name: string, description: string) => void;
+    onOverwriteTemplate: (templateId: string) => void;
 }
 
 export function SettingsPanel({
@@ -107,11 +114,58 @@ export function SettingsPanel({
     selectedImagesCount,
     savedTemplates = [],
     onLoadTemplate,
-    onSaveTemplate
+    onSaveTemplate,
+    onDeleteTemplate,
+    onUpdateTemplateMetadata,
+    onOverwriteTemplate
 }: SettingsPanelProps) {
     const [hashtagInput, setHashtagInput] = useState('');
     const [openSections, setOpenSections] = useState<string[]>(['general', 'templates', 'visual', 'text', 'api', 'export']);
     const [isSavingKey, setIsSavingKey] = useState(false);
+
+    // Edit Template State
+    const [isEditTemplateOpen, setIsEditTemplateOpen] = useState(false);
+    const [templateToEdit, setTemplateToEdit] = useState<{ id: string, name: string, description: string } | null>(null);
+    const [editName, setEditName] = useState('');
+    const [editDescription, setEditDescription] = useState('');
+    const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+    const [templateToDelete, setTemplateToDelete] = useState<string | null>(null);
+
+    const handleEditClick = (e: React.MouseEvent, template: SlideshowTemplate) => {
+        e.stopPropagation();
+        setTemplateToEdit({
+            id: template.id,
+            name: template.name,
+            description: template.description || ''
+        });
+        setEditName(template.name);
+        setEditDescription(template.description || '');
+        setIsEditTemplateOpen(true);
+    };
+
+    const handleSaveEdit = () => {
+        if (templateToEdit && editName.trim()) {
+            onUpdateTemplateMetadata(templateToEdit.id, editName.trim(), editDescription.trim());
+            setIsEditTemplateOpen(false);
+        }
+    };
+
+    const handleDeleteClick = (e: React.MouseEvent, templateId: string) => {
+        e.stopPropagation();
+        setTemplateToDelete(templateId);
+        setIsDeleteAlertOpen(true);
+    };
+
+    const confirmDelete = () => {
+        if (templateToDelete) {
+            onDeleteTemplate(templateToDelete);
+            setIsDeleteAlertOpen(false);
+            setTemplateToDelete(null);
+            if (selectedTemplate === templateToDelete) {
+                setSelectedTemplate('');
+            }
+        }
+    };
 
     // Load API key from Supabase on mount
     useEffect(() => {
@@ -287,37 +341,158 @@ export function SettingsPanel({
                             <ChevronDown className={cn("w-4 h-4 text-muted-foreground transition-transform duration-200", openSections.includes('templates') && "rotate-180")} />
                         </CollapsibleTrigger>
                         <CollapsibleContent className="space-y-4 pt-1 pb-3 px-2">
-                            <Button
-                                onClick={onSaveTemplate}
-                                className="w-full h-9 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-foreground mb-2"
-                            >
-                                <Save className="w-3 h-3 mr-2" /> Save Current as Template
-                            </Button>
-                            <div className="grid grid-cols-2 gap-2">
+                            <div className="flex gap-2 mb-2">
+                                <Button
+                                    onClick={onSaveTemplate}
+                                    className="flex-1 h-9 text-xs bg-white/5 hover:bg-white/10 border border-white/10 text-foreground"
+                                >
+                                    <Save className="w-3 h-3 mr-2" /> New Template
+                                </Button>
+                                {selectedTemplate && (
+                                    <Button
+                                        onClick={() => onOverwriteTemplate(selectedTemplate)}
+                                        className="flex-1 h-9 text-xs bg-primary/20 hover:bg-primary/30 border border-primary/20 text-primary hover:text-white"
+                                        title="Overwrite active template settings with current editor state"
+                                    >
+                                        <RefreshCw className="w-3 h-3 mr-2" /> Update Active
+                                    </Button>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-1 gap-2">
                                 {savedTemplates.length === 0 ? (
-                                    <div className="col-span-2 text-center p-4 text-muted-foreground text-xs border border-dashed border-white/10 rounded-lg">
+                                    <div className="text-center p-4 text-muted-foreground text-xs border border-dashed border-white/10 rounded-lg">
                                         No saved templates found.
                                     </div>
                                 ) : (
                                     savedTemplates.map(template => (
                                         <div
                                             key={template.id}
-                                            onClick={() => onLoadTemplate(template)}
+                                            onClick={() => {
+                                                if (selectedTemplate === template.id) {
+                                                    // Deselect if already selected
+                                                    setSelectedTemplate('');
+                                                } else {
+                                                    onLoadTemplate(template);
+                                                }
+                                            }}
                                             className={cn(
-                                                "p-3 rounded-lg border cursor-pointer transition-all duration-200",
+                                                "group flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all duration-200 relative",
                                                 selectedTemplate === template.id
                                                     ? "bg-primary/10 border-primary/50"
                                                     : "bg-black/20 border-white/10 hover:bg-white/5 hover:border-white/20"
                                             )}
                                         >
-                                            <div className="font-medium text-xs text-white truncate">{template.name}</div>
-                                            <div className="text-[10px] text-muted-foreground truncate">{template.description || 'No description'}</div>
+                                            <div className="flex-1 min-w-0 mr-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="font-medium text-xs text-white truncate">{template.name}</div>
+                                                    {selectedTemplate === template.id && (
+                                                        <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full flex items-center gap-1">
+                                                            <Check className="w-2 h-2" /> Active
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-[10px] text-muted-foreground truncate">{template.description || 'No description'}</div>
+                                            </div>
+
+                                            <div className="flex items-center gap-1 opacity-60 hover:opacity-100 transition-opacity">
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 hover:bg-white/10 text-muted-foreground hover:text-white"
+                                                    onClick={(e) => handleEditClick(e, template)}
+                                                >
+                                                    <Pencil className="w-3 h-3" />
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-6 w-6 hover:bg-destructive/10 text-muted-foreground hover:text-destructive"
+                                                    onClick={(e) => handleDeleteClick(e, template.id)}
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </Button>
+                                            </div>
                                         </div>
                                     ))
                                 )}
                             </div>
                         </CollapsibleContent>
                     </Collapsible>
+
+                    {/* Custom Edit Dialog */}
+                    <AnimatePresence>
+                        {isEditTemplateOpen && (
+                            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setIsEditTemplateOpen(false)}>
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="bg-[#1a1a1a] rounded-lg shadow-xl max-w-md w-full border border-white/10 p-6 space-y-4"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-lg font-semibold text-white">Edit Template</h3>
+                                        <Button variant="ghost" size="icon" onClick={() => setIsEditTemplateOpen(false)} className="h-6 w-6">
+                                            <X className="w-4 h-4" />
+                                        </Button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="name">Name</Label>
+                                            <Input
+                                                id="name"
+                                                value={editName}
+                                                onChange={(e) => setEditName(e.target.value)}
+                                                className="bg-black/20 border-white/10"
+                                            />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="description">Description</Label>
+                                            <Input
+                                                id="description"
+                                                value={editDescription}
+                                                onChange={(e) => setEditDescription(e.target.value)}
+                                                className="bg-black/20 border-white/10"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-end gap-2 pt-2">
+                                        <Button variant="ghost" onClick={() => setIsEditTemplateOpen(false)} className="hover:bg-white/5">Cancel</Button>
+                                        <Button onClick={handleSaveEdit}>Save Changes</Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Custom Delete Alert Dialog */}
+                    <AnimatePresence>
+                        {isDeleteAlertOpen && (
+                            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setIsDeleteAlertOpen(false)}>
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="bg-[#1a1a1a] rounded-lg shadow-xl max-w-md w-full border border-white/10 p-6 space-y-4"
+                                >
+                                    <div className="space-y-2">
+                                        <h3 className="text-lg font-semibold text-white">Are you sure?</h3>
+                                        <p className="text-sm text-muted-foreground">
+                                            This action cannot be undone. This will permanently delete the template.
+                                        </p>
+                                    </div>
+
+                                    <div className="flex justify-end gap-2 pt-2">
+                                        <Button variant="ghost" onClick={() => setIsDeleteAlertOpen(false)} className="hover:bg-white/5">Cancel</Button>
+                                        <Button onClick={confirmDelete} variant="destructive" className="bg-destructive hover:bg-destructive/90 text-white">Delete</Button>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
 
                     <Separator className="bg-white/5" />
 
