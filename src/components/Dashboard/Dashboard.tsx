@@ -255,7 +255,7 @@ export const Dashboard: React.FC = () => {
       text: 'New Text',
       x: 50,
       y: 50,
-      width: 95,
+      width: 90,
       height: 15,
       fontSize: 24,
       color: '#ffffff',

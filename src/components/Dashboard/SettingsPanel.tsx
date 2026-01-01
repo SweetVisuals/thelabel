@@ -422,9 +422,9 @@ export function SettingsPanel({
                                                 />
                                             </div>
                                             <div className="space-y-1 col-span-2">
-                                                <Label className="text-[10px] text-muted-foreground">Width: {overlay.width || 95}%</Label>
+                                                <Label className="text-[10px] text-muted-foreground">Width: {overlay.width || 90}%</Label>
                                                 <Slider
-                                                    value={[overlay.width || 95]}
+                                                    value={[overlay.width || 90]}
                                                     min={20}
                                                     max={100}
                                                     step={1}
