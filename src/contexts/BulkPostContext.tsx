@@ -446,8 +446,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (failedSlideshows.length > 0) {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
-                    // Calculate retry time: Start of next batch or 66 mins from now
-                    const retryMinutes = 66;
+                    // Calculate retry time: Start of next batch or 67 mins (1h 7m) from now
+                    const retryMinutes = 67;
                     const retryJobStartTime = addMinutes(new Date(), retryMinutes);
 
                     // Find the scheduled time of the first failed slideshow to preserve the sequence
@@ -472,12 +472,13 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         account_id: profiles[0],
                         status: 'pending',
                         scheduled_start_time: retryJobStartTime.toISOString(),
-                        batch_index: job.batch_index + 1, // Append to next index logically
+                        // Keep the same batch index so it acts as a "retry of batch X"
+                        batch_index: job.batch_index,
                         total_batches: job.total_batches,
                         payload: retryPayload
                     });
 
-                    toast.error(`Rescheduled ${failedSlideshows.length} failed posts for next batch slot`);
+                    toast.error(`Rescheduled ${failedSlideshows.length} failed posts for 1h 7m later`);
                 }
             }
 
@@ -494,16 +495,24 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
         } catch (error) {
             console.error('Job processing error:', error);
+
+            // On total failure, reschedule the entire job for 1h 7m later
+            const retryTime = addMinutes(new Date(), 67);
+
             await supabase
                 .from('job_queue')
                 .update({
-                    status: 'failed',
-                    error: error instanceof Error ? error.message : 'Unknown error'
+                    status: 'pending', // Set back to pending to retry
+                    scheduled_start_time: retryTime.toISOString(),
+                    error: error instanceof Error ? `Failed, retrying: ${error.message}` : 'Unknown error (retrying)'
                 })
                 .eq('id', job.id);
-            toast.error('Job failed');
+
+            toast.error('Job failed. Rescheduled for 1h 7m later.');
+
+            // Update local state to show it pending again
             setJobQueue(prev => prev.map(j =>
-                j.id === job.id ? { ...j, status: 'failed', error: 'Job failed' } : j
+                j.id === job.id ? { ...j, status: 'pending', scheduled_start_time: retryTime.toISOString(), error: 'Job failed, retrying...' } : j
             ));
         } finally {
             setIsPosting(false);
@@ -690,8 +699,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             // Create a deep copy of settings to avoid reference issues
             let settings = { ...job.payload.settings };
 
-            if (!settings.postIntervalMinutes || isNaN(settings.postIntervalMinutes) || settings.postIntervalMinutes > 5) {
-                console.warn(`Job ${job.id}: postIntervalMinutes ${settings.postIntervalMinutes} is invalid/high. Resetting to 1.`);
+            // [FIX] Removed forced reset of postIntervalMinutes. 
+            // We now respect the user's settings or the existing job settings.
+            if (!settings.postIntervalMinutes || isNaN(settings.postIntervalMinutes)) {
                 settings.postIntervalMinutes = 1;
             }
 
