@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { postizAPI } from '../../lib/postiz';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { addMinutes, addHours } from 'date-fns';
 
 interface QueueViewerProps {
     onClose: () => void;
@@ -19,6 +20,42 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
     const [profiles, setProfiles] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [expandedJobs, setExpandedJobs] = useState<string[]>([]);
+
+    const applyScheduleConstraints = (baseTime: Date): Date => {
+        const hour = baseTime.getHours();
+        if (hour >= 22) {
+            const adjustedTime = new Date(baseTime);
+            adjustedTime.setDate(adjustedTime.getDate() + 1);
+            adjustedTime.setHours(9, 0, 0, 0);
+            return adjustedTime;
+        }
+        if (hour >= 0 && hour < 9) {
+            const adjustedTime = new Date(baseTime);
+            adjustedTime.setHours(9, 0, 0, 0);
+            return adjustedTime;
+        }
+        return baseTime;
+    };
+
+    const getPostTime = (job: any, index: number) => {
+        const { strategy, settings } = job.payload;
+        let currentTime = new Date(settings.startTime);
+        const intervalHours = settings.intervalHours || 1;
+        const postIntervalMinutes = settings.postIntervalMinutes || 1;
+
+        for (let i = 0; i <= index; i++) {
+            currentTime = applyScheduleConstraints(currentTime);
+
+            if (i === index) return currentTime;
+
+            if (strategy === 'batch') {
+                currentTime = addMinutes(currentTime, postIntervalMinutes);
+            } else {
+                currentTime = addHours(currentTime, intervalHours);
+            }
+        }
+        return currentTime;
+    };
 
     useEffect(() => {
         loadProfiles();
@@ -187,6 +224,9 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                                         <div className="flex items-center gap-2 flex-1 min-w-0">
                                                             <span className="text-muted-foreground font-mono">#{sIdx + 1}</span>
                                                             <span className="truncate text-white/90">{slideshow.title}</span>
+                                                            <span className="text-muted-foreground ml-2 text-[10px] bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                                                                {getPostTime(job, sIdx).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
                                                         </div>
                                                         <Clock className="w-3.5 h-3.5 text-muted-foreground" />
                                                     </div>

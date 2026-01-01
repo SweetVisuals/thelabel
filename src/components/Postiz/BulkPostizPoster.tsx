@@ -18,7 +18,8 @@ interface BulkPostizPosterProps {
 
 export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   slideshows,
-  onClose
+  onClose,
+  onPostSuccess
 }) => {
   const { startBulkPost, isPosting: isGlobalPosting, jobQueue, lastScheduledTime } = useBulkPost();
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
@@ -32,9 +33,9 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   const [startAfterLastBatch, setStartAfterLastBatch] = useState(false);
 
   // Batch State
-  const [batchSize, setBatchSize] = useState(10);
+  const [batchSize, setBatchSize] = useState<number | string>(10);
 
-  const [postIntervalMinutes, setPostIntervalMinutes] = useState(1);
+  const [postIntervalMinutes, setPostIntervalMinutes] = useState<number | string>(1);
 
   // Validation State
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -123,11 +124,14 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       }
     } else if (postingStrategy === 'batch') {
       // Continuous scheduling logic
+      // Continuous scheduling logic
       let currentScheduledTime = new Date(startTime);
+      const safeBatchSize = Number(batchSize) || 1;
+      const safePostIntervalMinutes = Number(postIntervalMinutes) || 0;
 
       for (let i = 0; i < slideshows.length; i++) {
-        const batchIndex = Math.floor(i / batchSize);
-        const indexInBatch = i % batchSize;
+        const batchIndex = Math.floor(i / safeBatchSize);
+        const indexInBatch = i % safeBatchSize;
 
         // Calculate batch info for display
         let batchInfo = null;
@@ -150,7 +154,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         });
 
         // Advance time for the next post
-        currentScheduledTime = addMinutes(currentScheduledTime, postIntervalMinutes);
+        currentScheduledTime = addMinutes(currentScheduledTime, safePostIntervalMinutes);
       }
     } else {
       for (let i = 0; i < slideshows.length; i++) {
@@ -180,8 +184,8 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       {
         intervalHours,
         startTime,
-        batchSize,
-        postIntervalMinutes
+        batchSize: Number(batchSize) || 1,
+        postIntervalMinutes: Number(postIntervalMinutes) || 0
       }
     );
 
@@ -303,7 +307,11 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                             type="number"
                             min={1}
                             value={batchSize}
-                            onChange={(e) => setBatchSize(Math.max(1, parseInt(e.target.value) || 1))}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '') setBatchSize('');
+                              else setBatchSize(parseInt(val));
+                            }}
                             className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm text-center"
                           />
                         </div>
@@ -315,7 +323,11 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                           type="number"
                           min={0}
                           value={postIntervalMinutes}
-                          onChange={(e) => setPostIntervalMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === '') setPostIntervalMinutes('');
+                            else setPostIntervalMinutes(parseInt(val));
+                          }}
                           className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm"
                         />
                         <p className="text-[10px] text-muted-foreground ml-1">Time between posts within a batch</p>
