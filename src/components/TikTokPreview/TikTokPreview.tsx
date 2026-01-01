@@ -485,28 +485,31 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         e.preventDefault();
                         e.stopPropagation();
 
-                        // Select this text for editing immediately on click
-                        setEditingTextId(overlay.id);
-                        setEditingTextValue(overlay.text);
-
-                        setIsDraggingText(true);
-                        setSnapLines({ x: false, y: false });
-
                         const startX = e.clientX;
                         const startY = e.clientY;
                         const startLeft = overlay.x;
                         const startTop = overlay.y;
                         const container = dragContainerRef.current;
 
-                        // Track if it was a click or drag
-                        let isDrag = false;
+                        // Local flag to track if we actually dragged
+                        let hasMoved = false;
 
                         if (!container) return;
 
+                        // Initial snap reset
+                        setSnapLines({ x: false, y: false });
+
                         const handleMouseMove = (e: MouseEvent) => {
-                          isDrag = true;
                           const deltaX = e.clientX - startX;
                           const deltaY = e.clientY - startY;
+
+                          // Consider it a drag if moved more than 5 pixels
+                          if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+                            hasMoved = true;
+                            setIsDraggingText(true);
+                          }
+
+                          if (!hasMoved) return;
 
                           const containerRect = container.getBoundingClientRect();
                           const deltaXPercent = (deltaX / containerRect.width) * 100;
@@ -516,7 +519,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                           let newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
 
                           // Snap logic (Snap to 50%)
-                          const SNAP_THRESHOLD = 3; // %
+                          const SNAP_THRESHOLD = 5; // increased threshold for better feel
                           let snappedX = false;
                           let snappedY = false;
 
@@ -545,22 +548,20 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                           setSnapLines({ x: false, y: false });
                           document.removeEventListener('mousemove', handleMouseMove);
                           document.removeEventListener('mouseup', handleMouseUp);
+
+                          // If we didn't drag, enter edit mode
+                          if (!hasMoved) {
+                            setEditingTextId(overlay.id);
+                            setEditingTextValue(overlay.text);
+                          }
                         };
 
                         document.addEventListener('mousemove', handleMouseMove);
                         document.addEventListener('mouseup', handleMouseUp);
                       }}
                       onTouchStart={(e) => {
-                        // Mobile Touch Handling for Dragging
                         if (previewMode) return;
                         e.stopPropagation();
-
-                        // Select this text for editing immediately on click
-                        setEditingTextId(overlay.id);
-                        setEditingTextValue(overlay.text);
-
-                        setIsDraggingText(true);
-                        setSnapLines({ x: false, y: false });
 
                         const touch = e.touches[0];
                         const startX = touch.clientX;
@@ -569,13 +570,24 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                         const startTop = overlay.y;
                         const container = dragContainerRef.current;
 
+                        let hasMoved = false;
+
                         if (!container) return;
 
+                        setSnapLines({ x: false, y: false });
+
                         const handleTouchMove = (e: TouchEvent) => {
-                          e.preventDefault(); // Prevent scrolling while dragging text
+                          e.preventDefault(); // Prevent scrolling while dragging
                           const touch = e.touches[0];
                           const deltaX = touch.clientX - startX;
                           const deltaY = touch.clientY - startY;
+
+                          if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
+                            hasMoved = true;
+                            setIsDraggingText(true);
+                          }
+
+                          if (!hasMoved) return;
 
                           const containerRect = container.getBoundingClientRect();
                           const deltaXPercent = (deltaX / containerRect.width) * 100;
@@ -584,8 +596,8 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                           let newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
                           let newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
 
-                          // Snap logic (Snap to 50%)
-                          const SNAP_THRESHOLD = 3; // %
+                          // Snap logic
+                          const SNAP_THRESHOLD = 5;
                           let snappedX = false;
                           let snappedY = false;
 
@@ -614,6 +626,12 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                           setSnapLines({ x: false, y: false });
                           document.removeEventListener('touchmove', handleTouchMove);
                           document.removeEventListener('touchend', handleTouchEnd);
+
+                          // If we didn't drag, enter edit mode
+                          if (!hasMoved) {
+                            setEditingTextId(overlay.id);
+                            setEditingTextValue(overlay.text);
+                          }
                         };
 
                         document.addEventListener('touchmove', handleTouchMove, { passive: false });
@@ -622,8 +640,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                     >
                       {editingTextId === overlay.id ? (
                         <div className="relative w-full h-full">
-                          <input
-                            type="text"
+                          <textarea
                             value={editingTextValue}
                             onChange={(e) => setEditingTextValue(e.target.value)}
                             onBlur={() => {
@@ -634,27 +651,22 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                                   : o
                               );
                               onTextOverlaysChange?.(updatedOverlays);
-                              // Keep selection active but stop editing mode if needed?
-                              // For now, let's keep it simple.
-                              // setEditingTextId(null); 
                             }}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.currentTarget.blur();
-                                setEditingTextId(null);
-                              } else if (e.key === 'Escape') {
+                              if (e.key === 'Escape') {
                                 setEditingTextId(null);
                                 setEditingTextValue(overlay.text); // Revert
                               }
+                              e.stopPropagation();
                             }}
-                            className="w-[200%] h-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent border-none outline-none text-center p-1 z-30"
+                            className="w-full h-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent border-none outline-none text-center p-1 z-30 resize-none overflow-hidden"
                             style={{
                               color: overlay.color || '#ffffff',
                               fontSize: `${Math.max(10, Math.min(overlay.fontSize, 50))}px`,
                               fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
                               textAlign: overlay.alignment,
                               lineHeight: '1.2',
-                              whiteSpace: 'nowrap',
+                              whiteSpace: 'pre-wrap',
 
                               textShadow: overlay.outline
                                 ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
@@ -682,7 +694,7 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
                       ) : (
                         <div
                           className={cn(
-                            "w-full h-full flex items-center justify-center text-center p-1 select-none whitespace-nowrap",
+                            "w-full h-full flex items-center justify-center text-center p-1 select-none whitespace-pre-wrap break-words",
                             overlay.bold && "font-bold",
                             overlay.italic && "italic",
                           )}
