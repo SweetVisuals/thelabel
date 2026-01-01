@@ -2411,7 +2411,17 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       const data = localStorage.getItem('savedTemplates');
       if (data) {
         const entries = JSON.parse(data);
-        this.templates = new Map(entries);
+        // Auto-fix legacy width in localStorage
+        const fixedEntries = entries.map(([key, template]: [string, any]) => {
+          if (template && template.textOverlays) {
+            template.textOverlays = template.textOverlays.map((overlay: any) => ({
+              ...overlay,
+              width: (!overlay.width || overlay.width === 60) ? 90 : overlay.width
+            }));
+          }
+          return [key, template];
+        });
+        this.templates = new Map(fixedEntries);
         console.log('💾 Loaded templates from localStorage:', this.templates.size);
       }
     } catch (error) {
@@ -2539,7 +2549,10 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
           postTitle: dbTemplate.post_title,
           caption: dbTemplate.caption,
           hashtags: dbTemplate.hashtags || [],
-          textOverlays: dbTemplate.text_overlays || [],
+          textOverlays: (dbTemplate.text_overlays || []).map((overlay: any) => ({
+            ...overlay,
+            width: (!overlay.width || overlay.width === 60) ? 90 : overlay.width
+          })),
           aspectRatio: validAspectRatio, // Ensure aspect ratio is valid and properly loaded
           transitionEffect: dbTemplate.transition_effect || 'fade',
           musicEnabled: dbTemplate.music_enabled || false,
