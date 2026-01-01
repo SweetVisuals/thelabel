@@ -719,7 +719,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
                     <textarea
                       value={overlay.text}
                       onChange={(e) => updateTextOverlay(overlay.id, { text: e.target.value })}
-                      className="w-full text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white resize-y min-h-[60px]"
+                      className="w-full text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white resize-y min-h-[60px] whitespace-pre overflow-x-auto"
                       rows={3}
                     />
                     <div className="flex space-x-2">

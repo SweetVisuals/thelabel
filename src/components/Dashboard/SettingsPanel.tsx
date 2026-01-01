@@ -392,10 +392,10 @@ export function SettingsPanel({
                                             </Button>
                                         </div>
 
-                                        <Input
+                                        <textarea
                                             value={overlay.text}
                                             onChange={(e) => onUpdateTextOverlay(overlay.id, { text: e.target.value })}
-                                            className="bg-black/40 border-white/10 h-8 text-xs font-medium"
+                                            className="flex min-h-[60px] w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-xs font-medium ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:border-primary/50 disabled:cursor-not-allowed disabled:opacity-50 transition-all duration-300 backdrop-blur-sm hover:bg-black/30 resize-y"
                                         />
 
                                         <div className="grid grid-cols-2 gap-2">
