@@ -479,6 +479,14 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     });
 
                     toast.error(`Rescheduled ${failedSlideshows.length} failed posts for 1h 7m later`);
+
+                    // Cascade reschedule subsequent batches
+                    await cascadeReschedule(
+                        job.batch_index,
+                        job.total_batches,
+                        retryJobStartTime,
+                        user.id
+                    );
                 }
             }
 
@@ -509,6 +517,18 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 .eq('id', job.id);
 
             toast.error('Job failed. Rescheduled for 1h 7m later.');
+
+            // Cascade reschedule subsequent batches (Full Failure)
+            // We need user ID, assume we have it from context or fetch it
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                await cascadeReschedule(
+                    job.batch_index,
+                    job.total_batches,
+                    retryTime,
+                    user.id
+                );
+            }
 
             // Update local state to show it pending again
             setJobQueue(prev => prev.map(j =>
@@ -667,6 +687,49 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const stopBulkPost = () => {
         stopProcessingRef.current = true;
+    };
+
+    const cascadeReschedule = async (
+        failedBatchIndex: number,
+        totalBatches: number,
+        baseRetryTime: Date,
+        userId: string
+    ) => {
+        // Fetch all pending jobs for this user that are part of the same "set" (same total_batches)
+        // We assume jobs with same total_batches and user_id *might* be related. 
+        // A stricter link (like a group_id) would be better but we don't have it.
+        // We filter by status='pending' and batch_index > failedBatchIndex.
+
+        const { data: pendingJobs, error } = await supabase
+            .from('job_queue')
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'pending')
+            .eq('total_batches', totalBatches)
+            .gt('batch_index', failedBatchIndex) // Only shift subsequent batches
+            .order('batch_index', { ascending: true });
+
+        if (error || !pendingJobs || pendingJobs.length === 0) return;
+
+        console.log(`Cascading reschedule for ${pendingJobs.length} subsequent batches...`);
+
+        // Shift each subsequent batch
+        for (let i = 0; i < pendingJobs.length; i++) {
+            const job = pendingJobs[i];
+            const relativeIndex = job.batch_index - failedBatchIndex;
+            // logic: subsequent batch should be (relativeIndex * 67 mins) after the retry time of the failed batch
+            // e.g. Failed Batch 1 (Retrying at 1:00)
+            // Batch 2 (Index 2): 1:00 + (1 * 67m) = 2:07
+            // Batch 3 (Index 3): 1:00 + (2 * 67m) = 3:14
+            const newTime = addMinutes(baseRetryTime, relativeIndex * 67);
+
+            await supabase
+                .from('job_queue')
+                .update({ scheduled_start_time: newTime.toISOString() })
+                .eq('id', job.id);
+        }
+
+        toast.success(`Shifted ${pendingJobs.length} subsequent batches forward.`);
     };
 
     const rescheduleQueue = async () => {
