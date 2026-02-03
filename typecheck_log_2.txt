@@ -1,0 +1,307 @@
+
+> vite-react-typescript-starter@0.0.0 typecheck
+> tsc --noEmit -p tsconfig.app.json
+
+src/types/supabase.ts(2340,81): error TS1127: Invalid character.
+src/types/supabase.ts(2340,82): error TS1131: Property or signature expected.
+src/types/supabase.ts(2340,114): error TS1127: Invalid character.
+src/types/supabase.ts(2340,115): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,181): error TS1127: Invalid character.
+src/types/supabase.ts(2340,182): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,209): error TS1127: Invalid character.
+src/types/supabase.ts(2340,214): error TS1127: Invalid character.
+src/types/supabase.ts(2340,215): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,254): error TS1127: Invalid character.
+src/types/supabase.ts(2340,255): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,320): error TS1127: Invalid character.
+src/types/supabase.ts(2340,321): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,348): error TS1127: Invalid character.
+src/types/supabase.ts(2340,353): error TS1127: Invalid character.
+src/types/supabase.ts(2340,354): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,388): error TS1127: Invalid character.
+src/types/supabase.ts(2340,389): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,426): error TS1127: Invalid character.
+src/types/supabase.ts(2340,427): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,454): error TS1127: Invalid character.
+src/types/supabase.ts(2340,459): error TS1127: Invalid character.
+src/types/supabase.ts(2340,465): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,466): error TS1127: Invalid character.
+src/types/supabase.ts(2340,467): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,481): error TS1127: Invalid character.
+src/types/supabase.ts(2340,482): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,548): error TS1127: Invalid character.
+src/types/supabase.ts(2340,549): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,590): error TS1127: Invalid character.
+src/types/supabase.ts(2340,591): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,651): error TS1127: Invalid character.
+src/types/supabase.ts(2340,652): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,704): error TS1127: Invalid character.
+src/types/supabase.ts(2340,709): error TS1127: Invalid character.
+src/types/supabase.ts(2340,710): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,733): error TS1127: Invalid character.
+src/types/supabase.ts(2340,747): error TS1005: ';' expected.
+src/types/supabase.ts(2340,754): error TS1127: Invalid character.
+src/types/supabase.ts(2340,759): error TS1127: Invalid character.
+src/types/supabase.ts(2340,763): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,764): error TS1127: Invalid character.
+src/types/supabase.ts(2340,766): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,767): error TS1127: Invalid character.
+src/types/supabase.ts(2340,769): error TS1127: Invalid character.
+src/types/supabase.ts(2340,770): error TS1435: Unknown keyword or identifier. Did you mean 'type'?
+src/types/supabase.ts(2340,839): error TS1127: Invalid character.
+src/types/supabase.ts(2340,841): error TS1127: Invalid character.
+src/types/supabase.ts(2340,842): error TS1435: Unknown keyword or identifier. Did you mean 'type'?
+src/types/supabase.ts(2340,923): error TS1127: Invalid character.
+src/types/supabase.ts(2340,925): error TS1127: Invalid character.
+src/types/supabase.ts(2340,926): error TS1435: Unknown keyword or identifier. Did you mean 'export'?
+src/types/supabase.ts(2340,946): error TS1127: Invalid character.
+src/types/supabase.ts(2340,950): error TS1005: ',' expected.
+src/types/supabase.ts(2340,990): error TS1127: Invalid character.
+src/types/supabase.ts(2340,996): error TS1005: ',' expected.
+src/types/supabase.ts(2340,1055): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1076): error TS1005: ',' expected.
+src/types/supabase.ts(2340,1104): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1105): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1108): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1118): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,1126): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1158): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,1168): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1169): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1182): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1212): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1217): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1307): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1317): error TS1005: ',' expected.
+src/types/supabase.ts(2340,1395): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1414): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1419): error TS1109: Expression expected.
+src/types/supabase.ts(2340,1421): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1453): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,1463): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1464): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1475): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1505): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1510): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1595): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1596): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1679): error TS1005: ';' expected.
+src/types/supabase.ts(2340,1692): error TS1005: ';' expected.
+src/types/supabase.ts(2340,1702): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1703): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1715): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1722): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1727): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1733): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1742): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1746): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1778): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,1817): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1827): error TS1005: ',' expected.
+src/types/supabase.ts(2340,1851): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1882): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1883): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1914): error TS1005: ';' expected.
+src/types/supabase.ts(2340,1949): error TS1005: ';' expected.
+src/types/supabase.ts(2340,1959): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1960): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1974): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,1981): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1986): error TS1127: Invalid character.
+src/types/supabase.ts(2340,1992): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2001): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2010): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2012): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2013): error TS1435: Unknown keyword or identifier. Did you mean 'export'?
+src/types/supabase.ts(2340,2039): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2043): error TS1005: ',' expected.
+src/types/supabase.ts(2340,2083): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2089): error TS1005: ',' expected.
+src/types/supabase.ts(2340,2120): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2141): error TS1005: ',' expected.
+src/types/supabase.ts(2340,2169): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2170): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2173): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2183): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,2191): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2223): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,2233): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2234): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2247): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2277): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2282): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2293): error TS1005: ':' expected.
+src/types/supabase.ts(2340,2370): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2389): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2394): error TS1109: Expression expected.
+src/types/supabase.ts(2340,2396): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2428): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,2438): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2439): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2450): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2480): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2485): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2579): error TS1005: ':' expected.
+src/types/supabase.ts(2340,2589): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2590): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2605): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2612): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2617): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2623): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2632): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2636): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2668): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,2676): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2705): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2767): error TS1005: ':' expected.
+src/types/supabase.ts(2340,2777): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2778): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2795): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2802): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2807): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2813): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2822): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2831): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2833): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2834): error TS1435: Unknown keyword or identifier. Did you mean 'export'?
+src/types/supabase.ts(2340,2860): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2864): error TS1005: ',' expected.
+src/types/supabase.ts(2340,2904): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2910): error TS1005: ',' expected.
+src/types/supabase.ts(2340,2941): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2962): error TS1005: ',' expected.
+src/types/supabase.ts(2340,2990): error TS1127: Invalid character.
+src/types/supabase.ts(2340,2991): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,2994): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3004): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,3012): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3044): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,3054): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3055): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3068): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3098): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3103): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3114): error TS1005: ':' expected.
+src/types/supabase.ts(2340,3191): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3210): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3215): error TS1109: Expression expected.
+src/types/supabase.ts(2340,3217): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3249): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,3259): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3260): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3271): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3301): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3306): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3400): error TS1005: ':' expected.
+src/types/supabase.ts(2340,3410): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3411): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3426): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3433): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3438): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3444): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3453): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3457): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3489): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,3497): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3526): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3588): error TS1005: ':' expected.
+src/types/supabase.ts(2340,3598): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3599): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3616): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3623): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3628): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3634): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3643): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3652): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3654): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3655): error TS1435: Unknown keyword or identifier. Did you mean 'export'?
+src/types/supabase.ts(2340,3674): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3678): error TS1005: ',' expected.
+src/types/supabase.ts(2340,3717): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3723): error TS1005: ',' expected.
+src/types/supabase.ts(2340,3753): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3774): error TS1005: ',' expected.
+src/types/supabase.ts(2340,3802): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3803): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3806): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3815): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,3823): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3854): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,3864): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3865): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3878): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,3908): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3913): error TS1127: Invalid character.
+src/types/supabase.ts(2340,3924): error TS1005: ':' expected.
+src/types/supabase.ts(2340,3999): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4018): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4023): error TS1109: Expression expected.
+src/types/supabase.ts(2340,4025): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4056): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,4066): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4067): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4078): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4108): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4113): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4203): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4207): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4238): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,4246): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4274): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4333): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4342): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4344): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4345): error TS1435: Unknown keyword or identifier. Did you mean 'export'?
+src/types/supabase.ts(2340,4373): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4377): error TS1005: ',' expected.
+src/types/supabase.ts(2340,4418): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4424): error TS1005: ',' expected.
+src/types/supabase.ts(2340,4463): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4484): error TS1005: ',' expected.
+src/types/supabase.ts(2340,4512): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4513): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4516): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4534): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,4542): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4575): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,4585): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4586): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4599): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4629): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4634): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4645): error TS1005: ':' expected.
+src/types/supabase.ts(2340,4731): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4750): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4755): error TS1109: Expression expected.
+src/types/supabase.ts(2340,4757): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4790): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,4800): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4801): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4812): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4842): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4847): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4957): error TS1127: Invalid character.
+src/types/supabase.ts(2340,4961): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,4994): error TS1128: Declaration or statement expected.
+src/types/supabase.ts(2340,5002): error TS1434: Unexpected keyword or identifier.
+src/types/supabase.ts(2340,5039): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5109): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5118): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5120): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5121): error TS1435: Unknown keyword or identifier. Did you mean 'export'?
+src/types/supabase.ts(2340,5149): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5153): error TS1005: ',' expected.
+src/types/supabase.ts(2340,5163): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5169): error TS1005: ',' expected.
+src/types/supabase.ts(2340,5178): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5186): error TS1005: ',' expected.
+src/types/supabase.ts(2340,5246): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5254): error TS1005: ',' expected.
+src/types/supabase.ts(2340,5291): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5299): error TS1005: ',' expected.
+src/types/supabase.ts(2340,5354): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5362): error TS1005: ',' expected.
+src/types/supabase.ts(2340,5408): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5414): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5420): error TS1127: Invalid character.
+src/types/supabase.ts(2340,5433): error TS1127: Invalid character.

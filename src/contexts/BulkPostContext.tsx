@@ -591,8 +591,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const batchSlideshows = slideshows.slice(i * batchSize, (i + 1) * batchSize);
 
                 // Job Processing Time
-                // First batch processes immediately (or as close as possible), subsequent ones wait 66 mins * index
-                const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 66);
+                // First batch processes immediately (or as close as possible), subsequent ones wait 70 mins (1h 10m) * index
+                // This provides a buffer over the 1h 7m Postiz limit
+                const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 70);
 
                 // Post Start Time for this batch
                 const batchPostStartTime = new Date(currentPostTime);

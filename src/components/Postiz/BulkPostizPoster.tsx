@@ -33,7 +33,9 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   const [startAfterLastBatch, setStartAfterLastBatch] = useState(false);
 
   // Batch State
-  const [batchSize, setBatchSize] = useState<number | string>(10);
+  // Batch State
+  // const [batchSize, setBatchSize] = useState<number | string>(10);
+  const batchSize = 10; // Fixed as per requirements
 
   const [postIntervalMinutes, setPostIntervalMinutes] = useState<number | string>(1);
 
@@ -94,17 +96,24 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     let currentTime = new Date(startTime);
 
     const applyScheduleConstraints = (baseTime: Date): Date => {
-      const hour = baseTime.getHours();
-      if (hour >= 0 && hour < 9) {
-        const adjustedTime = new Date(baseTime);
-        adjustedTime.setHours(9, 0, 0, 0);
-        // If we pushed it to tomorrow, make sure we didn't go back in time relative to baseTime
-        if (adjustedTime < baseTime) {
-          adjustedTime.setDate(adjustedTime.getDate() + 1);
-        }
-        return adjustedTime;
+      let date = new Date(baseTime);
+      let hour = date.getHours();
+
+      // If before 9am, move to 9am today
+      if (hour < 9) {
+        date.setHours(9, 0, 0, 0);
       }
-      return baseTime;
+      // If after 10pm (22:00), move to 9am TOMORROW
+      else if (hour >= 22) {
+        date.setDate(date.getDate() + 1);
+        date.setHours(9, 0, 0, 0);
+      }
+
+      // Double check - if we moved to tomorrow, make sure we didn't go back in time relative to baseTime (rare edge case)
+      if (date < baseTime) {
+        date = new Date(baseTime); // fallback
+      }
+      return date;
     };
 
     if (postingStrategy === 'first-now') {
@@ -124,10 +133,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       }
     } else if (postingStrategy === 'batch') {
       // Continuous scheduling logic
-      // Continuous scheduling logic
       let currentScheduledTime = new Date(startTime);
-      const safeBatchSize = Number(batchSize) || 1;
-      const safePostIntervalMinutes = Number(postIntervalMinutes) || 0;
+      // Ensure start time respects constraints
+      currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
+
+      const safeBatchSize = 10; // Enforce 10 as per requirements
+      const safePostIntervalMinutes = Number(postIntervalMinutes) || 240; // Default to 240 mins (4 hours) as per request
 
       for (let i = 0; i < slideshows.length; i++) {
         const batchIndex = Math.floor(i / safeBatchSize);
@@ -136,15 +147,10 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         // Calculate batch info for display
         let batchInfo = null;
         if (indexInBatch === 0) {
-          // Calculate when this batch will actually be sent to Postiz
-          // First batch is sent immediately (startTime), subsequent batches wait batchIntervalHours
-          // First batch is sent immediately (startTime), subsequent batches wait 66 minutes (1.1 hours)
-          const batchSendTime = addMinutes(startTime, batchIndex * 66);
+          // Batches sent every 70 mins (1h 10m) to allow buffer over the 1h 7m limit
+          const batchSendTime = addMinutes(startTime, batchIndex * 70);
           batchInfo = { number: batchIndex + 1, time: batchSendTime };
         }
-
-        // Apply constraints to the current scheduled time
-        currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
 
         schedule.push({
           slideshowTitle: slideshows[i]?.title || `Slideshow ${i + 1}`,
@@ -155,6 +161,8 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
         // Advance time for the next post
         currentScheduledTime = addMinutes(currentScheduledTime, safePostIntervalMinutes);
+        // Re-apply constraints after adding time
+        currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
       }
     } else {
       for (let i = 0; i < slideshows.length; i++) {
@@ -300,37 +308,34 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                 <div className="bg-white/5 rounded-xl border border-white/10 p-4 space-y-4">
                   {postingStrategy === 'batch' ? (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1.5">
-                          <label className="text-xs text-muted-foreground block ml-1">Batch Size</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={batchSize}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '') setBatchSize('');
-                              else setBatchSize(parseInt(val));
-                            }}
-                            className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm text-center"
-                          />
+                      {/* Fixed Batch Size Note */}
+                      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                        <div className="flex items-start">
+                          <Layers className="w-4 h-4 text-blue-400 mt-0.5 mr-2" />
+                          <div>
+                            <p className="text-xs font-medium text-blue-200">Automatic Batching Active</p>
+                            <p className="text-[10px] text-blue-200/70 mt-1">
+                              System will automatically send 10 posts every 70 minutes to respect limits.
+                            </p>
+                          </div>
                         </div>
-
                       </div>
+
                       <div className="space-y-1.5">
-                        <label className="text-xs text-muted-foreground block ml-1">Post Interval (Mins)</label>
+                        <label className="text-xs text-muted-foreground block ml-1">Interval Between Posts (Mins)</label>
                         <input
                           type="number"
-                          min={0}
+                          min={1}
                           value={postIntervalMinutes}
                           onChange={(e) => {
                             const val = e.target.value;
                             if (val === '') setPostIntervalMinutes('');
                             else setPostIntervalMinutes(parseInt(val));
                           }}
+                          placeholder="240"
                           className="w-full px-3 py-2 bg-black/20 border border-white/10 rounded-xl focus:border-primary/50 focus:outline-none text-sm"
                         />
-                        <p className="text-[10px] text-muted-foreground ml-1">Time between posts within a batch</p>
+                        <p className="text-[10px] text-muted-foreground ml-1">e.g. 240 mins = 4 hours between each post going live</p>
                       </div>
                     </div>
                   ) : (
