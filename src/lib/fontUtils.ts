@@ -14,20 +14,23 @@ class FontLoader {
     // we will force the browser to load the fonts defined in our CSS (@font-face in index.css).
     // This ensures consistency between the HTML preview and the Canvas.
 
-    const fontString = '16px "TikTok Sans"';
-
     try {
       // Check if already loaded
-      if (document.fonts.check(fontString)) {
+      if (document.fonts.check('16px "TikTok Sans"')) {
         console.log('✅ TikTok Sans fonts already loaded');
         return;
       }
 
       console.log('⏳ Waiting for TikTok Sans fonts to load...');
-      await document.fonts.load(fontString);
 
-      // Also load bold just in case
-      await document.fonts.load('bold 16px "TikTok Sans"');
+      const promises = [
+        document.fonts.load('16px "TikTok Sans"'),           // Regular 400
+        document.fonts.load('500 16px "TikTok Sans"'),       // Medium 500
+        document.fonts.load('600 16px "TikTok Sans"'),       // SemiBold 600
+        document.fonts.load('bold 16px "TikTok Sans"')       // Bold 700
+      ];
+
+      await Promise.all(promises);
 
       console.log('✅ TikTok Sans fonts loaded via CSS');
     } catch (error) {

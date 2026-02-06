@@ -22,7 +22,8 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
    * Get all loaded slideshows
    */
   getAllSlideshows(): SlideshowMetadata[] {
-    return Array.from(this.slideshows.values());
+    return Array.from(this.slideshows.values())
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
   }
 
   /**
@@ -195,17 +196,16 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
     // Set font properties with loaded TikTok fonts and fallbacks
     // Construct the font string carefully to ensure browser parses it correctly
 
-    // We are now using distinct font families for each weight (e.g. "TikTokBold", "TikTokRegular")
-    // All of these are registered with weight '400'/'normal' to avoid browser synthetic bolding.
-    // So we ALWAYS use 'normal' weight in the font string when using these families.
-    const weight = 'normal';
+    // Use the effective font weight (e.g. '700' for bold, '400' for normal)
+    // We rely on the @font-face definitions in index.css which map 'TikTok Sans' 
+    // to different files based on the requested weight.
+    const weight = effectiveFontWeight;
 
     const style = italic ? 'italic' : 'normal';
     const size = `${scaledFontSize}px`;
 
     // Construct the full font string
     // fontLoader.getCanvasFontFamily returns a string like: '"TikTok Sans", Arial, sans-serif'
-    // So we just need to interpolate it directly.
     const fontStyle = `${style} ${weight} ${size} ${canvasFontFamily}`;
 
     // Apply font to context
@@ -944,22 +944,19 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
 
       // Check if data is too large (rough estimate: 4MB limit)
       if (jsonData.length > 4 * 1024 * 1024) {
-        console.warn('⚠️ Slideshow data too large for localStorage, cleaning up old slideshows...');
+        console.warn('⚠️ Slideshow data too large for localStorage, saving only recent items to storage...');
 
-        // Keep only the 10 most recent slideshows
+        // Keep only the 10 most recent slideshows FOR STORAGE ONLY
+        // DO NOT modify this.slideshows (in-memory state)
         const sortedSlideshows = Array.from(this.slideshows.values())
           .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
           .slice(0, 10);
 
-        this.slideshows.clear();
-        sortedSlideshows.forEach(slideshow => {
-          this.slideshows.set(slideshow.id, slideshow);
-        });
+        // Create a reduced data set for storage
+        const reducedData = sortedSlideshows.map(slideshow => [slideshow.id, slideshow]);
 
-        // Retry with reduced data
-        const reducedData = Array.from(this.slideshows.entries());
         localStorage.setItem('savedSlideshows', JSON.stringify(reducedData));
-        console.log('💾 Saved reduced slideshows to localStorage:', reducedData.length);
+        console.log(`💾 Saved reduced slideshows to localStorage: ${reducedData.length}/${this.slideshows.size} (Full set kept in memory)`);
         return;
       }
 
@@ -1001,11 +998,31 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
   /**
    * Load from localStorage
    */
+
+
+  /**
+   * Load from localStorage
+   * CRITICAL FIX: Prevent overwriting full in-memory list with truncated localStorage data.
+   */
   public loadFromLocalStorage(): void {
     try {
+      // If we already have a significant number of slideshows (likely from DB), 
+      // do not overwrite with potentially truncated localStorage data
+      // Exception: If we have very few, it might be an empty state, so we try to load.
+      if (this.slideshows.size > 10) {
+        return;
+      }
+
       const data = localStorage.getItem('savedSlideshows');
       if (data) {
         const entries = JSON.parse(data);
+
+        // If the new data is smaller than what we have, ignore it (likely truncated)
+        if (this.slideshows.size > entries.length) {
+          console.log('⚠️ Skipping loadFromLocalStorage as in-memory list is larger');
+          return;
+        }
+
         this.slideshows = new Map(entries);
         console.log('💾 Loaded slideshows from localStorage:', entries.length);
       }
@@ -2206,7 +2223,17 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       // Create each slideshow
       for (let i = 0; i < imageGroups.length; i++) {
         const imageGroup = imageGroups[i];
-        const slideshowTitle = slideshowTitles[i] || finalTitle;
+
+        // Generate unique title if not provided
+        let slideshowTitle = slideshowTitles[i];
+        if (!slideshowTitle) {
+          // If we have multiple slideshows, append index to make them unique
+          if (imageGroups.length > 1) {
+            slideshowTitle = `${finalTitle} #${i + 1}`;
+          } else {
+            slideshowTitle = finalTitle;
+          }
+        }
 
         try {
           console.log(`🎬 Starting slideshow ${i + 1}/${imageGroups.length}: ${slideshowTitle}`);

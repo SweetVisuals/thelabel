@@ -15,13 +15,25 @@ import {
   RefreshCw,
   UploadCloud,
   CornerLeftUp,
-  MousePointer2
+  MousePointer2,
+  List,
+  LayoutGrid,
+  ArrowUpDown,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+} from '@/components/ui/dropdown-menu';
 
 import { format } from 'date-fns';
 import { imageService } from '../../lib/imageService';
@@ -53,6 +65,7 @@ interface FileItem {
   name: string;
   type: 'file' | 'folder' | 'slideshow';
   size?: number;
+  itemCount?: number;
   modified?: Date;
   image?: UploadedImage;
   slideshow?: SlideshowMetadata;
@@ -81,8 +94,6 @@ export function FileBrowser({
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'size'>('date');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [isLoading, setIsLoading] = useState(false);
-  const [ctrlPressed, setCtrlPressed] = useState(false);
-  const [shiftPressed, setShiftPressed] = useState(false);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -122,13 +133,13 @@ export function FileBrowser({
       ]);
 
       // Deduplication logic
-      const rootImageIds = new Set(loadedImages.map(img => img.id));
       const folderImageIds = new Set();
       loadedFolders.forEach(folder => {
         folder.images.forEach(img => folderImageIds.add(img.id));
       });
 
       const dedupedImages = loadedImages.filter(img => !folderImageIds.has(img.id));
+
 
       onImagesUploaded(dedupedImages);
       onFoldersChange(loadedFolders);
@@ -231,23 +242,15 @@ export function FileBrowser({
   // Keyboard modifiers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey) setCtrlPressed(true);
-      if (e.shiftKey) setShiftPressed(true);
       if (e.key === 'Delete') removeSelected();
       if ((e.ctrlKey || e.metaKey) && e.key === 'a') {
         e.preventDefault();
         selectAll();
       }
     };
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (!e.ctrlKey && !e.metaKey) setCtrlPressed(false);
-      if (!e.shiftKey) setShiftPressed(false);
-    };
     document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('keyup', handleKeyUp);
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('keyup', handleKeyUp);
     };
   }, [selectedImages, selectedSlideshows]);
 
@@ -501,21 +504,23 @@ export function FileBrowser({
 
   const getSlideshowsFromService = () => {
     try {
-      slideshowService.loadFromLocalStorage();
-      const allSlideshows = Array.from((slideshowService as any)['slideshows'].values());
+      // Use public method to get slideshows without forced reload
+      const allSlideshows = slideshowService.getAllSlideshows();
 
       const filteredSlideshows = currentFolderId === null
-        ? allSlideshows.filter((slideshow: any) => !slideshow.folder_id)
-        : allSlideshows.filter((slideshow: any) => slideshow.folder_id === currentFolderId);
+        ? allSlideshows.filter(slideshow => !slideshow.folder_id)
+        : allSlideshows.filter(slideshow => slideshow.folder_id === currentFolderId);
 
-      return filteredSlideshows.map((slideshow: any) => ({
+      return filteredSlideshows.map(slideshow => ({
         id: slideshow.id,
         name: `${slideshow.title || 'Untitled'}.slideshow`,
         type: 'slideshow' as const,
+        itemCount: slideshow.condensedSlides?.length || 0,
         modified: new Date(slideshow.updated_at || slideshow.created_at || Date.now()),
         slideshow: slideshow,
       }));
     } catch (error) {
+      console.error('Failed to get slideshows:', error);
       return [];
     }
   };
@@ -535,6 +540,7 @@ export function FileBrowser({
         id: folder.id,
         name: folder.name,
         type: 'folder' as const,
+        itemCount: folder.images.length,
         modified: new Date(folder.created_at),
       })),
     ...currentImages.map(img => ({
@@ -950,6 +956,44 @@ export function FileBrowser({
 
           {/* Right: Actions */}
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+              className="h-8 w-8 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg"
+              title={viewMode === 'grid' ? "Switch to List View" : "Switch to Grid View"}
+            >
+              {viewMode === 'grid' ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
+                >
+                  <ArrowUpDown className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+                  <span className="text-xs font-medium text-white/80 group-hover:text-white hidden sm:inline">Sort</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Sort By</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                  <DropdownMenuRadioItem value="date">Date</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="size">Size</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel>Order</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup value={sortOrder} onValueChange={(v) => setSortOrder(v as any)}>
+                  <DropdownMenuRadioItem value="desc">Descending</DropdownMenuRadioItem>
+                  <DropdownMenuRadioItem value="asc">Ascending</DropdownMenuRadioItem>
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
             {/* Delete Button */}
             <AnimatePresence>
               {(selectedImages.length > 0 || selectedSlideshows.length > 0) && (
@@ -1058,7 +1102,7 @@ export function FileBrowser({
             "grid gap-4 transition-all duration-300",
             viewMode === 'grid' ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-1"
           )}>
-            <AnimatePresence mode="popLayout">
+            <AnimatePresence>
               {filteredAndSortedItems.map(item => (
                 <motion.div
                   key={item.id}
@@ -1161,7 +1205,7 @@ export function FileBrowser({
                         viewMode === 'grid' && "p-3 bg-black/40 backdrop-blur-sm border-t border-blue-500/10"
                       )}>
                         <span className="font-medium text-sm truncate text-blue-100 group-hover:text-white">{item.name}</span>
-                        <span className="text-[10px] text-blue-200/50">Folder</span>
+                        <span className="text-[10px] text-blue-200/50">{item.itemCount} files</span>
                       </div>
                     </>
                   ) : item.type === 'slideshow' ? (
@@ -1203,7 +1247,7 @@ export function FileBrowser({
                             (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-200/50" :
                               (item.slideshow?.uploadCount === 1) ? "text-green-200/50" :
                                 "text-purple-200/50"
-                        )}>Slideshow</span>
+                        )}>{item.itemCount} slides</span>
                       </div>
                     </>
                   ) : (

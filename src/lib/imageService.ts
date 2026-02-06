@@ -712,6 +712,39 @@ export const imageService = {
       const user = session.user;
       console.log('👤 Deleting folder for user:', user.id);
 
+      // CRITICAL FIX: Delete actual images in the folder first, otherwise they become "orphaned" in the root directory
+      // 1. Get all subfolders recursively to find ALL images
+      const subfolders = await this.getAllSubfolders(folderId, user.id);
+      const allFolderIds = [folderId, ...subfolders];
+
+      // 2. Get all images in this folder and subfolders
+      const { data: folderImages, error: fetchImagesError } = await supabase
+        .from('folder_images')
+        .select('image_id')
+        .in('folder_id', allFolderIds);
+
+      if (fetchImagesError) {
+        console.error('❌ Failed to fetch images for deletion:', fetchImagesError);
+      } else if (folderImages && folderImages.length > 0) {
+        const imageIds = folderImages.map(fi => fi.image_id);
+        console.log(`🗑️ Deleting ${imageIds.length} images found in folder(s)...`);
+
+        // 3. Delete the images from the 'images' table
+        const { error: deleteImagesError } = await supabase
+          .from('images')
+          .delete()
+          .in('id', imageIds)
+          .eq('user_id', user.id);
+
+        if (deleteImagesError) {
+          console.error('❌ Failed to delete images from database:', deleteImagesError);
+          // We log but continue, as we still want to delete the folder structure if possible
+          // though ideally this should throw or warn.
+        } else {
+          console.log('✅ Successfully deleted images in folder');
+        }
+      }
+
       // First, delete all folder_images associations for this folder
       console.log('🗑️ Deleting folder_images associations...');
       const { error: folderImagesError } = await supabase
@@ -725,10 +758,9 @@ export const imageService = {
       }
       console.log('✅ Folder images associations deleted');
 
-      // Get all subfolders recursively
-      console.log('🔍 Getting subfolders...');
-      const subfolders = await this.getAllSubfolders(folderId, user.id);
-      console.log('📁 Found subfolders:', subfolders);
+      // Get all subfolders recursively (we already have them, but following original logic flow for safety)
+      // Note: we already deleted images from these subfolders above
+      console.log('🔍 Processing subfolders for deletion...');
 
       // Delete all subfolders and their contents
       for (const subfolderId of subfolders) {

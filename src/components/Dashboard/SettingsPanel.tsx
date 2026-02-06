@@ -173,9 +173,9 @@ export function SettingsPanel({
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data, error } = await supabase
-                    .from('user_settings')
+                    .from('users')
                     .select('postiz_api_key')
-                    .eq('user_id', user.id)
+                    .eq('id', user.id)
                     .single();
 
                 if (data?.postiz_api_key) {
@@ -211,12 +211,12 @@ export function SettingsPanel({
             }
 
             const { error } = await supabase
-                .from('user_settings')
-                .upsert({
-                    user_id: user.id,
+                .from('users')
+                .update({
                     postiz_api_key: apiKeys.postizApiKey,
                     updated_at: new Date().toISOString()
-                });
+                })
+                .eq('id', user.id);
 
             if (error) throw error;
             toast.success('Postiz API Key saved securely');

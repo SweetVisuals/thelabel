@@ -35,7 +35,7 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
         end: endOfMonth(currentMonth),
     })
 
-    const firstDayCurrentMonth = getDay(startOfMonth(currentMonth))
+
     const colStartClasses = [
         "",
         "col-start-2",
@@ -96,8 +96,8 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
             </div>
 
             <div className="grid grid-cols-7 gap-1 mb-2 text-center">
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
-                    <div key={day} className="text-xs text-muted-foreground font-medium py-1">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
+                    <div key={`${day}-${i}`} className="text-xs text-muted-foreground font-medium py-1">
                         {day}
                     </div>
                 ))}
