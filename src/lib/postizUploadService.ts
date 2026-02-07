@@ -3,46 +3,43 @@ import { CondensedSlide, SlideshowMetadata } from '@/types';
 
 export class PostizUploadService {
   /**
-   * Upload imgbb-hosted slideshow images to Postiz storage for posting
-   * This takes the imgbb URLs from the slideshow and uploads them to Postiz's storage
+   * Upload slideshow images to Postiz storage for posting
    */
-  async uploadImgbbImagesToPostiz(slideshow: SlideshowMetadata): Promise<{ id: string, path: string }[]> {
-    console.log('🔄 Starting upload of imgbb images to Postiz storage...');
+  async uploadImagesToPostizStorage(slideshow: SlideshowMetadata): Promise<{ id: string, path: string }[]> {
+    console.log('🔄 Starting upload of images to Postiz storage...');
 
-    const imgbbUrls: string[] = [];
+    const validUrls: string[] = [];
 
-    // Extract imgbb URLs from the slideshow
+    // Extract URLs from the slideshow
     for (const slide of slideshow.condensedSlides) {
-      // Priority 1: Use condensed image URL if it's imgbb
-      if (slide.condensedImageUrl?.includes('i.ibb.co')) {
-        imgbbUrls.push(slide.condensedImageUrl);
+      // Priority 1: Condensed URL (Has text burned in) - MUST be http/https and NOT data:
+      if (slide.condensedImageUrl && slide.condensedImageUrl.startsWith('http') && !slide.condensedImageUrl.startsWith('data:')) {
+        validUrls.push(slide.condensedImageUrl);
       }
-      // Priority 2: Use original image URL if it's imgbb
-      else if (slide.originalImageUrl?.includes('i.ibb.co')) {
-        imgbbUrls.push(slide.originalImageUrl);
+      // Priority 2: Original URL (No text, but better than nothing or base64)
+      else if (slide.originalImageUrl && slide.originalImageUrl.startsWith('http')) {
+        console.warn(`⚠️ Using original image for slide ${slide.id} (Text overlay will be missing)`);
+        validUrls.push(slide.originalImageUrl);
       }
-      // Priority 3: Use any http URL available
-      else if (slide.condensedImageUrl?.startsWith('http')) {
-        imgbbUrls.push(slide.condensedImageUrl);
-      }
-      else if (slide.originalImageUrl?.startsWith('http')) {
-        imgbbUrls.push(slide.originalImageUrl);
+      // Priority 3: Fallback - skip if only base64 is available (Postiz requires URL)
+      else {
+        console.error(`❌ No valid URL found for slide ${slide.id}. Condensed is base64 and original is missing/invalid.`);
       }
     }
 
-    console.log('📋 Found imgbb URLs to upload:', imgbbUrls);
+    console.log('📋 Found valid URLs to upload:', validUrls);
 
     const postizMedia: { id: string, path: string }[] = [];
     let successCount = 0;
 
-    for (let i = 0; i < imgbbUrls.length; i++) {
-      const imgbbUrl = imgbbUrls[i];
+    for (let i = 0; i < validUrls.length; i++) {
+      const imageUrl = validUrls[i];
 
       try {
-        console.log(`📤 Uploading imgbb image ${i + 1}/${imgbbUrls.length}: ${imgbbUrl}`);
+        console.log(`📤 Uploading image ${i + 1}/${validUrls.length}: ${imageUrl}`);
 
-        // Upload from imgbb URL to Postiz storage
-        const postizResponse = await this.uploadUrlToPostiz(imgbbUrl);
+        // Upload from URL to Postiz storage
+        const postizResponse = await this.uploadUrlToPostiz(imageUrl);
 
         postizMedia.push({
           id: postizResponse.id,
@@ -50,15 +47,15 @@ export class PostizUploadService {
         });
 
         successCount++;
-        console.log(`✅ Successfully uploaded imgbb image ${i + 1} to Postiz:`, postizResponse.path);
+        console.log(`✅ Successfully uploaded image ${i + 1} to Postiz:`, postizResponse.path);
 
       } catch (error) {
-        console.error(`❌ Failed to upload imgbb image ${i + 1}:`, error);
-        // Don't add failed uploads - this will cause the posting to fail and provide proper error message
+        console.error(`❌ Failed to upload image ${i + 1}:`, error);
+        // Don't add failed uploads
       }
     }
 
-    console.log(`🎉 Upload completed: ${successCount}/${imgbbUrls.length} images successfully uploaded to Postiz`);
+    console.log(`🎉 Upload completed: ${successCount}/${validUrls.length} images successfully uploaded to Postiz`);
 
     if (successCount === 0) {
       throw new Error('All image uploads to Postiz storage failed. Please try again or check your Postiz API configuration.');
@@ -121,8 +118,8 @@ export class PostizUploadService {
   }
 
   /**
-   * Create Postiz post data with imgbb images uploaded to Postiz storage
-   * This follows the correct flow: imgbb for slideshow → Postiz storage for posting
+   * Create Postiz post data with valid images images uploaded to Postiz storage
+   * This follows the correct flow: ImgBB/Supabase -> Postiz storage for posting
    */
   async createOptimizedPostizData(
     slideshow: SlideshowMetadata,
@@ -130,10 +127,11 @@ export class PostizUploadService {
     scheduledAt?: Date,
     postNow: boolean = false
   ) {
-    console.log('🔄 Creating Postiz post data with imgbb → Postiz storage flow...');
+    console.log('🔄 Creating Postiz post data with ImgBB/Supabase -> Postiz storage flow...');
 
-    // Step 1: Upload imgbb images to Postiz storage (required for posting)
-    const postizMedia = await this.uploadImgbbImagesToPostiz(slideshow);
+    // Step 1: Upload images to Postiz storage (required for posting)
+    // Uses the new method name
+    const postizMedia = await this.uploadImagesToPostizStorage(slideshow);
 
     if (postizMedia.length === 0) {
       throw new Error('No images were successfully uploaded to Postiz storage. Cannot create post without images.');
@@ -148,7 +146,7 @@ export class PostizUploadService {
       _postizMedia: postizMedia, // Keep for API call with Postiz image IDs
       // Add enhanced metadata for better tracking
       _uploadMetadata: {
-        originalImgbbCount: slideshow.condensedSlides.length,
+        originalCount: slideshow.condensedSlides.length,
         postizUploadedCount: postizMedia.length,
         uploadTimestamp: new Date().toISOString(),
         uploadSuccess: postizMedia.length === slideshow.condensedSlides.length
@@ -158,15 +156,6 @@ export class PostizUploadService {
     console.log('✅ Created Postiz post data with Postiz storage paths');
     console.log('📊 Final media to reference in post:', postizMedia);
     return postData;
-  }
-
-  /**
-   * STEP 1 ONLY: Upload images to Postiz storage (no post creation)
-   * Returns Postiz image gallery URLs for use in Step 2
-   */
-  async uploadImagesToPostizStorage(slideshow: SlideshowMetadata): Promise<{ id: string, path: string }[]> {
-    console.log('📤 STEP 1: Uploading images to Postiz storage only...');
-    return await this.uploadImgbbImagesToPostiz(slideshow);
   }
 
   /**

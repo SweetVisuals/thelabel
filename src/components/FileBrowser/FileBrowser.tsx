@@ -120,7 +120,7 @@ export function FileBrowser({
   const [renameItemId, setRenameItemId] = useState('');
 
   // Multi-select state
-  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(true);
 
   // Load initial data
   // Load data function
@@ -687,6 +687,7 @@ export function FileBrowser({
   };
 
   const handleItemClick = (item: FileItem, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (item.id === 'parent-directory') {
       const currentFolder = folders.find(f => f.id === currentFolderId);
       onCurrentFolderIdChange(currentFolder?.parent_id || null);
@@ -1070,6 +1071,11 @@ export function FileBrowser({
       {/* Content Area */}
       <div
         className="flex-1 p-4 overflow-auto min-h-0"
+        onClick={() => {
+          onSelectionChange([]);
+          onSlideshowSelectionChange([]);
+          onFolderSelectionChange([]);
+        }}
         onDoubleClick={(e) => {
           if (e.target === e.currentTarget) {
             setShowNewFolderDialog(true);

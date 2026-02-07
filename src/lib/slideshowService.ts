@@ -82,7 +82,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       const img = new Image();
       img.crossOrigin = 'anonymous';
 
-      img.onload = () => {
+      img.onload = async () => {
         try {
           // Set canvas size based on aspect ratio
           const ratio = this.parseAspectRatio(aspectRatio);
@@ -111,10 +111,10 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
             ctx.drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight);
           }
 
-          // Overlay text elements
-          textOverlays.forEach(overlay => {
-            this.drawTextOverlay(ctx, overlay, canvas.width, canvas.height);
-          });
+          // Overlay text elements - CRITICAL FIX: Await drawing to ensure text is rendered before saving
+          for (const overlay of textOverlays) {
+            await this.drawTextOverlay(ctx, overlay, canvas.width, canvas.height);
+          }
 
           // Convert to compressed image
           canvas.toBlob(
@@ -167,23 +167,35 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
   ): Promise<void> {
     const { text, x, y, fontSize, color, fontFamily, fontWeight, alignment, bold, italic, outline, outlineColor, outlineWidth, outlinePosition, glow, glowColor, glowIntensity } = overlay;
 
+    // CRITICAL FIX: Ensure font is loaded specific to this canvas context
+    // This prevents the "missing font" issue where text isn't drawn or defaults to Arial
+    await fontLoader.waitForFontInCanvas(ctx, 'TikTok Sans');
+
     // Fonts are already loaded at the start of createCondensedSlides for bulk operations
 
     // Calculate position as percentage of canvas
     const posX = (x / 100) * canvasWidth;
     const posY = (y / 100) * canvasHeight;
 
-    // Calculate correct scaling factor for TikTok format
-    // The preview in TikTokPreview is designed to look good at various sizes
-    // but the final TikTok format is standardized at 1080px width
-    // We need to scale text appropriately to maintain visual proportions
+    console.log(`🎨 Drawing text overlay: "${text ? text.substring(0, 15) : 'EMPTY'}" at (${posX.toFixed(1)}, ${posY.toFixed(1)}) on ${canvasWidth}x${canvasHeight} canvas. Orig X/Y: ${x}%/${y}%. Color: ${color}. Font: ${fontSize}`);
 
-    // Use a scaling factor that makes text appropriately sized for 1080px final width
-    // 3x scaling gives better results than 4x
-    const tiktokScaleFactor = 3;
+    console.log(`🎨 Drawing text overlay: "${text ? text.substring(0, 15) : 'EMPTY'}" at (${posX.toFixed(1)}, ${posY.toFixed(1)}) on ${canvasWidth}x${canvasHeight} canvas. Orig X/Y: ${x}%/${y}%. Color: ${color}. Font: ${fontSize}`);
+
+    // Calculate correct scaling factor for TikTok format
+    // The preview in TikTokPreview (and design phase) is based on ~360px width
+    // We need to scale text appropriately to maintain visual proportions relative to the actual canvas width
+    const baseDesignWidth = 360;
+    const tiktokScaleFactor = canvasWidth / baseDesignWidth;
+
+    // Log the calculated scale factor to debug
+    console.log(`📏 Scaling text: Canvas width ${canvasWidth}, Scale Factor ${tiktokScaleFactor.toFixed(2)}, Font Size ${fontSize} -> ${(fontSize * tiktokScaleFactor).toFixed(1)}`);
+
     const scaledFontSize = Math.max(16, fontSize * tiktokScaleFactor);
-    // Scale outline width more aggressively for better visibility (5x vs 3x for text)
-    const strokeScaleFactor = 5;
+
+    // Scale outline width more aggressively for better visibility (proportional to text scale)
+    // Original was 5x for 1080px (factor 3), so ration is 5/3 = ~1.67
+    const strokeScaleFactor = tiktokScaleFactor * 1.67;
+
     const scaledOutlineWidth = outlineWidth * strokeScaleFactor;
     const scaledGlowIntensity = Math.max(2, glowIntensity * tiktokScaleFactor);
 
@@ -892,7 +904,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       // STEP 1: Upload imgbb images to Postiz storage
       // ========================================
       console.log('📤 STEP 1: Uploading images to Postiz storage...');
-      const postizMedia = await postizUploadService.uploadImgbbImagesToPostiz(slideshow);
+      const postizMedia = await postizUploadService.uploadImagesToPostizStorage(slideshow);
 
       if (postizMedia.length === 0) {
         throw new Error('No images were successfully uploaded to Postiz storage. Cannot create post without images.');
@@ -2216,7 +2228,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       const imageGroups = this.groupImagesForSlideshows(images, slidesPerSlideshowFinal, randomizeImages);
 
       const createdSlideshows: SlideshowMetadata[] = [];
-      const finalTitle = customizations.title || template.title;
+      const finalTitle = customizations.title || template.name || template.title;
       const finalCaption = customizations.caption || template.caption;
       const finalHashtags = customizations.hashtags || template.hashtags;
 

@@ -5,6 +5,7 @@ export interface User {
   email: string;
   created_at: string;
   postiz_api_key?: string;
+  timezone?: string;
 }
 
 export interface UploadedImage {

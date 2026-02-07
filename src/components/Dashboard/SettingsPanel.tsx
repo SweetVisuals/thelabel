@@ -167,23 +167,31 @@ export function SettingsPanel({
         }
     };
 
-    // Load API key from Supabase on mount
+    const [timezone, setTimezone] = useState('UTC');
+    const [availableTimezones] = useState((Intl as any).supportedValuesOf ? (Intl as any).supportedValuesOf('timeZone') : ['UTC']);
+
+    // Loading state
     useEffect(() => {
-        const loadApiKey = async () => {
+        const loadUserData = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const { data, error } = await supabase
                     .from('users')
-                    .select('postiz_api_key')
+                    .select('postiz_api_key, timezone')
                     .eq('id', user.id)
                     .single();
 
-                if (data?.postiz_api_key) {
-                    setApiKeys(prev => ({ ...prev, postizApiKey: data.postiz_api_key }));
+                if (data) {
+                    if (data.postiz_api_key) {
+                        setApiKeys((prev: ApiKeys) => ({ ...prev, postizApiKey: data.postiz_api_key }));
+                    }
+                    if (data.timezone) {
+                        setTimezone(data.timezone);
+                    }
                 }
             }
         };
-        loadApiKey();
+        loadUserData();
     }, []);
 
     const toggleSection = (section: string) => {
@@ -201,12 +209,12 @@ export function SettingsPanel({
         }
     };
 
-    const handleSaveApiKey = async () => {
+    const handleSaveUserData = async () => {
         setIsSavingKey(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
-                toast.error('You must be logged in to save API keys');
+                toast.error('You must be logged in to save settings');
                 return;
             }
 
@@ -214,15 +222,16 @@ export function SettingsPanel({
                 .from('users')
                 .update({
                     postiz_api_key: apiKeys.postizApiKey,
+                    timezone: timezone,
                     updated_at: new Date().toISOString()
                 })
                 .eq('id', user.id);
 
             if (error) throw error;
-            toast.success('Postiz API Key saved securely');
+            toast.success('Settings saved securely');
         } catch (error) {
-            console.error('Failed to save API key:', error);
-            toast.error('Failed to save API key');
+            console.error('Failed to save settings:', error);
+            toast.error('Failed to save settings');
         } finally {
             setIsSavingKey(false);
         }
@@ -680,8 +689,8 @@ export function SettingsPanel({
                                         />
                                         <Button
                                             size="sm"
-                                            onClick={handleSaveApiKey}
-                                            disabled={isSavingKey || !apiKeys.postizApiKey}
+                                            onClick={handleSaveUserData}
+                                            disabled={isSavingKey}
                                             className="h-9 px-3"
                                         >
                                             {isSavingKey ? 'Saving...' : 'Save'}
@@ -689,6 +698,22 @@ export function SettingsPanel({
                                     </div>
                                     <p className="text-[10px] text-muted-foreground ml-1">
                                         Required for background processing. Saved securely to your account.
+                                    </p>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs text-muted-foreground ml-1">Timezone</Label>
+                                    <Select value={timezone} onValueChange={setTimezone}>
+                                        <SelectTrigger className="bg-black/20 border-white/10 h-9 text-xs">
+                                            <SelectValue placeholder="Select Timezone" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {availableTimezones.map(tz => (
+                                                <SelectItem key={tz} value={tz}>{tz}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-muted-foreground ml-1">
+                                        Used for scheduling posts within the 9am - 10pm window.
                                     </p>
                                 </div>
                                 <div className="space-y-1.5">

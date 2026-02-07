@@ -475,6 +475,8 @@ export const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalPr
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [randomizeImages, setRandomizeImages] = useState(false);
   const [customizeHashtags, setCustomizeHashtags] = useState(false);
+  const [customCaption, setCustomCaption] = useState('');
+  const [customHashtags, setCustomHashtags] = useState('');
   const [slidesPerSlideshow, setSlidesPerSlideshow] = useState<number>(3); // Default to 3 slides per slideshow
   const [isCreating, setIsCreating] = useState(false);
   const [preview, setPreview] = useState<BulkTemplatePreview | null>(null);
@@ -521,7 +523,10 @@ export const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalPr
         randomizeImages,
         slidesPerSlideshow,
         customizations: {
-          randomizeHashtags: customizeHashtags
+          randomizeHashtags: customizeHashtags,
+          caption: customCaption || undefined,
+          hashtags: customHashtags ? customHashtags.split(',').map(tag => tag.trim()).filter(Boolean) : undefined,
+          title: undefined // Title is handled by logic inside service usually, or we can add input for it too
         }
       };
 
@@ -685,6 +690,30 @@ export const BulkCreateFromTemplateModal: React.FC<BulkCreateFromTemplateModalPr
                     id="customize-hashtags"
                     checked={customizeHashtags}
                     onCheckedChange={setCustomizeHashtags}
+                  />
+                </div>
+
+                {/* Custom Caption Input */}
+                <div>
+                  <label className="text-sm font-medium block mb-2">Caption (Optional)</label>
+                  <textarea
+                    value={customCaption}
+                    onChange={(e) => setCustomCaption(e.target.value)}
+                    placeholder={`Default: ${selectedTemplateData?.caption || 'No caption'}`}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none resize-none"
+                    rows={3}
+                  />
+                </div>
+
+                {/* Custom Hashtags Input */}
+                <div>
+                  <label className="text-sm font-medium block mb-2">Custom Hashtags (comma separated)</label>
+                  <input
+                    type="text"
+                    value={customHashtags}
+                    onChange={(e) => setCustomHashtags(e.target.value)}
+                    placeholder="tag1, tag2, tag3"
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-input text-foreground focus:border-primary focus:outline-none"
                   />
                 </div>
               </div>

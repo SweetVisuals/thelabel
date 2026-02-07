@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { toZonedTime, fromZonedTime } from 'https://esm.sh/date-fns-tz@3.1.3'
 
 // Types for our job payload
 interface JobPayload {
@@ -11,6 +12,7 @@ interface JobPayload {
         batchSize: number;
         batchIntervalHours: number;
         postIntervalMinutes: number;
+        timezone?: string;
     };
 }
 
@@ -105,12 +107,23 @@ Deno.serve(async (req) => {
             )
         }
 
-        // 3. Determine Postiz API Key
-        let postizApiKey = defaultPostizApiKey;
+        // 3. Determine Postiz API Key & Timezone
+        // Fetch User settings including API Key and Timezone
+        const { data: userSettings, error: userError } = await supabase
+            .from('users')
+            .select('postiz_api_key, timezone')
+            .eq('id', job.user_id)
+            .single();
+
+        if (userError) {
+            console.error('Failed to fetch user settings:', userError);
+        }
+
+        let postizApiKey = userSettings?.postiz_api_key || defaultPostizApiKey;
         // Check for user settings if implemented later
         if (!postizApiKey) {
             // Fallback to searching a known table or throw
-            throw new Error('No Postiz API Key found.');
+            throw new Error('No Postiz API Key found. Please add it in Settings.');
         }
 
         // 4. Process the job
@@ -127,21 +140,23 @@ Deno.serve(async (req) => {
         let currentScheduleTime = new Date()
 
         // Helper to enforce 9am - 10pm window
-        const applyTimeWindow = (date: Date) => {
-            let d = new Date(date);
-            const h = d.getHours();
+        // Helper to enforce 9am - 10pm window
+        const applyTimeWindow = (date: Date, timezone: string = 'UTC') => {
+            const zonedDate = toZonedTime(date, timezone);
+            const h = zonedDate.getHours();
+
             if (h < 9) {
-                d.setHours(9, 0, 0, 0);
+                const adjustedZoned = new Date(zonedDate);
+                adjustedZoned.setHours(9, 0, 0, 0);
+                return fromZonedTime(adjustedZoned, timezone);
             } else if (h >= 22) {
-                d.setDate(d.getDate() + 1);
-                d.setHours(9, 0, 0, 0);
+                const adjustedZoned = new Date(zonedDate);
+                adjustedZoned.setDate(adjustedZoned.getDate() + 1);
+                adjustedZoned.setHours(9, 0, 0, 0);
+                return fromZonedTime(adjustedZoned, timezone);
             }
-            // Ensure we don't go back in time
-            if (d < new Date()) {
-                // If 9am today passed, and we tried to set 9am today, it's fine, we post "ASAP" (which is now)
-                // configured by scheduler logic usually.
-            }
-            return d;
+            // Ensure we don't go back in time (handled by caller mostly)
+            return date;
         };
 
         // Initialize base schedule time from job or now
@@ -149,7 +164,9 @@ Deno.serve(async (req) => {
         if (scheduledStart > currentScheduleTime) {
             currentScheduleTime = scheduledStart
         }
-        currentScheduleTime = applyTimeWindow(currentScheduleTime);
+
+        let jobTimezone = job.payload.settings.timezone || userSettings?.timezone || 'UTC';
+        currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
 
         const results = []
         const failedItems = [];
@@ -168,7 +185,7 @@ Deno.serve(async (req) => {
                 if (i > 0) currentScheduleTime = new Date(currentScheduleTime.getTime() + settings.postIntervalMinutes * 60000)
             }
 
-            currentScheduleTime = applyTimeWindow(currentScheduleTime);
+            currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
 
             try {
                 console.log(`Scheduling post ${i + 1}/${itemsToProcess.length} for ${currentScheduleTime.toISOString()}`)

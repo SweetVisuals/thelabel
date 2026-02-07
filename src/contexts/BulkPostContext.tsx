@@ -5,23 +5,27 @@ import { slideshowService } from '../lib/slideshowService';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 import { addMinutes, addHours } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
-const applyScheduleConstraints = (baseTime: Date): Date => {
-    const hour = baseTime.getHours();
+const applyScheduleConstraints = (baseTime: Date, timezone: string = 'UTC'): Date => {
+    // Convert baseTime (which is a JS Date with a specific timestamp) to the user's timezone
+    // toZonedTime returns a Date object representing the time in the target timezone
+    const zonedDate = toZonedTime(baseTime, timezone);
+    const hour = zonedDate.getHours();
 
     // If post falls between 10pm (22:00) and midnight, move to 9am next day
     if (hour >= 22) {
-        const adjustedTime = new Date(baseTime);
-        adjustedTime.setDate(adjustedTime.getDate() + 1);
-        adjustedTime.setHours(9, 0, 0, 0);
-        return adjustedTime;
+        const adjustedZoned = new Date(zonedDate);
+        adjustedZoned.setDate(adjustedZoned.getDate() + 1);
+        adjustedZoned.setHours(9, 0, 0, 0);
+        return fromZonedTime(adjustedZoned, timezone);
     }
 
     // If post falls between midnight and 9am, move to 9am same day
     if (hour >= 0 && hour < 9) {
-        const adjustedTime = new Date(baseTime);
-        adjustedTime.setHours(9, 0, 0, 0);
-        return adjustedTime;
+        const adjustedZoned = new Date(zonedDate);
+        adjustedZoned.setHours(9, 0, 0, 0);
+        return fromZonedTime(adjustedZoned, timezone);
     }
 
     return baseTime;
@@ -36,6 +40,7 @@ interface JobPayload {
         startTime: string; // ISO string for JSON serialization
         batchSize: number;
         postIntervalMinutes: number;
+        timezone?: string;
     };
 }
 
@@ -111,6 +116,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const [currentJobId, setCurrentJobId] = useState<string | null>(null);
     const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
     const [totalBatches, setTotalBatches] = useState(0);
+    const [userTimezone, setUserTimezone] = useState('UTC');
 
     const stopProcessingRef = useRef(false);
 
@@ -118,6 +124,17 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const fetchQueue = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
+
+        // Fetch user timezone
+        const { data: userData } = await supabase
+            .from('users')
+            .select('timezone')
+            .eq('id', user.id)
+            .single();
+
+        if (userData?.timezone) {
+            setUserTimezone(userData.timezone);
+        }
 
         const { data, error } = await supabase
             .from('job_queue')
@@ -305,8 +322,11 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             // 'interval' strategy means "post these items with intervalHours"
             // 'first-now' is handled by the first batch having start time = now, and subsequent items having interval
 
+            // Get user timezone from payload if available, otherwise default to UTC
+            const jobTimezone = settings.timezone || 'UTC';
+
             for (let i = 0; i < slideshows.length; i++) {
-                currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
+                currentScheduledTime = applyScheduleConstraints(currentScheduledTime, jobTimezone);
 
                 schedule.push({
                     slideshowId: slideshows[i].id,
@@ -600,7 +620,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
                 // Advance currentPostTime for the next batch by simulating this batch's posts
                 for (let j = 0; j < batchSlideshows.length; j++) {
-                    currentPostTime = applyScheduleConstraints(currentPostTime);
+                    currentPostTime = applyScheduleConstraints(currentPostTime, userTimezone);
                     currentPostTime = addMinutes(currentPostTime, settings.postIntervalMinutes);
                 }
 
@@ -610,7 +630,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     strategy: 'batch', // Keep as batch so processor knows to use postIntervalMinutes
                     settings: {
                         ...settings,
-                        startTime: batchPostStartTime.toISOString()
+                        startTime: batchPostStartTime.toISOString(),
+                        timezone: userTimezone
                     }
                 };
 
@@ -632,7 +653,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 strategy,
                 settings: {
                     ...settings,
-                    startTime: settings.startTime.toISOString()
+                    startTime: settings.startTime.toISOString(),
+                    timezone: userTimezone
                 }
             };
 
@@ -780,7 +802,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const strategy = job.payload.strategy;
 
             for (let j = 0; j < slideshows.length; j++) {
-                currentPostTime = applyScheduleConstraints(currentPostTime);
+                currentPostTime = applyScheduleConstraints(currentPostTime, userTimezone);
                 if (strategy === 'batch') {
                     currentPostTime = addMinutes(currentPostTime, settings.postIntervalMinutes);
                 } else {

@@ -32,6 +32,7 @@ class FontLoader {
 
       await Promise.all(promises);
 
+      this.loadedFonts.add('TikTok Sans');
       console.log('✅ TikTok Sans fonts loaded via CSS');
     } catch (error) {
       console.warn('⚠️ Error waiting for TikTok fonts:', error);
