@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react';
 import { SlideshowMetadata } from '../types';
-import { postizUploadService } from '../lib/postizUploadService';
-import { slideshowService } from '../lib/slideshowService';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
+import { postizAPI } from '../lib/postiz';
 import { addMinutes, addHours } from 'date-fns';
 import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 
@@ -58,26 +57,11 @@ export interface JobQueueItem {
     error?: string;
 }
 
-interface PostingSchedule {
-    slideshowId: string;
-    slideshowTitle: string;
-    scheduledTime: Date;
-    status: 'pending' | 'posting' | 'success' | 'error';
-    postId?: string;
-    error?: string;
-}
+
 
 interface BulkPostContextType {
-    isPosting: boolean;
-    isPaused: boolean;
-    nextResumeTime: Date | null;
-    postingSchedule: PostingSchedule[]; // Current active job schedule
-    statusMessage: string;
     jobQueue: JobQueueItem[];
     lastScheduledTime: Date | null;
-    currentJobId: string | null;
-    currentBatchIndex: number;
-    totalBatches: number;
     startBulkPost: (
         slideshows: SlideshowMetadata[],
         profiles: string[],
@@ -89,7 +73,6 @@ interface BulkPostContextType {
             postIntervalMinutes: number;
         }
     ) => Promise<void>;
-    stopBulkPost: () => void;
     refreshQueue: () => Promise<void>;
     rescheduleQueue: () => Promise<void>;
     nextBatchStartTime: Date | null;
@@ -106,19 +89,9 @@ export const useBulkPost = () => {
 };
 
 export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [isPosting, setIsPosting] = useState(false);
-    const [isPaused, setIsPaused] = useState(false);
-    const [nextResumeTime, setNextResumeTime] = useState<Date | null>(null);
-    const [postingSchedule, setPostingSchedule] = useState<PostingSchedule[]>([]);
-    const [statusMessage, setStatusMessage] = useState('');
     const [jobQueue, setJobQueue] = useState<JobQueueItem[]>([]);
     const [lastScheduledTime, setLastScheduledTime] = useState<Date | null>(null);
-    const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-    const [currentBatchIndex, setCurrentBatchIndex] = useState(0);
-    const [totalBatches, setTotalBatches] = useState(0);
     const [userTimezone, setUserTimezone] = useState('UTC');
-
-    const stopProcessingRef = useRef(false);
 
     // Load initial queue and subscribe to changes
     const fetchQueue = useCallback(async () => {
@@ -207,371 +180,13 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         setLastScheduledTime(endTime);
     };
 
-    // Poll for pending jobs that are ready to run
-    useEffect(() => {
-        const checkQueue = async () => {
-            if (isPosting) return; // Already processing a job
+    // Poll for pending jobs that are ready to run - REMOVED (Backend processing only)
 
-            const now = new Date();
-            const readyJob = jobQueue.find(job =>
-                (job.status === 'pending' && new Date(job.scheduled_start_time) <= now) ||
-                job.status === 'processing' // Resume interrupted jobs
-            );
+    // Helper to wait with UI feedback - REMOVED (Backend processing only)
 
-            if (readyJob) {
-                console.log('Found ready job:', readyJob.id);
-                processJob(readyJob);
-            }
-        };
+    // postSingleSlideshow - REMOVED (Backend processing only)
 
-        const interval = setInterval(checkQueue, 1000); // Check every second
-        return () => clearInterval(interval);
-    }, [jobQueue, isPosting]);
-
-    // Helper to wait with UI feedback
-    const waitWithFeedback = async (ms: number) => {
-        const resumeAt = new Date(Date.now() + ms);
-        setNextResumeTime(resumeAt);
-        setIsPaused(true);
-        setStatusMessage(`Waiting for next batch... Resuming at ${resumeAt.toLocaleTimeString()}`);
-
-        return new Promise<void>((resolve, reject) => {
-            const checkInterval = setInterval(() => {
-                if (stopProcessingRef.current) {
-                    clearInterval(checkInterval);
-                    reject(new Error('Processing stopped by user'));
-                }
-                if (Date.now() >= resumeAt.getTime()) {
-                    clearInterval(checkInterval);
-                    setIsPaused(false);
-                    setNextResumeTime(null);
-                    setStatusMessage('Resuming processing...');
-                    resolve();
-                }
-            }, 1000);
-        });
-    };
-
-    const postSingleSlideshow = async (
-        slideshow: SlideshowMetadata,
-        profileId: string,
-        scheduledAt?: Date,
-        postNow: boolean = false
-    ): Promise<{ success: boolean; postId?: string; error?: string }> => {
-        try {
-            const captionText = slideshowService.formatCaptionForBuffer(slideshow.caption, slideshow.hashtags);
-            const postizMedia = await postizUploadService.uploadImagesToPostizStorage(slideshow);
-
-            if (postizMedia.length === 0) {
-                throw new Error('No images were successfully uploaded to Postiz storage');
-            }
-
-            const result = await postizUploadService.createPostWithUploadedImages(
-                captionText,
-                profileId,
-                postizMedia,
-                scheduledAt,
-                postNow
-            );
-
-            return { success: true, postId: result.postId };
-        } catch (error) {
-            console.error(`Failed to post slideshow ${slideshow.title}:`, error);
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            return { success: false, error: errorMessage };
-        }
-    };
-
-    const processJob = useCallback(async (job: JobQueueItem) => {
-        if (isPosting) return;
-
-        try {
-            // 1. Lock the job
-            const { error: lockError } = await supabase
-                .from('job_queue')
-                .update({ status: 'processing' })
-                .eq('id', job.id)
-                .eq('status', 'pending');
-
-            if (lockError) {
-                console.error('Failed to lock job:', lockError);
-                return;
-            }
-
-            // Optimistically update local queue state
-            setJobQueue(prev => prev.map(j =>
-                j.id === job.id ? { ...j, status: 'processing' } : j
-            ));
-
-            setIsPosting(true);
-            setCurrentJobId(job.id);
-            setCurrentBatchIndex(job.batch_index);
-            setTotalBatches(job.total_batches);
-            stopProcessingRef.current = false;
-            setStatusMessage(`Starting Batch ${job.batch_index}/${job.total_batches}...`);
-
-            const { slideshows, profiles, strategy, settings } = job.payload;
-            const { intervalHours, postIntervalMinutes } = settings;
-
-            // Generate Schedule for this specific job/batch
-            const schedule: PostingSchedule[] = [];
-            // Use settings.startTime as base to ensure correct scheduling even if processed early
-            let currentScheduledTime = new Date(settings.startTime);
-
-            // Since we've split batches, 'batch' strategy here just means "post these items with postIntervalMinutes"
-            // 'interval' strategy means "post these items with intervalHours"
-            // 'first-now' is handled by the first batch having start time = now, and subsequent items having interval
-
-            // Get user timezone from payload if available, otherwise default to UTC
-            const jobTimezone = settings.timezone || 'UTC';
-
-            for (let i = 0; i < slideshows.length; i++) {
-                currentScheduledTime = applyScheduleConstraints(currentScheduledTime, jobTimezone);
-
-                schedule.push({
-                    slideshowId: slideshows[i].id,
-                    slideshowTitle: slideshows[i].title,
-                    scheduledTime: new Date(currentScheduledTime),
-                    status: 'pending'
-                });
-
-                if (strategy === 'batch') {
-                    currentScheduledTime = addMinutes(currentScheduledTime, postIntervalMinutes);
-                } else {
-                    currentScheduledTime = addHours(currentScheduledTime, intervalHours);
-                }
-            }
-
-            setPostingSchedule(schedule);
-
-            let successfulCount = 0;
-            let failedCount = 0;
-            let hasError = false;
-            const failedSlideshows: SlideshowMetadata[] = [];
-
-            for (let i = 0; i < schedule.length; i++) {
-                if (stopProcessingRef.current) break;
-
-                const scheduleItem = schedule[i];
-
-                setPostingSchedule(prev => prev.map((item, index) =>
-                    index === i ? { ...item, status: 'posting' } : item
-                ));
-                setStatusMessage(`Batch ${job.batch_index}/${job.total_batches} - Posting ${i + 1}/${schedule.length} (${successfulCount} Success, ${failedCount} Failed): ${scheduleItem.slideshowTitle}`);
-
-                const slideshow = slideshows.find(s => s.id === scheduleItem.slideshowId);
-                if (!slideshow) continue;
-
-                // Check if this slideshow was already successfully posted (Resume Logic)
-                // We need to fetch the fresh status because the job payload might be stale
-                const freshSlideshow = await slideshowService.loadSlideshow(slideshow.id);
-                if (freshSlideshow?.lastUploadStatus === 'success') {
-                    console.log(`Skipping already posted slideshow: ${slideshow.title}`);
-                    setPostingSchedule(prev => prev.map((item, index) =>
-                        index === i ? { ...item, status: 'success' } : item
-                    ));
-                    successfulCount++;
-                    continue;
-                }
-
-                // For 'first-now', the first item of the first batch should be immediate
-                // But since we split jobs, we need to know if this is the VERY first item of the VERY first batch
-                // However, the job's scheduled_start_time handles the "when to start" part.
-                // If the job is scheduled for NOW, we post now.
-                // We don't need special 'postNow' flag for API unless we really want to bypass scheduling
-                // But here we are "processing" which means we are doing the actions NOW.
-                // So we always send "postNow=true" to Postiz? 
-                // Wait, if we send "postNow=true", Postiz posts immediately.
-                // If we send a date, Postiz schedules it.
-                // The user wants to "schedule" batches.
-                // But the requirement was "Sequential Batch Scheduling... each new batch starts only after the previous one has completed".
-                // And "We can't schedule future posts immedietly because it still requires the postiz API".
-                // So we are acting as the scheduler. We tell Postiz to post NOW.
-
-                // Use the calculated schedule time for this item
-                // If the time is in the past or very close to now (within 1 min), we can post immediately
-                // Otherwise we schedule it
-                const now = new Date();
-                const scheduledTime = scheduleItem.scheduledTime;
-                const shouldPostNow = scheduledTime.getTime() <= now.getTime() + 60000; // 1 min buffer
-
-                const result = await postSingleSlideshow(
-                    slideshow,
-                    profiles[0],
-                    shouldPostNow ? undefined : scheduledTime,
-                    shouldPostNow
-                );
-
-                if (result.success) {
-                    setPostingSchedule(prev => prev.map((item, index) =>
-                        index === i ? { ...item, status: 'success', postId: result.postId } : item
-                    ));
-                    successfulCount++;
-                    await slideshowService.incrementUploadCount(slideshow.id);
-                    await slideshowService.updateSlideshowStatus(slideshow.id, 'success');
-                } else {
-                    hasError = true;
-                    await slideshowService.updateSlideshowStatus(slideshow.id, 'failed');
-                    const isRateLimit = result.error && (
-                        result.error.toLowerCase().includes('rate limit') ||
-                        result.error.toLowerCase().includes('too many requests')
-                    );
-
-                    if (isRateLimit) {
-                        setPostingSchedule(prev => prev.map((item, index) =>
-                            index === i ? { ...item, status: 'pending', error: 'Rate limit hit' } : item
-                        ));
-                        try {
-                            // Wait 1 hour for rate limits
-                            await waitWithFeedback(60 * 60 * 1000);
-                            i--; // Retry
-                            continue;
-                        } catch (e) {
-                            break;
-                        }
-                    } else {
-                        setPostingSchedule(prev => prev.map((item, index) =>
-                            index === i ? { ...item, status: 'error', error: result.error } : item
-                        ));
-                        failedCount++;
-                        failedSlideshows.push(slideshow);
-
-                        // Stop processing immediately and reschedule remaining posts
-                        if (!stopProcessingRef.current) {
-                            console.log('Batch failure detected. Rescheduling remaining posts...');
-                            for (let j = i + 1; j < slideshows.length; j++) {
-                                failedSlideshows.push(slideshows[j]);
-                                // Update UI to show these are being skipped/rescheduled
-                                setPostingSchedule(prev => prev.map((item, index) =>
-                                    index === j ? { ...item, status: 'pending', error: 'Rescheduled' } : item
-                                ));
-                            }
-                            toast.error(`Batch interrupted. Rescheduling ${failedSlideshows.length} posts for next interval.`);
-                            // Break the loop
-                            break;
-                        }
-                    }
-                }
-
-                if (stopProcessingRef.current) {
-                    toast.info('Processing cancelled by user');
-                    break;
-                }
-
-                // No waiting between items - we are scheduling them all at once
-                // The only delay is the upload time itself
-            }
-
-            // Handle Retries for Failed Slideshows
-            if (failedSlideshows.length > 0) {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    // Calculate retry time: Start of next batch or 67 mins (1h 7m) from now
-                    const retryMinutes = 67;
-                    const retryJobStartTime = addMinutes(new Date(), retryMinutes);
-
-                    // Find the scheduled time of the first failed slideshow to preserve the sequence
-                    const firstFailedSlideshowId = failedSlideshows[0].id;
-                    const firstFailedScheduleItem = schedule.find(s => s.slideshowId === firstFailedSlideshowId);
-
-                    // If we found the original schedule item, use its time. Otherwise fallback to retryJobStartTime
-                    const retryPostStartTime = firstFailedScheduleItem ? firstFailedScheduleItem.scheduledTime : retryJobStartTime;
-
-                    const retryPayload: JobPayload = {
-                        slideshows: failedSlideshows,
-                        profiles,
-                        strategy: 'batch',
-                        settings: {
-                            ...settings,
-                            startTime: retryPostStartTime.toISOString()
-                        }
-                    };
-
-                    await supabase.from('job_queue').insert({
-                        user_id: user.id,
-                        account_id: profiles[0],
-                        status: 'pending',
-                        scheduled_start_time: retryJobStartTime.toISOString(),
-                        // Keep the same batch index so it acts as a "retry of batch X"
-                        batch_index: job.batch_index,
-                        total_batches: job.total_batches,
-                        payload: retryPayload
-                    });
-
-                    toast.error(`Rescheduled ${failedSlideshows.length} failed posts for 1h 7m later`);
-
-                    // Cascade reschedule subsequent batches
-                    await cascadeReschedule(
-                        job.batch_index,
-                        job.total_batches,
-                        retryJobStartTime,
-                        user.id
-                    );
-                }
-            }
-
-            // Mark job as completed or failed
-            await supabase
-                .from('job_queue')
-                .update({
-                    status: stopProcessingRef.current ? 'failed' : (hasError && successfulCount < schedule.length ? 'failed' : 'completed'),
-                    error: stopProcessingRef.current ? 'Cancelled by user' : (hasError ? 'Some posts failed (retried)' : null)
-                })
-                .eq('id', job.id);
-
-            toast.success(`Batch ${job.batch_index}/${job.total_batches} completed`);
-
-        } catch (error) {
-            console.error('Job processing error:', error);
-
-            // On total failure, reschedule the entire job for 1h 7m later
-            const retryTime = addMinutes(new Date(), 67);
-
-            await supabase
-                .from('job_queue')
-                .update({
-                    status: 'pending', // Set back to pending to retry
-                    scheduled_start_time: retryTime.toISOString(),
-                    error: error instanceof Error ? `Failed, retrying: ${error.message}` : 'Unknown error (retrying)'
-                })
-                .eq('id', job.id);
-
-            toast.error('Job failed. Rescheduled for 1h 7m later.');
-
-            // Cascade reschedule subsequent batches (Full Failure)
-            // We need user ID, assume we have it from context or fetch it
-            const { data: { user } } = await supabase.auth.getUser();
-            if (user) {
-                await cascadeReschedule(
-                    job.batch_index,
-                    job.total_batches,
-                    retryTime,
-                    user.id
-                );
-            }
-
-            // Update local state to show it pending again
-            setJobQueue(prev => prev.map(j =>
-                j.id === job.id ? { ...j, status: 'pending', scheduled_start_time: retryTime.toISOString(), error: 'Job failed, retrying...' } : j
-            ));
-        } finally {
-            setIsPosting(false);
-            setCurrentJobId(null);
-            setCurrentBatchIndex(0);
-            setTotalBatches(0);
-            setIsPaused(false);
-            setNextResumeTime(null);
-            stopProcessingRef.current = false;
-            setPostingSchedule([]);
-            // Update local queue state to completed
-            setJobQueue(prev => prev.map(j =>
-                j.id === job.id ? { ...j, status: 'completed' } : j
-            ));
-
-            setStatusMessage('');
-            fetchQueue(); // Refresh queue immediately
-        }
-    }, [isPosting, fetchQueue]);
+    // processJob - REMOVED (Backend processing only)
 
     const startBulkPost = useCallback(async (
         slideshows: SlideshowMetadata[],
@@ -589,6 +204,30 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             toast.error('You must be logged in to schedule posts');
             return;
         }
+
+        // --- SYNC API KEY TO DATABASE ---
+        try {
+            const apiKey = postizAPI.getApiKey();
+            if (apiKey) {
+                const { error: updateError } = await supabase
+                    .from('users')
+                    .update({ postiz_api_key: apiKey })
+                    .eq('id', user.id);
+
+                if (updateError) {
+                    console.error('Failed to sync Postiz API key:', updateError);
+                    // Don't block scheduling if sync fails, but warn?
+                    // Proceeding anyway as it might have been set before.
+                } else {
+                    console.log('Synced Postiz API key to database');
+                }
+            } else {
+                console.warn('No Postiz API key found in local storage to sync');
+            }
+        } catch (e) {
+            console.error('Error syncing API key:', e);
+        }
+        // --------------------------------
 
         const jobsToInsert = [];
         let currentStartTime = new Date(settings.startTime);
@@ -677,83 +316,15 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             console.error('Failed to queue jobs:', error);
             toast.error('Failed to add jobs to queue');
         } else {
-            toast.success(`Added ${jobsToInsert.length} batches to queue`);
+            toast.success(`Active batch started! ${jobsToInsert.length} batches queued for background processing.`);
             await fetchQueue();
-
-            // Trigger immediate processing of first batch if scheduled for now (or close to now)
-            const now = new Date();
-            const firstJob = jobsToInsert[0];
-            // Allow 1 minute buffer for "now"
-            if (firstJob && new Date(firstJob.scheduled_start_time).getTime() <= now.getTime() + 60000) {
-                // Fetch the newly inserted jobs to get their IDs
-                const { data: insertedJobs } = await supabase
-                    .from('job_queue')
-                    .select('*')
-                    .eq('user_id', user.id)
-                    .eq('status', 'pending')
-                    .order('created_at', { ascending: false })
-                    .limit(jobsToInsert.length);
-
-                if (insertedJobs && insertedJobs.length > 0) {
-                    // Find the job that matches our first batch's start time (approx)
-                    const jobToProcess = insertedJobs.find(j =>
-                        Math.abs(new Date(j.scheduled_start_time).getTime() - new Date(firstJob.scheduled_start_time).getTime()) < 10000
-                    );
-                    if (jobToProcess) {
-                        console.log('Starting first batch immediately:', jobToProcess.id);
-                        processJob(jobToProcess);
-                    }
-                }
-            }
+            // Removed immediate local processing call
         }
-    }, [fetchQueue, processJob]);
+    }, [fetchQueue]);
 
-    const stopBulkPost = () => {
-        stopProcessingRef.current = true;
-    };
 
-    const cascadeReschedule = async (
-        failedBatchIndex: number,
-        totalBatches: number,
-        baseRetryTime: Date,
-        userId: string
-    ) => {
-        // Fetch all pending jobs for this user that are part of the same "set" (same total_batches)
-        // We assume jobs with same total_batches and user_id *might* be related. 
-        // A stricter link (like a group_id) would be better but we don't have it.
-        // We filter by status='pending' and batch_index > failedBatchIndex.
 
-        const { data: pendingJobs, error } = await supabase
-            .from('job_queue')
-            .select('*')
-            .eq('user_id', userId)
-            .eq('status', 'pending')
-            .eq('total_batches', totalBatches)
-            .gt('batch_index', failedBatchIndex) // Only shift subsequent batches
-            .order('batch_index', { ascending: true });
 
-        if (error || !pendingJobs || pendingJobs.length === 0) return;
-
-        console.log(`Cascading reschedule for ${pendingJobs.length} subsequent batches...`);
-
-        // Shift each subsequent batch
-        for (let i = 0; i < pendingJobs.length; i++) {
-            const job = pendingJobs[i];
-            const relativeIndex = job.batch_index - failedBatchIndex;
-            // logic: subsequent batch should be (relativeIndex * 67 mins) after the retry time of the failed batch
-            // e.g. Failed Batch 1 (Retrying at 1:00)
-            // Batch 2 (Index 2): 1:00 + (1 * 67m) = 2:07
-            // Batch 3 (Index 3): 1:00 + (2 * 67m) = 3:14
-            const newTime = addMinutes(baseRetryTime, relativeIndex * 67);
-
-            await supabase
-                .from('job_queue')
-                .update({ scheduled_start_time: newTime.toISOString() })
-                .eq('id', job.id);
-        }
-
-        toast.success(`Shifted ${pendingJobs.length} subsequent batches forward.`);
-    };
 
     const rescheduleQueue = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -851,18 +422,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     return (
         <BulkPostContext.Provider value={{
-            isPosting,
-            isPaused,
-            nextResumeTime,
-            postingSchedule,
-            statusMessage,
             jobQueue,
             lastScheduledTime,
-            currentJobId,
-            currentBatchIndex,
-            totalBatches,
             startBulkPost,
-            stopBulkPost,
             refreshQueue: fetchQueue,
             rescheduleQueue,
             nextBatchStartTime

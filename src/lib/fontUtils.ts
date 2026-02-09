@@ -74,14 +74,30 @@ class FontLoader {
   async waitForFontInCanvas(ctx: CanvasRenderingContext2D, fontFamily: string, timeout: number = 2000): Promise<boolean> {
     const startTime = Date.now();
 
+    // Clean up font family name (remove quotes if present)
+    const cleanFamily = fontFamily.replace(/['"]/g, '');
+    const fontString = `16px "${cleanFamily}"`;
+
     while (Date.now() - startTime < timeout) {
       try {
-        // Test if the font is available by measuring text
-        ctx.font = `16px ${fontFamily}, Arial, sans-serif`;
-        const metrics = ctx.measureText('Test');
-        if (metrics.width > 0) {
+        // Priority 1: Use document.fonts.check() if available (most reliable)
+        if (document.fonts && document.fonts.check(fontString)) {
           return true;
         }
+
+        // Priority 2: Fallback to width comparison if check() isn't trustworthy or fails
+        // Compare with a fallback font that is definitely different (e.g., 'Courier New' or 'serif')
+        ctx.font = `16px "${cleanFamily}", "Courier New", monospace`;
+        const metricsCustom = ctx.measureText('TikTokTextTest123');
+
+        ctx.font = '16px "Courier New", monospace';
+        const metricsFallback = ctx.measureText('TikTokTextTest123');
+
+        // If widths are different, the custom font is likely loaded and being used
+        if (metricsCustom.width !== metricsFallback.width) {
+          return true;
+        }
+
       } catch (error) {
         // Continue trying
       }
@@ -90,6 +106,7 @@ class FontLoader {
       await new Promise(resolve => setTimeout(resolve, 50));
     }
 
+    console.warn(`⚠️ Font wait timeout for: ${fontFamily}`);
     return false;
   }
 }

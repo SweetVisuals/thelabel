@@ -22,7 +22,7 @@ interface DateTimePickerProps {
     className?: string
 }
 
-export function DateTimePicker({ date, setDate, className }: DateTimePickerProps) {
+export function DateTimePicker({ date, setDate, className, disabled }: DateTimePickerProps & { disabled?: boolean }) {
     const [currentMonth, setCurrentMonth] = React.useState(startOfMonth(date))
 
     // Sync current month when date changes externally (optional, but good for UX)
@@ -70,7 +70,11 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
     }
 
     return (
-        <div className={cn("p-4 bg-black/20 rounded-xl border border-white/10", className)}>
+        <div className={cn(
+            "p-4 bg-black/20 rounded-xl border border-white/10",
+            disabled && "opacity-50 pointer-events-none grayscale",
+            className
+        )}>
             <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold text-sm">
                     {format(currentMonth, 'MMMM yyyy')}
@@ -80,6 +84,7 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
                         variant="ghost"
                         size="icon"
                         onClick={previousMonth}
+                        disabled={disabled}
                         className="h-7 w-7 hover:bg-white/10"
                     >
                         <ChevronLeft className="h-4 w-4" />
@@ -88,6 +93,7 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
                         variant="ghost"
                         size="icon"
                         onClick={nextMonth}
+                        disabled={disabled}
                         className="h-7 w-7 hover:bg-white/10"
                     >
                         <ChevronRight className="h-4 w-4" />
@@ -111,6 +117,7 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
                     return (
                         <button
                             key={day.toString()}
+                            disabled={disabled}
                             onClick={() => {
                                 // Preserve time when changing date
                                 const newDate = new Date(day)
@@ -146,6 +153,7 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
                             type="number"
                             min={0}
                             max={23}
+                            disabled={disabled}
                             value={format(date, 'HH')}
                             onChange={(e) => handleTimeChange('hour', e.target.value)}
                             className="w-8 bg-transparent text-center text-sm font-medium focus:outline-none appearance-none"
@@ -155,6 +163,7 @@ export function DateTimePicker({ date, setDate, className }: DateTimePickerProps
                             type="number"
                             min={0}
                             max={59}
+                            disabled={disabled}
                             value={format(date, 'mm')}
                             onChange={(e) => handleTimeChange('minute', e.target.value)}
                             className="w-8 bg-transparent text-center text-sm font-medium focus:outline-none appearance-none"

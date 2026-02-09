@@ -21,10 +21,11 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   onClose,
   onPostSuccess
 }) => {
-  const { startBulkPost, isPosting: isGlobalPosting, jobQueue, lastScheduledTime } = useBulkPost();
+  const { startBulkPost, jobQueue, lastScheduledTime } = useBulkPost();
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(true);
   const [profiles, setProfiles] = useState<PostizProfile[]>([]);
   const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
+  const [isScheduling, setIsScheduling] = useState(false);
 
   // Strategy State
   const [postingStrategy, setPostingStrategy] = useState<'interval' | 'first-now' | 'batch'>('interval');
@@ -178,31 +179,39 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     return schedule;
   }, [slideshows, postingStrategy, intervalHours, startTime, batchSize, postIntervalMinutes]);
 
-  const handleSchedule = () => {
+  const handleSchedule = async () => {
     if (selectedProfiles.length === 0) {
       setValidationError('Please select at least one profile');
       return;
     }
 
-    // Start background process
-    startBulkPost(
-      slideshows,
-      selectedProfiles,
-      postingStrategy,
-      {
-        intervalHours,
-        startTime,
-        batchSize: Number(batchSize) || 1,
-        postIntervalMinutes: Number(postIntervalMinutes) || 0
+    try {
+      setIsScheduling(true);
+      // Start background process
+      await startBulkPost(
+        slideshows,
+        selectedProfiles,
+        postingStrategy,
+        {
+          intervalHours,
+          startTime,
+          batchSize: Number(batchSize) || 1,
+          postIntervalMinutes: Number(postIntervalMinutes) || 0
+        }
+      );
+
+      if (onPostSuccess) {
+        onPostSuccess(slideshows.map(s => s.id));
       }
-    );
 
-    if (onPostSuccess) {
-      onPostSuccess(slideshows.map(s => s.id));
+      // Close modal immediately
+      onClose();
+    } catch (error) {
+      console.error('Scheduling failed:', error);
+      // Note: startBulkPost handles its own error toasts, so we just log here
+    } finally {
+      setIsScheduling(false);
     }
-
-    // Close modal immediately
-    onClose();
   };
 
   // Helper to get profile name
@@ -580,11 +589,20 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           <div className="flex gap-4">
             <Button
               onClick={handleSchedule}
-              disabled={selectedProfiles.length === 0}
+              disabled={selectedProfiles.length === 0 || isScheduling}
               className="flex-1 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-lg shadow-primary/25 h-12 text-base font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
             >
-              <Send className="w-5 h-5 mr-2" />
-              {isGlobalPosting ? 'Add to Queue' : `Schedule ${slideshows.length} Posts`}
+              {isScheduling ? (
+                <>
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  Scheduling...
+                </>
+              ) : (
+                <>
+                  <Send className="w-5 h-5 mr-2" />
+                  {`Schedule ${slideshows.length} Posts`}
+                </>
+              )}
             </Button>
 
             <Button
