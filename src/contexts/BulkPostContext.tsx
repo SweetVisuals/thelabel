@@ -382,6 +382,21 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             currentProcessingTime = addMinutes(new Date(), 2);
         }
 
+        // RESPECT FUTURE USER SCHEDULE
+        // If the first pending job is scheduled for the future, don't pull it back to "now".
+        const earliestPendingJob = jobs.reduce((earliest, job) => {
+            const jobTime = new Date(job.scheduled_start_time);
+            return (!earliest || jobTime < new Date(earliest.scheduled_start_time)) ? job : earliest;
+        }, null as any);
+
+        if (earliestPendingJob) {
+            const pendingTime = new Date(earliestPendingJob.scheduled_start_time);
+            if (pendingTime > addMinutes(currentProcessingTime, 5)) {
+                console.log(`Preserving future schedule: jumping to ${pendingTime.toISOString()}`);
+                currentProcessingTime = pendingTime;
+            }
+        }
+
         // SPLIT LARGE BATCHES LOGIC
         // If we find any job with > 10 items, we split it to prevent timeouts.
         let hasSplit = false;
@@ -398,12 +413,11 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const baseBatchIndex = job.batch_index;
                 const baseSettings = job.payload.settings;
 
+                const baseTime = new Date(job.scheduled_start_time);
+
                 // Create new jobs for chunks
                 for (let i = 0; i < totalChunks; i++) {
                     const chunkSlides = slideshows.slice(i * BATCH_LIMIT, (i + 1) * BATCH_LIMIT);
-
-                    // Only insert new jobs, don't update old one to keep ID clean?
-                    // Actually clearer to just delete old and insert all new.
 
                     const newPayload = {
                         ...job.payload,
@@ -415,13 +429,16 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                         }
                     };
 
+                    // Preserve schedule for the first chunk, offset others
+                    const chunkTime = i === 0 ? baseTime : addMinutes(baseTime, i * 70);
+
                     await supabase.from('job_queue').insert({
                         user_id: user.id,
                         account_id: job.account_id,
                         status: 'pending',
-                        scheduled_start_time: new Date().toISOString(), // Temporary, will be fixed by loop below
-                        batch_index: baseBatchIndex + i, // This might overlap with others, but we sort later
-                        total_batches: (job.total_batches || 0) + totalChunks - 1, // Rough estimate
+                        scheduled_start_time: chunkTime.toISOString(),
+                        batch_index: baseBatchIndex + i,
+                        total_batches: (job.total_batches || 0) + totalChunks - 1,
                         payload: newPayload
                     });
                 }
