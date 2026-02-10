@@ -238,28 +238,32 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             const batchSize = settings.batchSize;
             const totalBatches = Math.ceil(slideshows.length / batchSize);
 
+            // Base time for JOB PROCESSING
+            // We want batches to process every 70 minutes starting from NOW (so the first one goes immediately)
+            const baseProcessingTime = new Date();
+
             // Track the scheduled time for posts across batches
+            // Initial value is the User's selected Start Time.
             let currentPostTime = new Date(settings.startTime);
             currentPostTime.setSeconds(0, 0);
-
-            // Base time for JOB PROCESSING
-            // We want batches to process every 70 minutes starting from the USER SELECTED TIME
-            const baseProcessingTime = new Date(settings.startTime);
 
             for (let i = 0; i < totalBatches; i++) {
                 const batchSlideshows = slideshows.slice(i * batchSize, (i + 1) * batchSize);
 
                 // Job Processing Time
-                // First batch processes immediately (or as close as possible), subsequent ones wait 70 mins (1h 10m) * index
-                // This provides a buffer over the 1h 7m Postiz limit
+                // First batch processes immediately, subsequent ones wait 70 mins * index
                 const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 70);
 
-                // Post Start Time for this batch
+                // Post Start Time for THIS batch is the current logical time we've reached
                 const batchPostStartTime = new Date(currentPostTime);
 
-                // Advance currentPostTime for the next batch by simulating this batch's posts
+                // Advance currentPostTime for the NEXT batch by simulating this batch's posts
+                // This ensures Batch 2 starts exactly where Batch 1 left off + interval
                 for (let j = 0; j < batchSlideshows.length; j++) {
+                    // 1. Apply constraints to the current slot (e.g. if we landed on 11pm, move to 9am)
                     currentPostTime = applyScheduleConstraints(currentPostTime, userTimezone);
+
+                    // 2. Move time forward for the NEXT post (or the start of the next batch)
                     currentPostTime = addMinutes(currentPostTime, settings.postIntervalMinutes);
                 }
 

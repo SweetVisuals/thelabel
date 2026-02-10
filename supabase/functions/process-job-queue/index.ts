@@ -136,11 +136,13 @@ Deno.serve(async (req) => {
                 const itemsToProcess = slideshows.slice(0, BATCH_LIMIT);
                 const overflowItems = slideshows.slice(BATCH_LIMIT);
 
-                let currentScheduleTime = new Date();
-                const scheduledStart = new Date(job.scheduled_start_time);
-                if (scheduledStart > currentScheduleTime) {
-                    currentScheduleTime = scheduledStart;
-                }
+
+
+                // Use the settings.startTime as the STRICT starting point for the content schedule.
+                // Do NOT default to "Now" even if it's in the past (e.g. user catching up on posts).
+                let currentScheduleTime = new Date(job.payload.settings.startTime);
+
+                // Initial check: if the very first slot is in a restricted window, move it.
                 currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
 
                 const successItems = [];
@@ -148,10 +150,13 @@ Deno.serve(async (req) => {
 
                 for (let i = 0; i < itemsToProcess.length; i++) {
                     const slideshow = itemsToProcess[i];
+                    console.log(`[Item ${i + 1}/${itemsToProcess.length}] Preparing slideshow ${slideshow.id}`);
+
                     if (i > 0) {
                         currentScheduleTime = new Date(currentScheduleTime.getTime() + settings.postIntervalMinutes * 60000);
                     }
                     currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
+                    console.log(`[Item ${i + 1}] Schedule Time: ${currentScheduleTime.toISOString()}`);
 
                     try {
                         const validUrls = (slideshow.condensedSlides || [])
@@ -162,9 +167,12 @@ Deno.serve(async (req) => {
 
                         // 1. Upload images to Postiz
                         const uploadedMedia = [];
+                        console.log(`[Item ${i + 1}] Found ${validUrls.length} images to upload.`);
+
                         for (const url of validUrls) {
                             let attempts = 0;
                             let success = false;
+                            console.log(`[Item ${i + 1}] Uploading: ${url.substring(0, 50)}...`);
 
                             while (attempts < 5 && !success) {
                                 // Default nice delay of 1s between items, increasing on retries
@@ -217,6 +225,8 @@ Deno.serve(async (req) => {
                             }
                         }
 
+                        console.log(`[Item ${i + 1}] All images uploaded. Creating Postiz post...`);
+
                         // 2. Create Post with uploaded images
                         const response = await fetch('https://api.postiz.com/public/v1/posts', {
                             method: 'POST',
@@ -258,6 +268,7 @@ Deno.serve(async (req) => {
 
                         if (!response.ok) throw new Error(`Postiz failed: ${response.status} ${await response.text()}`);
 
+                        console.log(`[Item ${i + 1}] Success! Post scheduled.`);
                         successItems.push(slideshow.id);
                     } catch (err) {
                         const errorMsg = err instanceof Error ? err.message : 'Unknown error';

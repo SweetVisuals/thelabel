@@ -322,19 +322,17 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                                     <ChevronRight className="w-4 h-4 text-muted-foreground" />
                                                 )}
 
-                                                {job.status !== 'processing' && (
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleDeleteJob(job.id);
-                                                        }}
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </Button>
-                                                )}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleDeleteJob(job.id);
+                                                    }}
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
                                             </div>
                                         </div>
 
