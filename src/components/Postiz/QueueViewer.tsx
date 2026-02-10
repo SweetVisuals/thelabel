@@ -142,14 +142,22 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                             <div className="text-xs text-blue-400 mt-1 flex items-center gap-1.5 ml-8">
                                 <Clock className="w-3 h-3" />
                                 Next Batch: {(() => {
-                                    const next = jobQueue.find(j => j.status === 'pending');
-                                    if (!next) return 'None';
-                                    return new Date(next.scheduled_start_time).toLocaleString();
+                                    const pending = jobQueue.filter(j => j.status === 'pending')
+                                        .sort((a, b) => new Date(a.scheduled_start_time).getTime() - new Date(b.scheduled_start_time).getTime());
+                                    return new Date(pending[0].scheduled_start_time).toLocaleString();
                                 })()}
                             </div>
                         )}
                     </div>
                     <div className="flex items-center gap-2">
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={rescheduleQueue}
+                            className="text-xs border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary-foreground hidden sm:flex"
+                        >
+                            <RefreshCw className="w-3.5 h-3.5 mr-2" /> Sync & Calibrate
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={refreshQueue} className="hover:bg-white/10">
                             <RefreshCw className="w-4 h-4 mr-2" /> Refresh
                         </Button>
@@ -207,133 +215,145 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                         </div>
                     ) : (
                         <div className="space-y-3">
-                            {jobQueue.map((job) => (
-                                <div key={job.id} className="relative flex flex-col bg-black/40 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-all">
-                                    <div
-                                        className={cn(
-                                            "flex items-center justify-between p-4 cursor-pointer transition-colors",
-                                            expandedJobs.includes(job.id) ? "bg-white/5" : "hover:bg-white/[0.02]"
-                                        )}
-                                        onClick={() => {
-                                            // Allow expanding any job to see details
-                                            setExpandedJobs(prev => prev.includes(job.id) ? prev.filter(id => id !== job.id) : [...prev, job.id]);
-                                        }}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className={cn(
-                                                "w-10 h-10 rounded-full flex items-center justify-center border",
-                                                job.status === 'completed' ? "bg-green-500/10 border-green-500/20 text-green-500" :
-                                                    job.status === 'processing' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
-                                                        job.status === 'failed' ? "bg-red-500/10 border-red-500/20 text-red-500" :
-                                                            "bg-white/5 border-white/10 text-muted-foreground"
-                                            )}>
-                                                {job.status === 'completed' ? <CheckCircle className="w-5 h-5" /> :
-                                                    job.status === 'processing' ? <Loader2 className="w-5 h-5 animate-spin" /> :
-                                                        job.status === 'failed' ? <AlertCircle className="w-5 h-5" /> :
-                                                            <Clock className="w-5 h-5" />}
-                                            </div>
-                                            <div>
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className={cn(
-                                                        "text-sm font-bold px-2 py-0.5 rounded text-black",
-                                                        job.status === 'completed' ? "bg-green-500" :
-                                                            job.status === 'processing' ? "bg-blue-500" :
-                                                                "bg-white"
-                                                    )}>
-                                                        Batch {job.batch_index}/{job.total_batches}
-                                                    </span>
-                                                    <span className="text-sm font-medium text-white/90">
-                                                        • {job.payload.slideshows.length} Posts
-                                                    </span>
+                            {(() => {
+                                // Sort: Processing -> Pending (earliest first) -> Others (latest first)
+                                return [...jobQueue].sort((a, b) => {
+                                    const statusOrder = { processing: 0, pending: 1, failed: 2, completed: 3 };
+                                    if (statusOrder[a.status as keyof typeof statusOrder] !== statusOrder[b.status as keyof typeof statusOrder]) {
+                                        return statusOrder[a.status as keyof typeof statusOrder] - statusOrder[b.status as keyof typeof statusOrder];
+                                    }
+                                    if (a.status === 'pending' || a.status === 'processing') {
+                                        return new Date(a.scheduled_start_time).getTime() - new Date(b.scheduled_start_time).getTime();
+                                    }
+                                    return new Date(b.scheduled_start_time).getTime() - new Date(a.scheduled_start_time).getTime();
+                                }).map((job) => (
+                                    <div key={job.id} className="relative flex flex-col bg-black/40 border border-white/10 rounded-xl overflow-hidden hover:border-white/20 transition-all">
+                                        <div
+                                            className={cn(
+                                                "flex items-center justify-between p-4 cursor-pointer transition-colors",
+                                                expandedJobs.includes(job.id) ? "bg-white/5" : "hover:bg-white/[0.02]"
+                                            )}
+                                            onClick={() => {
+                                                // Allow expanding any job to see details
+                                                setExpandedJobs(prev => prev.includes(job.id) ? prev.filter(id => id !== job.id) : [...prev, job.id]);
+                                            }}
+                                        >
+                                            <div className="flex items-center gap-4">
+                                                <div className={cn(
+                                                    "w-10 h-10 rounded-full flex items-center justify-center border",
+                                                    job.status === 'completed' ? "bg-green-500/10 border-green-500/20 text-green-500" :
+                                                        job.status === 'processing' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
+                                                            job.status === 'failed' ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                                                                "bg-white/5 border-white/10 text-muted-foreground"
+                                                )}>
+                                                    {job.status === 'completed' ? <CheckCircle className="w-5 h-5" /> :
+                                                        job.status === 'processing' ? <Loader2 className="w-5 h-5 animate-spin" /> :
+                                                            job.status === 'failed' ? <AlertCircle className="w-5 h-5" /> :
+                                                                <Clock className="w-5 h-5" />}
                                                 </div>
-                                                <div className="text-xs text-muted-foreground flex items-center gap-2">
-                                                    <span>{getProfileName(job.payload.profiles[0])}</span>
-                                                    <span>•</span>
-                                                    <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
-                                                        {job.payload.strategy}
-                                                    </span>
-                                                    <span>•</span>
-                                                    <span>Scheduled: {new Date(job.scheduled_start_time).toLocaleString()}</span>
-                                                    {job.status === 'pending' && new Date(job.scheduled_start_time) > new Date() && (
-                                                        <span className="text-blue-400 ml-2">
-                                                            (Starts in {(() => {
-                                                                const diffMins = Math.ceil((new Date(job.scheduled_start_time).getTime() - new Date().getTime()) / 60000);
-                                                                const hours = Math.floor(diffMins / 60);
-                                                                const mins = diffMins % 60;
-                                                                if (hours > 0) return `${hours}h ${mins}m`;
-                                                                return `${mins} mins`;
-                                                            })()})
+                                                <div>
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className={cn(
+                                                            "text-sm font-bold px-2 py-0.5 rounded text-black",
+                                                            job.status === 'completed' ? "bg-green-500" :
+                                                                job.status === 'processing' ? "bg-blue-500" :
+                                                                    "bg-white"
+                                                        )}>
+                                                            Batch {job.batch_index}/{job.total_batches}
                                                         </span>
+                                                        <span className="text-sm font-medium text-white/90">
+                                                            • {job.payload.slideshows.length} Posts
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-muted-foreground flex items-center gap-2">
+                                                        <span>{getProfileName(job.payload.profiles[0])}</span>
+                                                        <span>•</span>
+                                                        <span className="bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                                                            {job.payload.strategy}
+                                                        </span>
+                                                        <span>•</span>
+                                                        <span>Scheduled: {new Date(job.scheduled_start_time).toLocaleString()}</span>
+                                                        {job.status === 'pending' && new Date(job.scheduled_start_time) > new Date() && (
+                                                            <span className="text-blue-400 ml-2">
+                                                                (Starts in {(() => {
+                                                                    const diffMins = Math.ceil((new Date(job.scheduled_start_time).getTime() - new Date().getTime()) / 60000);
+                                                                    const hours = Math.floor(diffMins / 60);
+                                                                    const mins = diffMins % 60;
+                                                                    if (hours > 0) return `${hours}h ${mins}m`;
+                                                                    return `${mins} mins`;
+                                                                })()})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {job.error && (
+                                                        <div className="text-xs text-red-400 mt-1">
+                                                            Error: {job.error}
+                                                        </div>
                                                     )}
                                                 </div>
-                                                {job.error && (
-                                                    <div className="text-xs text-red-400 mt-1">
-                                                        Error: {job.error}
-                                                    </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-3">
+                                                {expandedJobs.includes(job.id) ? (
+                                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                                ) : (
+                                                    <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                                )}
+
+                                                {job.status !== 'processing' && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteJob(job.id);
+                                                        }}
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
                                                 )}
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center gap-3">
-                                            {expandedJobs.includes(job.id) ? (
-                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                            ) : (
-                                                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                                            )}
-
-                                            {job.status !== 'processing' && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteJob(job.id);
-                                                    }}
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* Expanded View for Pending Jobs */}
-                                    {expandedJobs.includes(job.id) && job.status !== 'processing' && (
-                                        <div className="px-4 pb-4 border-t border-white/10 bg-black/20">
-                                            <div className="text-xs text-muted-foreground my-3 font-medium flex items-center gap-2">
-                                                <ListOrdered className="w-3.5 h-3.5" />
-                                                <span>Posts in this batch</span>
-                                                <div className="h-px bg-white/10 flex-1" />
-                                            </div>
-                                            <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-2">
-                                                {job.payload.slideshows.map((slideshow, sIdx) => (
-                                                    <div key={slideshow.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/10">
-                                                        <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                            <span className="text-muted-foreground font-mono">#{sIdx + 1}</span>
-                                                            <span className="truncate text-white/90">{slideshow.title}</span>
-                                                            <span className="text-muted-foreground ml-2 text-[10px] bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
-                                                                {getPostTime(job, sIdx).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                            </span>
+                                        {/* Expanded View for Pending Jobs */}
+                                        {expandedJobs.includes(job.id) && job.status !== 'processing' && (
+                                            <div className="px-4 pb-4 border-t border-white/10 bg-black/20">
+                                                <div className="text-xs text-muted-foreground my-3 font-medium flex items-center gap-2">
+                                                    <ListOrdered className="w-3.5 h-3.5" />
+                                                    <span>Posts in this batch</span>
+                                                    <div className="h-px bg-white/10 flex-1" />
+                                                </div>
+                                                <div className="space-y-1.5 max-h-48 overflow-y-auto custom-scrollbar pr-2">
+                                                    {job.payload.slideshows.map((slideshow, sIdx) => (
+                                                        <div key={slideshow.id} className="flex items-center justify-between px-3 py-2 rounded-lg text-xs bg-white/5 border border-white/10">
+                                                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                                <span className="text-muted-foreground font-mono">#{sIdx + 1}</span>
+                                                                <span className="truncate text-white/90">{slideshow.title}</span>
+                                                                <span className="text-muted-foreground ml-2 text-[10px] bg-white/5 px-1.5 py-0.5 rounded border border-white/5">
+                                                                    {getPostTime(job, sIdx).toLocaleString([], { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                            </div>
+                                                            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
                                                         </div>
-                                                        <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                                                    </div>
-                                                ))}
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
 
-                                    {/* Simplified Progress for Processing Job */}
-                                    {expandedJobs.includes(job.id) && job.status === 'processing' && (
-                                        <div className="px-4 pb-4 border-t border-white/10 bg-black/20">
-                                            <div className="flex flex-col items-center justify-center py-4 text-muted-foreground space-y-2">
-                                                <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
-                                                <span className="text-xs">Processing in background (Server)...</span>
-                                                <span className="text-[10px] opacity-70">Progress will update on completion</span>
+                                        {/* Simplified Progress for Processing Job */}
+                                        {expandedJobs.includes(job.id) && job.status === 'processing' && (
+                                            <div className="px-4 pb-4 border-t border-white/10 bg-black/20">
+                                                <div className="flex flex-col items-center justify-center py-4 text-muted-foreground space-y-2">
+                                                    <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                                                    <span className="text-xs">Processing in background (Server)...</span>
+                                                    <span className="text-[10px] opacity-70">Progress will update on completion</span>
+                                                </div>
                                             </div>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                                        )}
+                                    </div>
+                                ))
+                            })()}
                         </div>
                     )}
                 </div>

@@ -335,40 +335,60 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             .from('job_queue')
             .select('*')
             .eq('user_id', user.id)
-            .eq('status', 'pending')
-            .order('created_at', { ascending: true })
-            .order('batch_index', { ascending: true });
+            .eq('status', 'pending');
 
-        if (error || !jobs || jobs.length === 0) return;
+        if (error || !jobs || jobs.length === 0) {
+            toast.error('No pending jobs to reschedule');
+            return;
+        }
+
+        // Fetch last completed/processing job to find where we left off
+        const { data: lastJobs } = await supabase
+            .from('job_queue')
+            .select('scheduled_start_time, status, batch_index')
+            .eq('user_id', user.id)
+            .in('status', ['completed', 'processing'])
+            .order('scheduled_start_time', { ascending: false })
+            .limit(1);
 
         let currentProcessingTime = new Date();
-        // Add a small buffer so the first one isn't "in the past" immediately if processing takes time
-        currentProcessingTime = addMinutes(currentProcessingTime, 1);
+        const lastJob = lastJobs?.[0];
+
+        // If a job is currently processing or recently completed, start 70 mins after it
+        if (lastJob) {
+            const lastTime = new Date(lastJob.scheduled_start_time);
+            const nextPossibleTime = addMinutes(lastTime, 70);
+            if (nextPossibleTime > currentProcessingTime) {
+                currentProcessingTime = nextPossibleTime;
+            } else {
+                // If last job was long ago, just start from now + buffer
+                currentProcessingTime = addMinutes(new Date(), 2);
+            }
+        } else {
+            // First time ever? Start now + buffer
+            currentProcessingTime = addMinutes(new Date(), 2);
+        }
+
+        // Sort pending jobs strictly by batch_index to fix sequential issues (Batch 4 before 11)
+        const sortedJobs = [...jobs].sort((a, b) => (a.batch_index || 0) - (b.batch_index || 0));
 
         // Also track post time
         let currentPostTime = new Date(currentProcessingTime);
         currentPostTime.setSeconds(0, 0);
 
-        console.log(`Rescheduling ${jobs.length} jobs starting from ${currentProcessingTime.toISOString()}`);
+        console.log(`Rescheduling ${sortedJobs.length} jobs starting from ${currentProcessingTime.toISOString()}`);
 
-        for (let i = 0; i < jobs.length; i++) {
-            const job = jobs[i];
-            // Create a deep copy of settings to avoid reference issues
+        for (let i = 0; i < sortedJobs.length; i++) {
+            const job = sortedJobs[i];
             let settings = { ...job.payload.settings };
 
-            // [FIX] Removed forced reset of postIntervalMinutes. 
-            // We now respect the user's settings or the existing job settings.
             if (!settings.postIntervalMinutes || isNaN(settings.postIntervalMinutes)) {
                 settings.postIntervalMinutes = 1;
             }
 
-            // Capture start time for this batch's posts
             const batchPostStartTime = new Date(currentPostTime);
-
-            // Update settings with new start time
             settings.startTime = batchPostStartTime.toISOString();
 
-            // Simulate schedule to advance currentPostTime
             const slideshows = job.payload.slideshows || [];
             const strategy = job.payload.strategy;
 
@@ -377,12 +397,10 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 if (strategy === 'batch') {
                     currentPostTime = addMinutes(currentPostTime, settings.postIntervalMinutes);
                 } else {
-                    // Interval strategy
                     currentPostTime = addHours(currentPostTime, settings.intervalHours || 1);
                 }
             }
 
-            // Update the job
             const updatePayload = {
                 scheduled_start_time: currentProcessingTime.toISOString(),
                 payload: {
@@ -400,8 +418,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 console.error(`Failed to reschedule job ${job.id}:`, updateError);
             }
 
-            // Increment time for next job processing (66 minutes)
-            currentProcessingTime = addMinutes(currentProcessingTime, 66);
+            // Move to next processing window (70 mins)
+            currentProcessingTime = addMinutes(currentProcessingTime, 70);
         };
 
         toast.success('Queue rescheduled successfully');
