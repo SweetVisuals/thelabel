@@ -70,7 +70,9 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
 
     const getPostTime = (job: any, index: number) => {
         const { strategy, settings } = job.payload;
-        let currentTime = new Date(settings.startTime);
+        // The actual post time is relative to when the batch starts processing (scheduled_start_time)
+        // NOT the original creation settings.startTime
+        let currentTime = new Date(job.scheduled_start_time);
         const intervalHours = settings.intervalHours || 1;
         const postIntervalMinutes = settings.postIntervalMinutes || 1;
 
