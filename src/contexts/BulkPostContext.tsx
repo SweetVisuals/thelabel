@@ -211,7 +211,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             if (apiKey) {
                 const { error: updateError } = await supabase
                     .from('users')
-                    .update({ postiz_api_key: apiKey })
+                    .update({ postiz_api_key: apiKey.trim() })
                     .eq('id', user.id);
 
                 if (updateError) {

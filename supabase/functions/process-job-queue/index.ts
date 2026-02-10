@@ -163,14 +163,38 @@ Deno.serve(async (req) => {
                         const response = await fetch('https://api.postiz.com/public/v1/posts', {
                             method: 'POST',
                             headers: {
-                                'Authorization': `Bearer ${postizApiKey}`,
+                                'Authorization': postizApiKey.trim(),
                                 'Content-Type': 'application/json'
                             },
                             body: JSON.stringify({
-                                text: `${slideshow.caption || ''}\n\n${(slideshow.hashtags || []).map((t: string) => `#${t}`).join(' ')}`,
-                                profileIds: [profileId],
-                                mediaUrls: validUrls,
-                                scheduledAt: currentScheduleTime.toISOString()
+                                type: 'schedule',
+                                date: currentScheduleTime.toISOString(),
+                                shortLink: false,
+                                tags: [],
+                                posts: [{
+                                    integration: {
+                                        id: profileId
+                                    },
+                                    value: [{
+                                        content: `${slideshow.caption || ''}\n\n${(slideshow.hashtags || []).map((t: string) => `#${t}`).join(' ')}`,
+                                        image: validUrls.map((url: string, idx: number) => ({
+                                            id: `img_${Date.now()}_${idx}`,
+                                            path: url
+                                        }))
+                                    }],
+                                    group: `slideshow_${Date.now()}`,
+                                    settings: {
+                                        shortLink: false,
+                                        privacy_level: 'PUBLIC_TO_EVERYONE',
+                                        duet: false,
+                                        stitch: false,
+                                        comment: true,
+                                        autoAddMusic: 'no',
+                                        brand_content_toggle: false,
+                                        brand_organic_toggle: false,
+                                        content_posting_method: 'DIRECT_POST'
+                                    }
+                                }]
                             })
                         });
 
