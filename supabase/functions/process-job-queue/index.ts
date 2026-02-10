@@ -131,17 +131,15 @@ Deno.serve(async (req) => {
                 const { slideshows, profiles, settings } = job.payload;
                 const profileId = profiles[0];
                 const jobTimezone = job.payload.settings.timezone || userSettings?.timezone || 'UTC';
+                const postIntervalMinutes = Number(settings.postIntervalMinutes) || 240;
 
                 const BATCH_LIMIT = 5;
                 const itemsToProcess = slideshows.slice(0, BATCH_LIMIT);
                 const overflowItems = slideshows.slice(BATCH_LIMIT);
 
-                await logJob(supabase, job.id, 'info', `Starting batch processing (${itemsToProcess.length} items to process).`);
-
-
+                await logJob(supabase, job.id, 'info', `Starting batch processing (${itemsToProcess.length} items to process). Interval: ${postIntervalMinutes}m, TZ: ${jobTimezone}`);
 
                 // Use the settings.startTime as the STRICT starting point for the content schedule.
-                // Do NOT default to "Now" even if it's in the past (e.g. user catching up on posts).
                 let currentScheduleTime = new Date(job.payload.settings.startTime);
 
                 // Initial check: if the very first slot is in a restricted window, move it.
@@ -155,10 +153,11 @@ Deno.serve(async (req) => {
                     console.log(`[Item ${i + 1}/${itemsToProcess.length}] Preparing slideshow ${slideshow.id}`);
 
                     if (i > 0) {
-                        currentScheduleTime = new Date(currentScheduleTime.getTime() + settings.postIntervalMinutes * 60000);
+                        currentScheduleTime = new Date(currentScheduleTime.getTime() + postIntervalMinutes * 60000);
                     }
                     currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
                     console.log(`[Item ${i + 1}] Schedule Time: ${currentScheduleTime.toISOString()}`);
+                    await logJob(supabase, job.id, 'info', `Item ${i + 1} scheduled for: ${currentScheduleTime.toISOString()} (${jobTimezone})`);
 
                     try {
                         const validUrls = (slideshow.condensedSlides || [])
