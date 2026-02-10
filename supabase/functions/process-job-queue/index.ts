@@ -94,17 +94,27 @@ Deno.serve(async (req) => {
         console.log(`Processing job ${job.id} (Batch ${job.batch_index}/${job.total_batches})`)
 
         // 2. Lock the job
-        const { error: lockError } = await supabase
+        const { data: lockedData, error: lockError } = await supabase
             .from('job_queue')
             .update({ status: 'processing', updated_at: new Date().toISOString() })
             .eq('id', job.id)
             .eq('status', 'pending')
+            .select()
 
         if (lockError) {
             return new Response(
                 JSON.stringify({ message: 'Failed to lock job', error: lockError }),
                 { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
             )
+        }
+
+        // If no rows were updated, it means another process locked it first or it's no longer pending
+        if (!lockedData || lockedData.length === 0) {
+            console.log(`Job ${job.id} was already locked or processed by another worker. Skipping.`);
+            return new Response(
+                JSON.stringify({ message: 'Job already locked by another worker' }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
         }
 
         // 3. Determine Postiz API Key & Timezone

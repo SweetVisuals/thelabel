@@ -132,10 +132,23 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
-                    <h3 className="text-xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent flex items-center">
-                        <ListOrdered className="w-5 h-5 mr-3 text-primary" />
-                        Background Job Queue
-                    </h3>
+                    <div className="flex flex-col">
+                        <h3 className="text-xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent flex items-center">
+                            <ListOrdered className="w-5 h-5 mr-3 text-primary" />
+                            Background Job Queue
+                        </h3>
+                        {/* Display next batch time if available */}
+                        {jobQueue.some(j => j.status === 'pending') && (
+                            <div className="text-xs text-blue-400 mt-1 flex items-center gap-1.5 ml-8">
+                                <Clock className="w-3 h-3" />
+                                Next Batch: {(() => {
+                                    const next = jobQueue.find(j => j.status === 'pending');
+                                    if (!next) return 'None';
+                                    return new Date(next.scheduled_start_time).toLocaleString();
+                                })()}
+                            </div>
+                        )}
+                    </div>
                     <div className="flex items-center gap-2">
                         <Button variant="ghost" size="sm" onClick={refreshQueue} className="hover:bg-white/10">
                             <RefreshCw className="w-4 h-4 mr-2" /> Refresh
@@ -328,7 +341,7 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                 {/* Footer */}
                 <div className="p-4 border-t border-white/10 bg-white/5 flex justify-between items-center">
                     <div className="text-xs text-muted-foreground">
-                        Background jobs run every minute. Keep your API key saved in settings.
+                        Background jobs run every 10 minutes. Keep your API key saved in settings.
                     </div>
                     <div className="flex gap-2">
                         {jobQueue.some(j => j.status === 'pending') && (
