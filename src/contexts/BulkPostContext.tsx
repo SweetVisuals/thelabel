@@ -243,8 +243,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             currentPostTime.setSeconds(0, 0);
 
             // Base time for JOB PROCESSING
-            // We want batches to process every 66 minutes starting from now
-            const baseProcessingTime = new Date();
+            // We want batches to process every 70 minutes starting from the USER SELECTED TIME
+            const baseProcessingTime = new Date(settings.startTime);
 
             for (let i = 0; i < totalBatches; i++) {
                 const batchSlideshows = slideshows.slice(i * batchSize, (i + 1) * batchSize);

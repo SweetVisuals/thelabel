@@ -163,33 +163,57 @@ Deno.serve(async (req) => {
                         // 1. Upload images to Postiz
                         const uploadedMedia = [];
                         for (const url of validUrls) {
-                            try {
-                                const uploadRes = await fetch('https://api.postiz.com/public/v1/upload-from-url', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': postizApiKey.trim(),
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({ url })
-                                });
+                            let attempts = 0;
+                            let success = false;
 
-                                if (!uploadRes.ok) {
-                                    console.error(`Upload failed for ${url}: ${uploadRes.status} ${await uploadRes.text()}`);
-                                    throw new Error(`Image upload failed: ${uploadRes.status}`);
+                            while (attempts < 5 && !success) {
+                                // Default nice delay of 1s between items, increasing on retries
+                                const delayMs = attempts === 0 ? 1000 : 2000 * Math.pow(2, attempts);
+                                await new Promise(r => setTimeout(r, delayMs));
+
+                                try {
+                                    const uploadRes = await fetch('https://api.postiz.com/public/v1/upload-from-url', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Authorization': postizApiKey.trim(),
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ url })
+                                    });
+
+                                    if (uploadRes.status === 429) {
+                                        const retryAfter = uploadRes.headers.get('Retry-After');
+                                        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000; // Default 5s if header missing
+                                        console.warn(`Rate limit hit for ${url}. Waiting ${waitTime}ms...`);
+                                        await new Promise(r => setTimeout(r, waitTime));
+                                        attempts++;
+                                        continue;
+                                    }
+
+                                    if (!uploadRes.ok) {
+                                        const errorText = await uploadRes.text();
+                                        console.error(`Upload failed for ${url}: ${uploadRes.status} ${errorText}`);
+                                        throw new Error(`Image upload failed: ${uploadRes.status}`);
+                                    }
+
+                                    const uploadData = await uploadRes.json();
+                                    const uploadedPath = uploadData.path || uploadData.url;
+
+                                    if (!uploadedPath) throw new Error('Image upload returned no path');
+
+                                    uploadedMedia.push({
+                                        id: `img_${Date.now()}_${uploadedMedia.length}`,
+                                        path: uploadedPath
+                                    });
+                                    success = true;
+
+                                } catch (uploadErr) {
+                                    console.error(`Attempt ${attempts + 1} failed for ${url}:`, uploadErr);
+                                    attempts++;
+                                    if (attempts >= 5) {
+                                        throw new Error(`Failed to upload image after 5 attempts: ${uploadErr instanceof Error ? uploadErr.message : 'Unknown error'}`);
+                                    }
                                 }
-
-                                const uploadData = await uploadRes.json();
-                                const uploadedPath = uploadData.path || uploadData.url;
-
-                                if (!uploadedPath) throw new Error('Image upload returned no path');
-
-                                uploadedMedia.push({
-                                    id: `img_${Date.now()}_${uploadedMedia.length}`,
-                                    path: uploadedPath
-                                });
-                            } catch (uploadErr) {
-                                console.error(`Failed to upload image ${url}:`, uploadErr);
-                                throw new Error(`Failed to upload image to Postiz: ${uploadErr instanceof Error ? uploadErr.message : 'Unknown error'}`);
                             }
                         }
 
