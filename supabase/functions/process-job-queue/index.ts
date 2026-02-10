@@ -178,7 +178,9 @@ Deno.serve(async (req) => {
 
                         successItems.push(slideshow.id);
                     } catch (err) {
+                        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
                         console.error(`Slide ${slideshow.id} failed:`, err);
+                        await logJob(supabase, job.id, 'error', `Slide failed: ${errorMsg}`);
                         failedItems.push(slideshow);
                     }
                 }
@@ -186,36 +188,39 @@ Deno.serve(async (req) => {
                 // Shifting Logic
                 const itemsToShift = [...failedItems, ...overflowItems];
                 if (itemsToShift.length > 0) {
-                    await logJob(supabase, job.id, 'warning', `Shifting ${itemsToShift.length} items to next batch`);
+                    await logJob(supabase, job.id, 'warning', `Shifting ${itemsToShift.length} items to NEW batch (${failedItems.length} failed, ${overflowItems.length} overflow)`);
 
-                    const { data: nextJobs } = await supabase
+                    // Find the absolute last scheduled job to append after
+                    const { data: lastJobs } = await supabase
                         .from('job_queue')
-                        .select('*')
-                        .eq('status', 'pending')
-                        .gt('batch_index', job.batch_index) // Prefer chronological batch index
-                        .order('batch_index', { ascending: true })
+                        .select('scheduled_start_time, batch_index')
+                        .order('scheduled_start_time', { ascending: false })
                         .limit(1);
 
-                    const nextJob = nextJobs?.[0];
-                    if (nextJob) {
-                        const updatedPayload = {
-                            ...nextJob.payload,
-                            slideshows: [...itemsToShift, ...nextJob.payload.slideshows]
-                        };
-                        await supabase.from('job_queue').update({ payload: updatedPayload }).eq('id', nextJob.id);
-                    } else {
-                        // Create new batch 70 mins later
-                        const nextRunTime = new Date(Date.now() + 70 * 60 * 1000).toISOString();
-                        await supabase.from('job_queue').insert({
-                            user_id: job.user_id,
-                            account_id: job.account_id,
-                            status: 'pending',
-                            scheduled_start_time: nextRunTime,
-                            batch_index: job.batch_index + 1,
-                            total_batches: job.total_batches + 1,
-                            payload: { ...job.payload, slideshows: itemsToShift }
-                        });
+                    const lastJob = lastJobs?.[0];
+                    let nextRunTime = new Date(Date.now() + 70 * 60 * 1000); // Default: 70 mins from now
+                    let nextBatchIndex = (job.batch_index || 0) + 1;
+
+                    if (lastJob) {
+                        const lastTime = new Date(lastJob.scheduled_start_time);
+                        // If last job is in future, schedule 70 mins after it
+                        if (lastTime > new Date()) {
+                            nextRunTime = new Date(lastTime.getTime() + 70 * 60 * 1000);
+                        }
+                        if (lastJob.batch_index) nextBatchIndex = lastJob.batch_index + 1;
                     }
+
+                    await supabase.from('job_queue').insert({
+                        user_id: job.user_id,
+                        account_id: job.account_id,
+                        status: 'pending',
+                        scheduled_start_time: nextRunTime.toISOString(),
+                        batch_index: nextBatchIndex,
+                        total_batches: (job.total_batches || 0) + 1,
+                        payload: { ...job.payload, slideshows: itemsToShift }
+                    });
+
+                    await logJob(supabase, job.id, 'info', `Created new batch ${nextBatchIndex} for shifted items.`);
                 }
 
                 await supabase.from('job_queue').update({ status: 'completed' }).eq('id', job.id);

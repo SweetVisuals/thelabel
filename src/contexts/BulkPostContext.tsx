@@ -382,8 +382,83 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             currentProcessingTime = addMinutes(new Date(), 2);
         }
 
+        // SPLIT LARGE BATCHES LOGIC
+        // If we find any job with > 10 items, we split it to prevent timeouts.
+        let hasSplit = false;
+
+        for (const job of jobs) {
+            const slideshows = job.payload.slideshows || [];
+            const BATCH_LIMIT = 10;
+
+            if (slideshows.length > BATCH_LIMIT) {
+                console.log(`Splitting large batch ${job.id} with ${slideshows.length} items`);
+                hasSplit = true;
+
+                const totalChunks = Math.ceil(slideshows.length / BATCH_LIMIT);
+                const baseBatchIndex = job.batch_index;
+                const baseSettings = job.payload.settings;
+
+                // Create new jobs for chunks
+                for (let i = 0; i < totalChunks; i++) {
+                    const chunkSlides = slideshows.slice(i * BATCH_LIMIT, (i + 1) * BATCH_LIMIT);
+
+                    // Only insert new jobs, don't update old one to keep ID clean?
+                    // Actually clearer to just delete old and insert all new.
+
+                    const newPayload = {
+                        ...job.payload,
+                        strategy: 'batch', // Force batch strategy for chunks
+                        slideshows: chunkSlides,
+                        settings: {
+                            ...baseSettings,
+                            batchSize: BATCH_LIMIT
+                        }
+                    };
+
+                    await supabase.from('job_queue').insert({
+                        user_id: user.id,
+                        account_id: job.account_id,
+                        status: 'pending',
+                        scheduled_start_time: new Date().toISOString(), // Temporary, will be fixed by loop below
+                        batch_index: baseBatchIndex + i, // This might overlap with others, but we sort later
+                        total_batches: (job.total_batches || 0) + totalChunks - 1, // Rough estimate
+                        payload: newPayload
+                    });
+                }
+
+                // Delete the original large job
+                await supabase.from('job_queue').delete().eq('id', job.id);
+            }
+        }
+
+        if (hasSplit) {
+            toast.success('Large batches detected and split into smaller chunks. Recalibrating...');
+            // Re-fetch jobs to get the new split ones
+            const { data: refreshedJobs } = await supabase
+                .from('job_queue')
+                .select('*')
+                .eq('user_id', user.id)
+                .eq('status', 'pending');
+
+            if (refreshedJobs) {
+                // Update our local reference to sorted jobs
+                // We need to re-sort them to ensure order
+                // The batch_index might be messy now, so we should re-index them based on creation time or ID?
+                // Actually, just sort by created_at to preserve insertion order of chunks
+                jobs.length = 0; // Clear array
+                jobs.push(...refreshedJobs);
+            }
+        }
+
         // Sort pending jobs strictly by batch_index to fix sequential issues (Batch 4 before 11)
-        const sortedJobs = [...jobs].sort((a, b) => (a.batch_index || 0) - (b.batch_index || 0));
+        // If we split, we rely on the new batch_index or created_at
+        const sortedJobs = [...jobs].sort((a, b) => {
+            // Primary sort: batch_index
+            const batchDiff = (a.batch_index || 0) - (b.batch_index || 0);
+            if (batchDiff !== 0) return batchDiff;
+            // Secondary sort: created_at (for split chunks)
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
 
         // Also track post time
         let currentPostTime = new Date(currentProcessingTime);
@@ -416,6 +491,7 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
             const updatePayload = {
                 scheduled_start_time: currentProcessingTime.toISOString(),
+                batch_index: i + 1, // Re-normalize batch index strictly 1, 2, 3...
                 payload: {
                     ...job.payload,
                     settings
