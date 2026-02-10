@@ -32,52 +32,58 @@ const corsHeaders = {
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const applyTimeWindow = (date: Date, timezone: string = 'UTC') => {
+    const zonedDate = toZonedTime(date, timezone);
+    const h = zonedDate.getHours();
+
+    if (h < 9) {
+        const adjustedZoned = new Date(zonedDate);
+        adjustedZoned.setHours(9, 0, 0, 0);
+        return fromZonedTime(adjustedZoned, timezone);
+    } else if (h >= 22) {
+        const adjustedZoned = new Date(zonedDate);
+        adjustedZoned.setDate(adjustedZoned.getDate() + 1);
+        adjustedZoned.setHours(9, 0, 0, 0);
+        return fromZonedTime(adjustedZoned, timezone);
+    }
+    return date;
+};
+
+const logJob = async (supabase: any, jobId: string | null, level: string, message: string, details?: any) => {
+    console.log(`[${level.toUpperCase()}] ${message}`);
+    await supabase.from('job_logs').insert({
+        job_id: jobId,
+        level,
+        message,
+        details
+    });
+};
+
 Deno.serve(async (req) => {
-    // Handle CORS preflight requests
     if (req.method === 'OPTIONS') {
         return new Response('ok', { headers: corsHeaders })
     }
 
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
     try {
-        // Initialize Supabase client
-        const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-        const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-
-        // We will fetch the user's Postiz API key from the database or use a default if provided in env
-        // But for now, we assume the user has stored their key in a 'user_settings' table or similar,
-        // OR we use the environment variable as a fallback.
-        // Given the user's request "dynamically load the API key depending on the account",
-        // we need to know WHERE the user stores their Postiz API key.
-        // Based on the codebase, it seems to be in localStorage ('postiz_api_key').
-        // This is NOT accessible from the Edge Function.
-        // The user needs to store this key in the database (e.g., in a 'profiles' or 'settings' table).
-
-        // HOWEVER, since I don't see a settings table, I will assume for now we use the ENV variable
-        // but I will add a TODO to fetch it from DB if available.
-        // The user mentioned "dynamically load the API key depending on the account".
-        // This implies multiple users might use this system.
-
-        // Let's look for a table that might hold this.
-        // If not found, we will fail gracefully or use the ENV key.
-
         const defaultPostizApiKey = Deno.env.get('POSTIZ_API_KEY') ?? ''
 
         if (!supabaseUrl || !supabaseServiceKey) {
             throw new Error('Missing Supabase environment variables')
         }
 
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
-        // 1. Fetch the next pending job that is ready to run
+        // 1. Fetch up to 5 pending jobs ready to run
         const now = new Date().toISOString()
-
         const { data: jobs, error: fetchError } = await supabase
             .from('job_queue')
             .select('*')
             .eq('status', 'pending')
             .lte('scheduled_start_time', now)
             .order('scheduled_start_time', { ascending: true })
-            .limit(1)
+            .limit(5)
 
         if (fetchError) {
             throw new Error(`Failed to fetch jobs: ${fetchError.message}`)
@@ -90,255 +96,149 @@ Deno.serve(async (req) => {
             )
         }
 
-        const job = jobs[0] as JobQueueItem
-        console.log(`Processing job ${job.id} (Batch ${job.batch_index}/${job.total_batches})`)
+        const stats = { processed: 0, skipped: 0, failed: 0 };
 
-        // 2. Lock the job
-        const { data: lockedData, error: lockError } = await supabase
-            .from('job_queue')
-            .update({ status: 'processing', updated_at: new Date().toISOString() })
-            .eq('id', job.id)
-            .eq('status', 'pending')
-            .select()
+        for (const job of jobs) {
+            // 2. Lock the job
+            const { data: lockedData, error: lockError } = await supabase
+                .from('job_queue')
+                .update({ status: 'processing' }) // We don't have updated_at, so just status
+                .eq('id', job.id)
+                .eq('status', 'pending')
+                .select()
 
-        if (lockError) {
-            return new Response(
-                JSON.stringify({ message: 'Failed to lock job', error: lockError }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            )
-        }
-
-        // If no rows were updated, it means another process locked it first or it's no longer pending
-        if (!lockedData || lockedData.length === 0) {
-            console.log(`Job ${job.id} was already locked or processed by another worker. Skipping.`);
-            return new Response(
-                JSON.stringify({ message: 'Job already locked by another worker' }),
-                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-        }
-
-        // 3. Determine Postiz API Key & Timezone
-        // Fetch User settings including API Key and Timezone
-        const { data: userSettings, error: userError } = await supabase
-            .from('users')
-            .select('postiz_api_key, timezone')
-            .eq('id', job.user_id)
-            .single();
-
-        if (userError) {
-            console.error('Failed to fetch user settings:', userError);
-        }
-
-        let postizApiKey = userSettings?.postiz_api_key || defaultPostizApiKey;
-        // Check for user settings if implemented later
-        if (!postizApiKey) {
-            // Fallback to searching a known table or throw
-            throw new Error('No Postiz API Key found. Please add it in Settings.');
-        }
-
-        // 4. Process the job
-        const { slideshows, profiles, settings } = job.payload
-        const profileId = profiles[0]
-
-        // --- BATCH LOGIC ---
-        // Max 10 posts per batch execution (Postiz limit: 10 per ~60 mins)
-        // We take the top 10. The rest (overflow) + failed ones will be shifted.
-        const BATCH_LIMIT = 10;
-        const itemsToProcess = slideshows.slice(0, BATCH_LIMIT);
-        const overflowItems = slideshows.slice(BATCH_LIMIT);
-
-        let currentScheduleTime = new Date()
-
-        // Helper to enforce 9am - 10pm window
-        // Helper to enforce 9am - 10pm window
-        const applyTimeWindow = (date: Date, timezone: string = 'UTC') => {
-            const zonedDate = toZonedTime(date, timezone);
-            const h = zonedDate.getHours();
-
-            if (h < 9) {
-                const adjustedZoned = new Date(zonedDate);
-                adjustedZoned.setHours(9, 0, 0, 0);
-                return fromZonedTime(adjustedZoned, timezone);
-            } else if (h >= 22) {
-                const adjustedZoned = new Date(zonedDate);
-                adjustedZoned.setDate(adjustedZoned.getDate() + 1);
-                adjustedZoned.setHours(9, 0, 0, 0);
-                return fromZonedTime(adjustedZoned, timezone);
-            }
-            // Ensure we don't go back in time (handled by caller mostly)
-            return date;
-        };
-
-        // Initialize base schedule time from job or now
-        const scheduledStart = new Date(job.scheduled_start_time)
-        if (scheduledStart > currentScheduleTime) {
-            currentScheduleTime = scheduledStart
-        }
-
-        let jobTimezone = job.payload.settings.timezone || userSettings?.timezone || 'UTC';
-        currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
-
-        const results = []
-        const failedItems = [];
-        const successItems = [];
-
-        for (let i = 0; i < itemsToProcess.length; i++) {
-            const slideshow = itemsToProcess[i]
-
-            // Calculate time for this specific post
-            // Users want 1 post every X mins (settings.postIntervalMinutes)
-            if (i > 0 || job.batch_index > 0) { // Add interval for subsequent posts
-                // For the very first post of first batch, currentScheduleTime is StartTime.
-                // For subsequent posts, we add interval.
-                // NOTE: Since batches are disconnected in time execution, we need to be careful.
-                // Just use the loop index relative to the current time block.
-                if (i > 0) currentScheduleTime = new Date(currentScheduleTime.getTime() + settings.postIntervalMinutes * 60000)
+            if (lockError || !lockedData || lockedData.length === 0) {
+                console.log(`Job ${job.id} already locked or failed to lock. Skipping.`);
+                stats.skipped++;
+                continue;
             }
 
-            currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
+            await logJob(supabase, job.id, 'info', `Processing batch ${job.batch_index}/${job.total_batches}`);
 
             try {
-                console.log(`Scheduling post ${i + 1}/${itemsToProcess.length} for ${currentScheduleTime.toISOString()}`)
+                // 3. Determine Postiz API Key & Timezone
+                const { data: userSettings, error: userError } = await supabase
+                    .from('users')
+                    .select('postiz_api_key, timezone')
+                    .eq('id', job.user_id)
+                    .single();
 
-                // Extract URLs correctly
-                const mediaUrls: string[] = [];
-                if (slideshow.condensedSlides) {
-                    slideshow.condensedSlides.forEach((s: any) => {
-                        if (s.condensedImageUrl) mediaUrls.push(s.condensedImageUrl);
-                        else if (s.originalImageUrl) mediaUrls.push(s.originalImageUrl);
-                    });
-                }
-                const validUrls = mediaUrls.filter((url: string) => url && url.startsWith('http'))
-
-                if (validUrls.length === 0) {
-                    throw new Error('No valid public image URLs found')
+                let postizApiKey = userSettings?.postiz_api_key || defaultPostizApiKey;
+                if (!postizApiKey) {
+                    throw new Error('No Postiz API Key found in settings.');
                 }
 
-                // Construct Postiz Payload
-                const postBody = {
-                    text: `${slideshow.caption || ''}\n\n${(slideshow.hashtags || []).map((t: string) => `#${t}`).join(' ')}`,
-                    profileIds: [profileId],
-                    mediaUrls: validUrls,
-                    scheduledAt: currentScheduleTime.toISOString()
+                const { slideshows, profiles, settings } = job.payload;
+                const profileId = profiles[0];
+                const jobTimezone = job.payload.settings.timezone || userSettings?.timezone || 'UTC';
+
+                const BATCH_LIMIT = 10;
+                const itemsToProcess = slideshows.slice(0, BATCH_LIMIT);
+                const overflowItems = slideshows.slice(BATCH_LIMIT);
+
+                let currentScheduleTime = new Date();
+                const scheduledStart = new Date(job.scheduled_start_time);
+                if (scheduledStart > currentScheduleTime) {
+                    currentScheduleTime = scheduledStart;
+                }
+                currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
+
+                const successItems = [];
+                const failedItems = [];
+
+                for (let i = 0; i < itemsToProcess.length; i++) {
+                    const slideshow = itemsToProcess[i];
+                    if (i > 0) {
+                        currentScheduleTime = new Date(currentScheduleTime.getTime() + settings.postIntervalMinutes * 60000);
+                    }
+                    currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
+
+                    try {
+                        const validUrls = (slideshow.condensedSlides || [])
+                            .map((s: any) => s.condensedImageUrl || s.originalImageUrl)
+                            .filter((url: string) => url && url.startsWith('http'));
+
+                        if (validUrls.length === 0) throw new Error('No valid images');
+
+                        const response = await fetch('https://api.postiz.com/public/v1/posts', {
+                            method: 'POST',
+                            headers: {
+                                'Authorization': `Bearer ${postizApiKey}`,
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                text: `${slideshow.caption || ''}\n\n${(slideshow.hashtags || []).map((t: string) => `#${t}`).join(' ')}`,
+                                profileIds: [profileId],
+                                mediaUrls: validUrls,
+                                scheduledAt: currentScheduleTime.toISOString()
+                            })
+                        });
+
+                        if (!response.ok) throw new Error(`Postiz failed: ${response.status} ${await response.text()}`);
+
+                        successItems.push(slideshow.id);
+                    } catch (err) {
+                        console.error(`Slide ${slideshow.id} failed:`, err);
+                        failedItems.push(slideshow);
+                    }
                 }
 
-                const response = await fetch('https://api.postiz.com/public/v1/posts', {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${postizApiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(postBody)
-                })
+                // Shifting Logic
+                const itemsToShift = [...failedItems, ...overflowItems];
+                if (itemsToShift.length > 0) {
+                    await logJob(supabase, job.id, 'warning', `Shifting ${itemsToShift.length} items to next batch`);
 
-                if (!response.ok) {
-                    const errorText = await response.text()
-                    throw new Error(`Postiz API error: ${response.status} ${errorText}`)
+                    const { data: nextJobs } = await supabase
+                        .from('job_queue')
+                        .select('*')
+                        .eq('status', 'pending')
+                        .gt('batch_index', job.batch_index) // Prefer chronological batch index
+                        .order('batch_index', { ascending: true })
+                        .limit(1);
+
+                    const nextJob = nextJobs?.[0];
+                    if (nextJob) {
+                        const updatedPayload = {
+                            ...nextJob.payload,
+                            slideshows: [...itemsToShift, ...nextJob.payload.slideshows]
+                        };
+                        await supabase.from('job_queue').update({ payload: updatedPayload }).eq('id', nextJob.id);
+                    } else {
+                        // Create new batch 70 mins later
+                        const nextRunTime = new Date(Date.now() + 70 * 60 * 1000).toISOString();
+                        await supabase.from('job_queue').insert({
+                            user_id: job.user_id,
+                            account_id: job.account_id,
+                            status: 'pending',
+                            scheduled_start_time: nextRunTime,
+                            batch_index: job.batch_index + 1,
+                            total_batches: job.total_batches + 1,
+                            payload: { ...job.payload, slideshows: itemsToShift }
+                        });
+                    }
                 }
 
-                const result = await response.json()
-                results.push({ id: slideshow.id, status: 'success', postId: result.id })
-                successItems.push(slideshow);
+                await supabase.from('job_queue').update({ status: 'completed' }).eq('id', job.id);
+                await logJob(supabase, job.id, 'info', `Successfully processed batch. ${successItems.length} posts scheduled.`);
+                stats.processed++;
 
-            } catch (err) {
-                console.error(`Failed to schedule post ${slideshow.id}:`, err)
-                const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-                results.push({ id: slideshow.id, status: 'failed', error: errorMsg })
-                // Add to failed items for shifting
-                // We preserve the original slideshow object
-                failedItems.push(slideshow);
+            } catch (jobErr) {
+                const errorMsg = jobErr instanceof Error ? jobErr.message : 'Unknown error';
+                console.error(`Batch ${job.id} failed:`, jobErr);
+                await logJob(supabase, job.id, 'error', `Batch failed: ${errorMsg}`);
+                await supabase.from('job_queue').update({ status: 'failed', error: errorMsg }).eq('id', job.id);
+                stats.failed++;
             }
         }
 
-        // --- LAZY SHIFTING ---
-        const itemsToShift = [...failedItems, ...overflowItems];
-
-        if (itemsToShift.length > 0) {
-            console.log(`Shifting ${itemsToShift.length} items to next batch (${failedItems.length} failed, ${overflowItems.length} overflow)`);
-
-            // 1. Find next pending job
-            const { data: nextJobs } = await supabase
-                .from('job_queue')
-                .select('*')
-                .eq('status', 'pending')
-                .gt('scheduled_start_time', now) // Must be in future
-                .order('scheduled_start_time', { ascending: true })
-                .limit(1);
-
-            let nextJob = nextJobs && nextJobs.length > 0 ? nextJobs[0] : null;
-
-            if (nextJob) {
-                // Update next job
-                const updatedPayload = {
-                    ...nextJob.payload,
-                    slideshows: [...itemsToShift, ...nextJob.payload.slideshows]
-                };
-
-                await supabase
-                    .from('job_queue')
-                    .update({ payload: updatedPayload })
-                    .eq('id', nextJob.id);
-
-                console.log(`Updated next job ${nextJob.id} with shifted items.`);
-            } else {
-                // Create new job if none exists
-                // We schedule it for 70 mins from now (Batch Interval)
-                // Or 70 mins from this job's start time? Let's say 70 mins from now to be safe on rate limits.
-                const nextRunTime = new Date(Date.now() + 70 * 60 * 1000).toISOString();
-
-                const newPayload = {
-                    ...job.payload,
-                    slideshows: itemsToShift // Only the shifted ones
-                };
-
-                await supabase
-                    .from('job_queue')
-                    .insert({
-                        user_id: job.user_id,
-                        status: 'pending',
-                        scheduled_start_time: nextRunTime,
-                        batch_index: job.batch_index + 1,
-                        total_batches: job.total_batches + 1, // Increment total?
-                        payload: newPayload
-                    });
-
-                console.log(`Created new batch job for shifted items: ${itemsToShift.length} items.`);
-            }
-        }
-
-        // 5. Update current job status
-        // Always 'completed' because failed items were shifted.
-        // Unless EVERYTHING failed and we couldn't shift (DB error), but we assume shift worked.
-        const finalStatus = 'completed';
-
-        const { error: updateError } = await supabase
-            .from('job_queue')
-            .update({
-                status: finalStatus,
-                updated_at: new Date().toISOString(),
-                error: null // Clear error since we handled it via shift
-            })
-            .eq('id', job.id)
-
-        if (updateError) {
-            console.error('Failed to update job status:', updateError)
-        }
-
-        return new Response(
-            JSON.stringify({
-                message: `Job ${job.id} processed. ${successItems.length} success, ${itemsToShift.length} shifted.`,
-                results,
-                shifted: itemsToShift.length,
-                status: finalStatus
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        return new Response(JSON.stringify({ message: 'Batch processing complete', stats }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
 
     } catch (error) {
-        console.error('Edge function error:', error)
-        return new Response(
-            JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        )
+        console.error('Edge function fatal error:', error);
+        return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
+            status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
     }
-})
+});

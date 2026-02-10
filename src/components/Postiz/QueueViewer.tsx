@@ -18,6 +18,23 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
     // Force re-deploy
     const [profiles, setProfiles] = useState<any[]>([]);
     const [expandedJobs, setExpandedJobs] = useState<string[]>([]);
+    const [jobLogs, setJobLogs] = useState<Record<string, any[]>>({});
+    const [isRefreshingLogs, setIsRefreshingLogs] = useState(false);
+
+    const fetchLogs = async (jobId: string) => {
+        try {
+            const { data, error } = await supabase
+                .from('job_logs')
+                .select('*')
+                .eq('job_id', jobId)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            setJobLogs(prev => ({ ...prev, [jobId]: data || [] }));
+        } catch (error) {
+            console.error('Failed to fetch logs:', error);
+        }
+    };
 
     // Calculate total stats
     const totalPosts = jobQueue.reduce((acc, job) => acc + (job.payload.slideshows?.length || 0), 0);
@@ -234,8 +251,11 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                                 expandedJobs.includes(job.id) ? "bg-white/5" : "hover:bg-white/[0.02]"
                                             )}
                                             onClick={() => {
-                                                // Allow expanding any job to see details
-                                                setExpandedJobs(prev => prev.includes(job.id) ? prev.filter(id => id !== job.id) : [...prev, job.id]);
+                                                const isMovingToExpanded = !expandedJobs.includes(job.id);
+                                                setExpandedJobs(prev => isMovingToExpanded ? [...prev, job.id] : prev.filter(id => id !== job.id));
+                                                if (isMovingToExpanded) {
+                                                    fetchLogs(job.id);
+                                                }
                                             }}
                                         >
                                             <div className="flex items-center gap-4">
@@ -348,6 +368,42 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                                                     <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
                                                     <span className="text-xs">Processing in background (Server)...</span>
                                                     <span className="text-[10px] opacity-70">Progress will update on completion</span>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Job Logs Section */}
+                                        {expandedJobs.includes(job.id) && (
+                                            <div className="px-4 pb-4 border-t border-white/10 bg-white/[0.02]">
+                                                <div className="text-xs text-muted-foreground my-3 font-medium flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <RefreshCw className={cn("w-3 h-3", isRefreshingLogs && "animate-spin")} />
+                                                        <span>Processing Logs</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); fetchLogs(job.id); }}
+                                                        className="text-[10px] text-blue-400 hover:underline"
+                                                    >
+                                                        Refresh Logs
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar bg-black/40 rounded-lg p-2 font-mono text-[10px]">
+                                                    {jobLogs[job.id]?.length > 0 ? (
+                                                        jobLogs[job.id].map((log, lIdx) => (
+                                                            <div key={log.id} className="flex gap-2">
+                                                                <span className="text-muted-foreground/50">[{new Date(log.created_at).toLocaleTimeString()}]</span>
+                                                                <span className={cn(
+                                                                    "font-bold uppercase",
+                                                                    log.level === 'error' ? "text-red-400" :
+                                                                        log.level === 'warning' ? "text-yellow-400" :
+                                                                            "text-blue-400"
+                                                                )}>[{log.level}]</span>
+                                                                <span className="text-white/80">{log.message}</span>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <div className="text-center py-2 text-muted-foreground italic">No logs generated yet.</div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}

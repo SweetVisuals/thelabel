@@ -318,7 +318,20 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         } else {
             toast.success(`Active batch started! ${jobsToInsert.length} batches queued for background processing.`);
             await fetchQueue();
-            // Removed immediate local processing call
+
+            // Trigger the processor Edge Function immediately so we don't wait for the cron
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                fetch('https://wtsckulmgegamnovlrbf.supabase.co/functions/v1/process-job-queue', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${session?.access_token || ''}`,
+                        'Content-Type': 'application/json'
+                    }
+                }).catch(e => console.warn('Background trigger fired (async)'));
+            } catch (triggerError) {
+                console.warn('Failed to fire immediate background trigger:', triggerError);
+            }
         }
     }, [fetchQueue]);
 
