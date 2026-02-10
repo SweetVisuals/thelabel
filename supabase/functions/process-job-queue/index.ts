@@ -160,6 +160,40 @@ Deno.serve(async (req) => {
 
                         if (validUrls.length === 0) throw new Error('No valid images');
 
+                        // 1. Upload images to Postiz
+                        const uploadedMedia = [];
+                        for (const url of validUrls) {
+                            try {
+                                const uploadRes = await fetch('https://api.postiz.com/public/v1/upload-from-url', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Authorization': postizApiKey.trim(),
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({ url })
+                                });
+
+                                if (!uploadRes.ok) {
+                                    console.error(`Upload failed for ${url}: ${uploadRes.status} ${await uploadRes.text()}`);
+                                    throw new Error(`Image upload failed: ${uploadRes.status}`);
+                                }
+
+                                const uploadData = await uploadRes.json();
+                                const uploadedPath = uploadData.path || uploadData.url;
+
+                                if (!uploadedPath) throw new Error('Image upload returned no path');
+
+                                uploadedMedia.push({
+                                    id: `img_${Date.now()}_${uploadedMedia.length}`,
+                                    path: uploadedPath
+                                });
+                            } catch (uploadErr) {
+                                console.error(`Failed to upload image ${url}:`, uploadErr);
+                                throw new Error(`Failed to upload image to Postiz: ${uploadErr instanceof Error ? uploadErr.message : 'Unknown error'}`);
+                            }
+                        }
+
+                        // 2. Create Post with uploaded images
                         const response = await fetch('https://api.postiz.com/public/v1/posts', {
                             method: 'POST',
                             headers: {
@@ -177,9 +211,9 @@ Deno.serve(async (req) => {
                                     },
                                     value: [{
                                         content: `${slideshow.caption || ''}\n\n${(slideshow.hashtags || []).map((t: string) => `#${t}`).join(' ')}`,
-                                        image: validUrls.map((url: string, idx: number) => ({
-                                            id: `img_${Date.now()}_${idx}`,
-                                            path: url
+                                        image: uploadedMedia.map((media: any) => ({
+                                            id: media.id,
+                                            path: media.path
                                         }))
                                     }],
                                     group: `slideshow_${Date.now()}`,
