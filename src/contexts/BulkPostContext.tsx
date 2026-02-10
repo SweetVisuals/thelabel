@@ -264,7 +264,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     currentPostTime = applyScheduleConstraints(currentPostTime, userTimezone);
 
                     // 2. Move time forward for the NEXT post (or the start of the next batch)
-                    currentPostTime = addMinutes(currentPostTime, settings.postIntervalMinutes);
+                    const effectiveInterval = settings.postIntervalMinutes || 240;
+                    currentPostTime = addMinutes(currentPostTime, effectiveInterval);
                 }
 
                 const payload: JobPayload = {

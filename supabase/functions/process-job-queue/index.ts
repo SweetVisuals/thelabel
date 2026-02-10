@@ -132,9 +132,11 @@ Deno.serve(async (req) => {
                 const profileId = profiles[0];
                 const jobTimezone = job.payload.settings.timezone || userSettings?.timezone || 'UTC';
 
-                const BATCH_LIMIT = 10;
+                const BATCH_LIMIT = 5;
                 const itemsToProcess = slideshows.slice(0, BATCH_LIMIT);
                 const overflowItems = slideshows.slice(BATCH_LIMIT);
+
+                await logJob(supabase, job.id, 'info', `Starting batch processing (${itemsToProcess.length} items to process).`);
 
 
 
@@ -269,6 +271,7 @@ Deno.serve(async (req) => {
                         if (!response.ok) throw new Error(`Postiz failed: ${response.status} ${await response.text()}`);
 
                         console.log(`[Item ${i + 1}] Success! Post scheduled.`);
+                        await logJob(supabase, job.id, 'info', `Slide ${i + 1}/${itemsToProcess.length} scheduled successfully: ${slideshow.title || slideshow.id}`);
                         successItems.push(slideshow.id);
                     } catch (err) {
                         const errorMsg = err instanceof Error ? err.message : 'Unknown error';

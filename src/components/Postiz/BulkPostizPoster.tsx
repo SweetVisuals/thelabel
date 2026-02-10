@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { postizAPI } from '../../lib/postiz';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { addHours, addMinutes } from 'date-fns';
+import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { DateTimePicker } from '../ui/datetime-picker';
 import { useBulkPost } from '../../contexts/BulkPostContext';
 
@@ -97,24 +98,26 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
     let currentTime = new Date(startTime);
 
     const applyScheduleConstraints = (baseTime: Date): Date => {
-      let date = new Date(baseTime);
-      let hour = date.getHours();
+      // Use the job timezone or fallback to UTC
+      const timezone = 'UTC'; // We could potentially get this from user settings context if available
+      const zonedDate = toZonedTime(baseTime, timezone);
+      const hour = zonedDate.getHours();
 
       // If before 9am, move to 9am today
       if (hour < 9) {
-        date.setHours(9, 0, 0, 0);
+        const adjustedZoned = new Date(zonedDate);
+        adjustedZoned.setHours(9, 0, 0, 0);
+        return fromZonedTime(adjustedZoned, timezone);
       }
       // If after 10pm (22:00), move to 9am TOMORROW
       else if (hour >= 22) {
-        date.setDate(date.getDate() + 1);
-        date.setHours(9, 0, 0, 0);
+        const adjustedZoned = new Date(zonedDate);
+        adjustedZoned.setDate(adjustedZoned.getDate() + 1);
+        adjustedZoned.setHours(9, 0, 0, 0);
+        return fromZonedTime(adjustedZoned, timezone);
       }
 
-      // Double check - if we moved to tomorrow, make sure we didn't go back in time relative to baseTime (rare edge case)
-      if (date < baseTime) {
-        date = new Date(baseTime); // fallback
-      }
-      return date;
+      return baseTime;
     };
 
     if (postingStrategy === 'first-now') {
@@ -138,7 +141,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       // Ensure start time respects constraints
       currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
 
-      const safeBatchSize = 10; // Enforce 10 as per requirements
+      const safeBatchSize = 5; // Reduced from 10 to avoid Edge Function timeouts (150s)
       const safePostIntervalMinutes = Number(postIntervalMinutes) || 240; // Default to 240 mins (4 hours) as per request
 
       for (let i = 0; i < slideshows.length; i++) {
@@ -196,7 +199,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
           intervalHours,
           startTime,
           batchSize: Number(batchSize) || 1,
-          postIntervalMinutes: Number(postIntervalMinutes) || 0
+          postIntervalMinutes: Number(postIntervalMinutes) || 240
         }
       );
 
