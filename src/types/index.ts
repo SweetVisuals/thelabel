@@ -22,6 +22,8 @@ export interface UploadedImage {
   height?: number;
   aspectRatio?: string; // e.g., "1:1", "4:5", "9:16"
   croppedUrl?: string; // URL of cropped version if different from original
+  account_ids?: string[];
+  account_id?: string | null;
 }
 
 export interface Folder {
@@ -30,6 +32,7 @@ export interface Folder {
   created_at: string;
   parent_id?: string;
   account_ids?: string[];
+  account_id?: string | null;
   images: UploadedImage[];
   slideshows?: SlideshowMetadata[];
 }
@@ -122,6 +125,8 @@ export interface SlideshowMetadata {
   updated_at: string;
   user_id: string;
   folder_id?: string | null; // Folder association for drag and drop organization
+  account_ids?: string[]; // TikTok account associations
+  account_id?: string | null; // Primary account for organization
   uploadCount?: number;
   lastUploadStatus?: 'success' | 'failed' | 'pending';
   scheduledTime?: string; // Stored timestamp for scheduled posts
@@ -259,6 +264,7 @@ export interface BulkTemplateOptions {
   };
   slideshowTitles?: string[]; // Optional custom titles for each slideshow
   signal?: AbortSignal;
+  account_id?: string; // Optional account assignment
 }
 
 // Bulk Template Creation Result

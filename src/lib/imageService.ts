@@ -397,6 +397,8 @@ export const imageService = {
         width: img.width || undefined,
         height: img.height || undefined,
         aspectRatio: img.aspect_ratio || undefined, // Include aspect ratio from database
+        account_ids: img.account_ids || [], // Include account associations (linking)
+        account_id: img.account_id || null, // Primary account (organization)
       }));
 
       return uploadedImages;
@@ -528,7 +530,9 @@ export const imageService = {
               file_size,
               mime_type,
               width,
-              height
+              height,
+              account_ids,
+              account_id
             )
           `)
           .eq('folder_id', folder.id);
@@ -564,6 +568,8 @@ export const imageService = {
               width: image.width || undefined,
               height: image.height || undefined,
               aspectRatio: image.aspect_ratio || undefined, // Include aspect ratio from database
+              account_ids: image.account_ids || [],
+              account_id: image.account_id || null,
             };
           });
 
@@ -579,6 +585,7 @@ export const imageService = {
           created_at: folder.created_at,
           parent_id: folder.parent_id,
           account_ids: folder.account_ids || [],
+          account_id: folder.account_id || null,
           images: folderImageList,
         };
       }));
@@ -812,6 +819,58 @@ export const imageService = {
       }
     } catch (error) {
       console.error('Failed to assign folder:', error);
+      throw error;
+    }
+  },
+
+  // Assign image to account
+  async assignImageToAccount(imageId: string, accountId: string, currentAccountIds: string[] = []): Promise<void> {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Append new account ID if not already present
+      const newAccountIds = Array.from(new Set([...currentAccountIds, accountId]));
+
+      const { error } = await supabase
+        .from('images')
+        .update({ account_ids: newAccountIds })
+        .eq('id', imageId)
+        .eq('user_id', session.user.id);
+
+      if (error) {
+        throw new Error(`Failed to assign image: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Failed to assign image:', error);
+      throw error;
+    }
+  },
+
+  // Unassign image from account
+  async unassignImageFromAccount(imageId: string, accountId: string, currentAccountIds: string[] = []): Promise<void> {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Remove the account ID
+      const newAccountIds = currentAccountIds.filter(id => id !== accountId);
+
+      const { error } = await supabase
+        .from('images')
+        .update({ account_ids: newAccountIds })
+        .eq('id', imageId)
+        .eq('user_id', session.user.id);
+
+      if (error) {
+        throw new Error(`Failed to unassign image: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Failed to unassign image:', error);
       throw error;
     }
   },

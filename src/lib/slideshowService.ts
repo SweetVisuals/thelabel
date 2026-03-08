@@ -309,7 +309,8 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
     aspectRatio: string,
     transitionEffect: 'fade' | 'slide' | 'zoom',
     musicEnabled: boolean,
-    userId: string
+    userId: string,
+    accountId?: string | null
   ): Promise<SlideshowMetadata> {
     try {
       // Starting enhanced slideshow save with smart cropping
@@ -377,7 +378,9 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         user_id: userId,
-        folder_id: null // Initialize with no folder
+        folder_id: null, // Initialize with no folder
+        account_id: accountId || null,
+        account_ids: accountId ? [accountId] : []
       };
 
       console.log('✅ Enhanced slideshow object created with smart cropping:', {
@@ -1250,6 +1253,8 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
           title: slideshow.title,
           description: slideshow.caption,
           aspect_ratio: slideshow.aspectRatio,
+          account_ids: slideshow.account_ids || [],
+          account_id: slideshow.account_id || null,
           created_at: slideshow.created_at,
           updated_at: slideshow.updated_at,
           metadata: {
@@ -1260,7 +1265,9 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
             transitionEffect: slideshow.transitionEffect,
             musicEnabled: slideshow.musicEnabled,
             folder_id: slideshow.folder_id || null,
-            uploadCount: slideshow.uploadCount || 0
+            uploadCount: slideshow.uploadCount || 0,
+            account_id: slideshow.account_id || null,
+            account_ids: slideshow.account_ids || []
           }
         });
 
@@ -1324,6 +1331,8 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
             updated_at: dbSlideshow.updated_at,
             user_id: dbSlideshow.user_id,
             folder_id: metadata.folder_id || null,
+            account_ids: dbSlideshow.account_ids || [], // Include account associations (linking)
+            account_id: dbSlideshow.account_id || null, // Primary account (organization)
             // Ensure postTitle exists - fallback to title if not in metadata
             postTitle: metadata.postTitle || dbSlideshow.title,
             uploadCount: metadata.uploadCount || 0,
@@ -1528,10 +1537,95 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
   }
 
   /**
+   * Assign slideshow to account
+   */
+  async assignSlideshowToAccount(slideshowId: string, accountId: string, currentAccountIds: string[] = []): Promise<void> {
+    try {
+      const { supabase } = await import('./supabase');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Append new account ID if not already present
+      const newAccountIds = Array.from(new Set([...currentAccountIds, accountId]));
+
+      // Extract the actual UUID from slideshow ID (remove "slideshow_" prefix if present)
+      const actualDatabaseId = slideshowId.startsWith('slideshow_')
+        ? slideshowId.replace('slideshow_', '')
+        : slideshowId;
+
+      const { error } = await supabase
+        .from('slideshows')
+        .update({ account_ids: newAccountIds })
+        .eq('id', actualDatabaseId)
+        .eq('user_id', session.user.id);
+
+      if (error) {
+        throw new Error(`Failed to assign slideshow: ${error.message}`);
+      }
+
+      // Update in memory if present
+      const slideshow = this.slideshows.get(slideshowId);
+      if (slideshow) {
+        slideshow.account_ids = newAccountIds;
+        this.slideshows.set(slideshowId, slideshow);
+        this.saveToLocalStorage();
+      }
+    } catch (error) {
+      console.error('Failed to assign slideshow:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Unassign slideshow from account
+   */
+  async unassignSlideshowFromAccount(slideshowId: string, accountId: string, currentAccountIds: string[] = []): Promise<void> {
+    try {
+      const { supabase } = await import('./supabase');
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Remove the account ID
+      const newAccountIds = currentAccountIds.filter(id => id !== accountId);
+
+      // Extract the actual UUID from slideshow ID (remove "slideshow_" prefix if present)
+      const actualDatabaseId = slideshowId.startsWith('slideshow_')
+        ? slideshowId.replace('slideshow_', '')
+        : slideshowId;
+
+      const { error } = await supabase
+        .from('slideshows')
+        .update({ account_ids: newAccountIds })
+        .eq('id', actualDatabaseId)
+        .eq('user_id', session.user.id);
+
+      if (error) {
+        throw new Error(`Failed to unassign slideshow: ${error.message}`);
+      }
+
+      // Update in memory if present
+      const slideshow = this.slideshows.get(slideshowId);
+      if (slideshow) {
+        slideshow.account_ids = newAccountIds;
+        this.slideshows.set(slideshowId, slideshow);
+        this.saveToLocalStorage();
+      }
+    } catch (error) {
+      console.error('Failed to unassign slideshow:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Increment upload count for a slideshow
    */
   async incrementUploadCount(slideshowId: string): Promise<void> {
     try {
+      const { supabase } = await import('./supabase');
       const slideshow = this.slideshows.get(slideshowId);
       if (!slideshow) {
         throw new Error('Slideshow not found');
@@ -1576,7 +1670,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
   /**
    * Update slideshow metadata interface to include folder association
    */
-  private updateSlideshowMetadataForFolderSupport(): void {
+  private async updateSlideshowMetadataForFolderSupport(): Promise<void> {
     // This method ensures backward compatibility by adding folder_id if it doesn't exist
     for (const [id, slideshow] of this.slideshows.entries()) {
       if (!('folder_id' in slideshow)) {
@@ -1599,9 +1693,9 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
         (slideshow as any).folder_id = null;
       }
 
-      // Ensure postTitle exists for backward compatibility (fix for missing postTitle)
+      // Ensure postTitle exists for backward compatibility
       if (!('postTitle' in slideshow)) {
-        (slideshow as any).postTitle = slideshow.title; // Fallback to title
+        (slideshow as any).postTitle = slideshow.title;
       }
 
       // Validate the slideshow structure
@@ -1609,10 +1703,9 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
         throw new Error('Invalid slideshow file format');
       }
 
-      console.log('✅ Parsed slideshow from file data with folder support:', slideshow.title, 'with', slideshow.condensedSlides.length, 'slides');
-      console.log('📝 Post title loaded:', slideshow.postTitle);
+      console.log('✅ Parsed slideshow from file data:', slideshow.title);
 
-      // Store in memory for future reference
+      // Store in memory
       this.slideshows.set(slideshow.id, slideshow);
       this.saveToLocalStorage();
 
@@ -1622,8 +1715,15 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       return slideshow;
     } catch (error) {
       console.error('❌ Failed to load slideshow from file data:', error);
-      throw new Error('Invalid slideshow file data');
+      throw error;
     }
+  }
+
+  /**
+   * Get slideshow by ID
+   */
+  getSlideshowById(id: string): SlideshowMetadata | undefined {
+    return this.slideshows.get(id);
   }
 
   // ========================================
@@ -2317,7 +2417,8 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
             finalAspectRatio,
             template.transitionEffect,
             template.musicEnabled,
-            userId
+            userId,
+            options.account_id
           );
 
           console.log(`🎯 FINAL VERIFICATION - Slideshow ${i + 1}:`, {

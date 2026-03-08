@@ -184,7 +184,8 @@ export const QuickModeDialog: React.FC<QuickModeDialogProps> = ({ isOpen, onClos
                         hashtags: hashtags,
                         aspectRatio: selectedAspectRatio
                     },
-                    signal: abortControllerRef.current?.signal
+                    signal: abortControllerRef.current?.signal,
+                    account_id: accountId
                 },
                 (p) => setProgress(30 + Math.floor(p * 0.6))
             );
@@ -206,7 +207,7 @@ export const QuickModeDialog: React.FC<QuickModeDialogProps> = ({ isOpen, onClos
                     intervalHours: postIntervalHours, // used to space interval batches
                     startTime: startTimeDate,
                     batchSize: 10,
-                    postIntervalMinutes: Math.floor((postIntervalHours * 60) / 10) // this determines job staggering within a batch if applicable
+                    postIntervalMinutes: postIntervalHours * 60 // Spacing between each individual post
                 }
             );
 

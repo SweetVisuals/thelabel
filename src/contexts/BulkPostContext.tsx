@@ -348,6 +348,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 id: s.id,
                 user_id: user.id,
                 metadata: s, // Usually stored in metadata column
+                folder_id: s.folder_id || null,
+                account_ids: s.account_ids || [],
+                account_id: s.account_id || null,
                 updated_at: new Date().toISOString()
             }));
 

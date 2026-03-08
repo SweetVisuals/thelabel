@@ -21,6 +21,7 @@ import {
   ArrowUpDown,
   Zap,
   Unlink,
+  Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -129,6 +130,7 @@ export function FileBrowser({
   const [activeTab, setActiveTab] = useState<'files' | 'accounts' | 'quickmode'>('files');
   const [tikTokProfiles, setTikTokProfiles] = useState<PostizProfile[]>([]);
   const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+  const [activeAccountId, setActiveAccountId] = useState<string | null>(null);
 
   // Quick Mode State
   const [quickModeFolder, setQuickModeFolder] = useState<{ id: string; name: string; accountId: string } | null>(null);
@@ -169,6 +171,22 @@ export function FileBrowser({
       if (!silent) setIsLoading(false);
     }
   }, [onImagesUploaded, onFoldersChange]);
+
+  // Load TikTok profiles
+  useEffect(() => {
+    const loadProfiles = async () => {
+      setIsLoadingProfiles(true);
+      try {
+        const profiles = await postizAPI.getProfiles();
+        setTikTokProfiles(profiles.filter(p => p.provider === 'tiktok'));
+      } catch (error) {
+        console.error('Failed to load TikTok profiles:', error);
+      } finally {
+        setIsLoadingProfiles(false);
+      }
+    };
+    loadProfiles();
+  }, []);
 
   // Initial load and Realtime subscription
   useEffect(() => {
@@ -232,7 +250,7 @@ export function FileBrowser({
 
   // Handle folder refresh events
   useEffect(() => {
-    const handleFolderDataRefresh = async (e: CustomEvent) => {
+    const handleFolderDataRefresh = async () => {
       try {
         const [loadedImages, loadedFolders] = await Promise.all([
           imageService.loadImages(),
@@ -420,6 +438,59 @@ export function FileBrowser({
     }
   };
 
+  const handleAccountDrop = async (e: React.DragEvent, accountId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    try {
+      const dataStr = e.dataTransfer.getData('application/json');
+      if (!dataStr) return;
+
+      const data = JSON.parse(dataStr);
+      const idsToMove = data.selectedIds as string[];
+
+      if (idsToMove.length === 0) return;
+
+      toast.loading(`Moving ${idsToMove.length} items to account...`);
+
+      if (data.type === 'file') {
+        for (const id of idsToMove) {
+          const img = images.find(i => i.id === id);
+          // Set account_id for organization, while keeping account_ids for linking
+          await imageService.assignImageToAccount(id, accountId, img?.account_ids || []);
+        }
+        toast.dismiss();
+        toast.success(`Moved ${idsToMove.length} images to account folder`);
+      } else if (data.type === 'slideshow') {
+        for (const id of idsToMove) {
+          const slideshow = slideshowService.getSlideshowById(id);
+          // Set account_id for organization
+          await slideshowService.assignSlideshowToAccount(id, accountId, slideshow?.account_ids || []);
+        }
+        toast.dismiss();
+        toast.success(`Moved ${idsToMove.length} slideshows to account folder`);
+      } else if (data.type === 'folder') {
+        for (const id of idsToMove) {
+          const folder = folders.find(f => f.id === id);
+          // Set account_id for organization
+          await imageService.assignFolderToAccount(id, accountId, folder?.account_ids || []);
+        }
+        toast.dismiss();
+        toast.success(`Moved ${idsToMove.length} folders to account folder`);
+      }
+
+      loadData(true);
+      onSelectionChange([]);
+      onSlideshowSelectionChange([]);
+      onFolderSelectionChange([]);
+
+    } catch (error) {
+      console.error('Failed to move items to account:', error);
+      toast.dismiss();
+      toast.error('Failed to move items to account');
+    }
+  };
+
   const handleFolderDrop = async (e: React.DragEvent, targetFolderId: string) => {
     e.preventDefault();
     e.stopPropagation();
@@ -521,28 +592,6 @@ export function FileBrowser({
     if (e.target) e.target.value = '';
   };
 
-  const getSlideshowsFromService = () => {
-    try {
-      // Use public method to get slideshows without forced reload
-      const allSlideshows = slideshowService.getAllSlideshows();
-
-      const filteredSlideshows = currentFolderId === null
-        ? allSlideshows.filter(slideshow => !slideshow.folder_id)
-        : allSlideshows.filter(slideshow => slideshow.folder_id === currentFolderId);
-
-      return filteredSlideshows.map(slideshow => ({
-        id: slideshow.id,
-        name: `${slideshow.title || 'Untitled'}.slideshow`,
-        type: 'slideshow' as const,
-        itemCount: slideshow.condensedSlides?.length || 0,
-        modified: new Date(slideshow.updated_at || slideshow.created_at || Date.now()),
-        slideshow: slideshow,
-      }));
-    } catch (error) {
-      console.error('Failed to get slideshows:', error);
-      return [];
-    }
-  };
 
   const currentImages = useMemo(() => {
     if (currentFolderId === null) {
@@ -552,36 +601,112 @@ export function FileBrowser({
     return currentFolder ? currentFolder.images : [];
   }, [currentFolderId, images, folders]);
 
-  const fileItems: FileItem[] = [
-    ...folders
-      .filter(f => f.parent_id === currentFolderId)
-      .map(folder => ({
-        id: folder.id,
-        name: folder.name,
-        type: 'folder' as const,
-        itemCount: folder.images.length,
-        modified: new Date(folder.created_at),
-      })),
-    ...currentImages.map(img => ({
+  const fileItems: FileItem[] = useMemo(() => {
+    const items: FileItem[] = [];
+
+    // 1. Add Parent Directory if in a folder or account
+    if (currentFolderId || activeAccountId) {
+      items.push({
+        id: 'parent-directory',
+        name: '..',
+        type: 'folder',
+        modified: new Date(),
+      });
+    }
+
+    // 2. Add TikTok accounts as "folders" if in root and no active account
+    if (currentFolderId === null && activeAccountId === null) {
+      tikTokProfiles.forEach(profile => {
+        // Calculate item count for this account (organized items)
+        const organizedFolders = folders.filter(f => f.account_id === profile.id).length;
+        const organizedImages = currentImages.filter(img => img.account_id === profile.id).length;
+        const organizedSlideshows = slideshowService.getAllSlideshows().filter(s => s.account_id === profile.id).length;
+
+        items.push({
+          id: `account_${profile.id}`,
+          name: profile.displayName || profile.username,
+          type: 'folder',
+          modified: new Date(),
+          itemCount: organizedFolders + organizedImages + organizedSlideshows,
+          // @ts-ignore - adding custom properties for rendering
+          isAccount: true,
+          avatar: profile.avatar,
+        } as any);
+      });
+    }
+
+    // 3. Filter items based on activeAccountId and currentFolderId
+    // ORGANIZATION (singular account_id): Moves items into the account folder.
+    // LINKING (plural account_ids): Used for posting, does not move item.
+
+    // Filter Folders
+    const filteredFolders = folders.filter(f => {
+      const isInCurrentFolder = f.parent_id === currentFolderId;
+      if (!isInCurrentFolder) return false;
+
+      // If we are inside an account, show only items organized into it
+      if (activeAccountId) {
+        return f.account_id === activeAccountId;
+      }
+
+      // If at root, show only items NOT organized into any account
+      return f.account_id === null || f.account_id === undefined;
+    });
+
+    items.push(...filteredFolders.map(folder => ({
+      id: folder.id,
+      name: folder.name,
+      type: 'folder' as const,
+      itemCount: folder.images.length,
+      modified: new Date(folder.created_at),
+    })));
+
+    // Filter Images
+    const filteredImagesData = currentImages.filter(img => {
+      // If we are inside an account, show only items organized into it
+      if (activeAccountId) {
+        return img.account_id === activeAccountId;
+      }
+
+      // If at root, show only items NOT organized into any account
+      return img.account_id === null || img.account_id === undefined;
+    });
+
+    items.push(...filteredImagesData.map(img => ({
       id: img.id,
       name: img.filename || img.file.name,
       type: 'file' as const,
       size: img.fileSize || img.file.size,
       modified: new Date(img.file.lastModified || Date.now()),
       image: img,
-    })),
-    ...getSlideshowsFromService()
-  ];
+    })));
 
-  // Add Parent Directory Item if in a folder
-  if (currentFolderId) {
-    fileItems.unshift({
-      id: 'parent-directory',
-      name: '..',
-      type: 'folder', // Treat as folder for sorting/display logic mostly
-      modified: new Date(),
+    // Filter Slideshows
+    const allSlideshows = slideshowService.getAllSlideshows();
+    const filteredSlideshows = allSlideshows.filter(s => {
+      const isInCurrentFolder = s.folder_id === currentFolderId;
+      if (!isInCurrentFolder) return false;
+
+      // If we are inside an account, show only items organized into it
+      if (activeAccountId) {
+        return s.account_id === activeAccountId;
+      }
+
+      // If at root, show only items NOT organized into any account
+      return s.account_id === null || s.account_id === undefined;
     });
-  }
+
+    items.push(...filteredSlideshows.map(slideshow => ({
+      id: slideshow.id,
+      name: `${slideshow.title || 'Untitled'}.slideshow`,
+      type: 'slideshow' as const,
+      itemCount: slideshow.condensedSlides?.length || 0,
+      modified: new Date(slideshow.updated_at || slideshow.created_at || Date.now()),
+      slideshow: slideshow,
+    })));
+
+    return items;
+  }, [currentFolderId, activeAccountId, tikTokProfiles, folders, currentImages]);
 
   const filteredAndSortedItems = fileItems
     .filter(item => item.name.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -708,8 +833,19 @@ export function FileBrowser({
   const handleItemClick = (item: FileItem, e: React.MouseEvent) => {
     e.stopPropagation();
     if (item.id === 'parent-directory') {
-      const currentFolder = folders.find(f => f.id === currentFolderId);
-      onCurrentFolderIdChange(currentFolder?.parent_id || null);
+      if (activeAccountId && !currentFolderId) {
+        setActiveAccountId(null);
+      } else {
+        const currentFolder = folders.find(f => f.id === currentFolderId);
+        onCurrentFolderIdChange(currentFolder?.parent_id || null);
+      }
+      return;
+    }
+
+    // Handle account "folder" click
+    if (item.id.startsWith('account_')) {
+      const accountId = item.id.replace('account_', '');
+      setActiveAccountId(accountId);
       return;
     }
 
@@ -1245,18 +1381,18 @@ export function FileBrowser({
                           (item.type === 'file' && selectedImages.includes(item.id)) && "bg-white/20 ring-1 ring-white",
                           (item.type === 'slideshow' && selectedSlideshows.includes(item.id)) && "bg-white/20 ring-1 ring-white",
                           // Drop Target Styles
-                          (item.id === 'parent-directory' || item.type === 'folder') && "hover:bg-white/15"
+                          (item.id === 'parent-directory' || item.type === 'folder' || (item as any).isAccount) && "hover:bg-white/15"
                         )}
                         draggable={item.id !== 'parent-directory'}
                         onDragStart={(e: any) => handleItemDragStart(e, item)}
                         onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
-                          if (item.type === 'folder' || item.id === 'parent-directory') {
+                          if (item.type === 'folder' || item.id === 'parent-directory' || (item as any).isAccount) {
                             e.preventDefault(); // Allow drop
                             e.currentTarget.classList.add('ring-1', 'ring-white', 'bg-white/20');
                           }
                         }}
                         onDragLeave={(e) => {
-                          if (item.type === 'folder' || item.id === 'parent-directory') {
+                          if (item.type === 'folder' || item.id === 'parent-directory' || (item as any).isAccount) {
                             e.currentTarget.classList.remove('ring-1', 'ring-white', 'bg-white/20');
                           }
                         }}
@@ -1265,12 +1401,22 @@ export function FileBrowser({
                           if (item.id === 'parent-directory') {
                             handleParentDrop(e);
                           } else if (item.type === 'folder') {
-                            handleFolderDrop(e, item.id);
+                            if ((item as any).isAccount) {
+                              const accountId = item.id.replace('account_', '');
+                              handleAccountDrop(e, accountId);
+                            } else {
+                              handleFolderDrop(e, item.id);
+                            }
                           }
                         }}
                         onDoubleClick={() => {
                           if (item.type === 'folder' && item.id !== 'parent-directory') {
-                            onCurrentFolderIdChange(item.id);
+                            if ((item as any).isAccount) {
+                              const accountId = item.id.replace('account_', '');
+                              setActiveAccountId(accountId);
+                            } else {
+                              onCurrentFolderIdChange(item.id);
+                            }
                           }
                         }}
                         onClick={(e) => handleItemClick(item, e)}
@@ -1309,6 +1455,16 @@ export function FileBrowser({
                             )}>
                               {item.id === 'parent-directory' ? (
                                 <CornerLeftUp className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
+                              ) : (item as any).isAccount ? (
+                                (item as any).avatar ? (
+                                  <img
+                                    src={(item as any).avatar}
+                                    className={cn("object-cover transition-all rounded-none border-none", viewMode === 'list' ? "w-6 h-6" : "w-16 h-16")}
+                                    alt={item.name}
+                                  />
+                                ) : (
+                                  <Users className={cn(viewMode === 'list' ? "w-5 h-5" : "w-14 h-14")} />
+                                )
                               ) : (
                                 <FolderIcon strokeWidth={1} className={cn(viewMode === 'list' ? "w-5 h-5" : "w-14 h-14")} />
                               )}
