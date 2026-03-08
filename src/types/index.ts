@@ -29,6 +29,7 @@ export interface Folder {
   name: string;
   created_at: string;
   parent_id?: string;
+  account_ids?: string[];
   images: UploadedImage[];
   slideshows?: SlideshowMetadata[];
 }
@@ -123,6 +124,7 @@ export interface SlideshowMetadata {
   folder_id?: string | null; // Folder association for drag and drop organization
   uploadCount?: number;
   lastUploadStatus?: 'success' | 'failed' | 'pending';
+  scheduledTime?: string; // Stored timestamp for scheduled posts
 }
 
 // Postiz integration data
@@ -253,8 +255,10 @@ export interface BulkTemplateOptions {
     caption?: string;
     hashtags?: string[];
     randomizeHashtags?: boolean;
+    aspectRatio?: string;
   };
   slideshowTitles?: string[]; // Optional custom titles for each slideshow
+  signal?: AbortSignal;
 }
 
 // Bulk Template Creation Result

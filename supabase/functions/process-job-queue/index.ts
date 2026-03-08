@@ -133,7 +133,7 @@ Deno.serve(async (req) => {
                 const jobTimezone = job.payload.settings.timezone || userSettings?.timezone || 'UTC';
                 const postIntervalMinutes = Number(settings.postIntervalMinutes) || 240;
 
-                const BATCH_LIMIT = 5;
+                const BATCH_LIMIT = 10;
                 const itemsToProcess = slideshows.slice(0, BATCH_LIMIT);
                 const overflowItems = slideshows.slice(BATCH_LIMIT);
 
@@ -142,8 +142,13 @@ Deno.serve(async (req) => {
                 // Use the settings.startTime as the STRICT starting point for the content schedule.
                 let currentScheduleTime = new Date(job.payload.settings.startTime);
 
-                // Initial check: if the very first slot is in a restricted window, move it.
-                currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
+                // Track the very last scheduled time to calculate the overflow start time
+                let lastScheduledTimeInBatch = new Date(currentScheduleTime);
+
+                // Initial check only if we are taking the fresh start time
+                if (!itemsToProcess[0]?.forcedScheduleTime) {
+                    currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
+                }
 
                 const successItems = [];
                 const failedItems = [];
@@ -152,12 +157,29 @@ Deno.serve(async (req) => {
                     const slideshow = itemsToProcess[i];
                     console.log(`[Item ${i + 1}/${itemsToProcess.length}] Preparing slideshow ${slideshow.id}`);
 
-                    if (i > 0) {
-                        currentScheduleTime = new Date(currentScheduleTime.getTime() + postIntervalMinutes * 60000);
+                    // Determine the specific time for THIS item
+                    let thisItemScheduleTime: Date;
+
+                    if (slideshow.forcedScheduleTime) {
+                        thisItemScheduleTime = new Date(slideshow.forcedScheduleTime);
+                        await logJob(supabase, job.id, 'info', `Item ${i + 1} using FORCED retry time: ${thisItemScheduleTime.toISOString()}`);
+                    } else if (slideshow.scheduledTime) {
+                        thisItemScheduleTime = new Date(slideshow.scheduledTime);
+                        await logJob(supabase, job.id, 'info', `Item ${i + 1} using PRE-CALCULATED time: ${thisItemScheduleTime.toISOString()}`);
+                    } else {
+                        // Standard Interval Logic
+                        if (i > 0) {
+                            currentScheduleTime = new Date(currentScheduleTime.getTime() + postIntervalMinutes * 60000);
+                        }
+                        currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
+                        thisItemScheduleTime = new Date(currentScheduleTime);
                     }
-                    currentScheduleTime = applyTimeWindow(currentScheduleTime, jobTimezone);
-                    console.log(`[Item ${i + 1}] Schedule Time: ${currentScheduleTime.toISOString()}`);
-                    await logJob(supabase, job.id, 'info', `Item ${i + 1} scheduled for: ${currentScheduleTime.toISOString()} (${jobTimezone})`);
+
+                    // Update tracker
+                    lastScheduledTimeInBatch = new Date(thisItemScheduleTime);
+
+                    console.log(`[Item ${i + 1}] Schedule Time: ${thisItemScheduleTime.toISOString()}`);
+                    await logJob(supabase, job.id, 'info', `Item ${i + 1} scheduled for: ${thisItemScheduleTime.toISOString()} (${jobTimezone})`);
 
                     try {
                         const validUrls = (slideshow.condensedSlides || [])
@@ -176,7 +198,6 @@ Deno.serve(async (req) => {
                             console.log(`[Item ${i + 1}] Uploading: ${url.substring(0, 50)}...`);
 
                             while (attempts < 5 && !success) {
-                                // Default nice delay of 1s between items, increasing on retries
                                 const delayMs = attempts === 0 ? 1000 : 2000 * Math.pow(2, attempts);
                                 await new Promise(r => setTimeout(r, delayMs));
 
@@ -192,7 +213,7 @@ Deno.serve(async (req) => {
 
                                     if (uploadRes.status === 429) {
                                         const retryAfter = uploadRes.headers.get('Retry-After');
-                                        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000; // Default 5s if header missing
+                                        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 5000;
                                         console.warn(`Rate limit hit for ${url}. Waiting ${waitTime}ms...`);
                                         await new Promise(r => setTimeout(r, waitTime));
                                         attempts++;
@@ -237,7 +258,7 @@ Deno.serve(async (req) => {
                             },
                             body: JSON.stringify({
                                 type: 'schedule',
-                                date: currentScheduleTime.toISOString(),
+                                date: thisItemScheduleTime.toISOString(),
                                 shortLink: false,
                                 tags: [],
                                 posts: [{
@@ -245,7 +266,9 @@ Deno.serve(async (req) => {
                                         id: profileId
                                     },
                                     value: [{
-                                        content: `${slideshow.caption || ''}\n\n${(slideshow.hashtags || []).map((t: string) => `#${t}`).join(' ')}`,
+                                        content: slideshow.caption
+                                            ? `${slideshow.caption} ${(slideshow.hashtags || []).map((t: string) => t.startsWith('#') ? t : `#${t}`).join(' ')}`
+                                            : (slideshow.hashtags || []).map((t: string) => t.startsWith('#') ? t : `#${t}`).join(' '),
                                         image: uploadedMedia.map((media: any) => ({
                                             id: media.id,
                                             path: media.path
@@ -276,34 +299,49 @@ Deno.serve(async (req) => {
                         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
                         console.error(`Slide ${slideshow.id} failed:`, err);
                         await logJob(supabase, job.id, 'error', `Slide failed: ${errorMsg}`);
-                        failedItems.push(slideshow);
+                        // Attach the INTENDED time so we can retry it there
+                        failedItems.push({ ...slideshow, forcedScheduleTime: thisItemScheduleTime.toISOString() });
                     }
                 }
 
-                // Shifting Logic
-                const itemsToShift = [...failedItems, ...overflowItems];
-                if (itemsToShift.length > 0) {
-                    await logJob(supabase, job.id, 'warning', `Shifting ${itemsToShift.length} items to NEW batch (${failedItems.length} failed, ${overflowItems.length} overflow)`);
+                // Shifting Logic - SPLIT for Retries vs Overflow
 
-                    // Find the absolute last scheduled job to append after
-                    const { data: lastJobs } = await supabase
-                        .from('job_queue')
-                        .select('scheduled_start_time, batch_index')
-                        .order('scheduled_start_time', { ascending: false })
-                        .limit(1);
+                // 1. Handle Failed Items (Retries) - Schedule ASAP
+                if (failedItems.length > 0) {
+                    await logJob(supabase, job.id, 'warning', `Re-queueing ${failedItems.length} failed items for immediate retry.`);
 
-                    const lastJob = lastJobs?.[0];
-                    let nextRunTime = new Date(Date.now() + 70 * 60 * 1000); // Default: 70 mins from now
+                    // We schedule these to run fairly soon to fill the gaps
+                    const retryRunTime = new Date(Date.now() + 5 * 60 * 1000); // 5 mins from now
+
+                    await supabase.from('job_queue').insert({
+                        user_id: job.user_id,
+                        account_id: job.account_id,
+                        status: 'pending',
+                        scheduled_start_time: retryRunTime.toISOString(),
+                        batch_index: (job.batch_index || 0), // Keep same index or marked as retry?
+                        total_batches: (job.total_batches || 0),
+                        payload: {
+                            ...job.payload,
+                            slideshows: failedItems,
+                            // We don't change settings.startTime because forcedScheduleTime overrides it
+                        }
+                    });
+                }
+
+                // 2. Handle Overflow Items - Schedule for NEXT Interval block
+                if (overflowItems.length > 0) {
+                    await logJob(supabase, job.id, 'info', `Scheduling ${overflowItems.length} overflow items for next batch.`);
+
+                    // Calculate immediate overflow runtime so it doesn't wait an entire 70-min gap
+                    // This prevents items pushing so far into the future that their pre-calculated timestamps
+                    // end up in the "past", causing Postiz to drop them all instantaneously.
+                    let nextRunTime = new Date(Date.now() + 60 * 1000); // 1 minute from now
                     let nextBatchIndex = (job.batch_index || 0) + 1;
 
-                    if (lastJob) {
-                        const lastTime = new Date(lastJob.scheduled_start_time);
-                        // If last job is in future, schedule 70 mins after it
-                        if (lastTime > new Date()) {
-                            nextRunTime = new Date(lastTime.getTime() + 70 * 60 * 1000);
-                        }
-                        if (lastJob.batch_index) nextBatchIndex = lastJob.batch_index + 1;
-                    }
+                    // Calculate the start time for the content in the NEXT batch.
+                    // It should start ONE interval after the LAST item (successful or failed) in THIS batch.
+                    const nextBatchStartTime = new Date(lastScheduledTimeInBatch.getTime() + postIntervalMinutes * 60000);
+                    const adjustedNextStartTime = applyTimeWindow(nextBatchStartTime, jobTimezone);
 
                     await supabase.from('job_queue').insert({
                         user_id: job.user_id,
@@ -312,10 +350,17 @@ Deno.serve(async (req) => {
                         scheduled_start_time: nextRunTime.toISOString(),
                         batch_index: nextBatchIndex,
                         total_batches: (job.total_batches || 0) + 1,
-                        payload: { ...job.payload, slideshows: itemsToShift }
+                        payload: {
+                            ...job.payload,
+                            slideshows: overflowItems,
+                            settings: {
+                                ...job.payload.settings,
+                                startTime: adjustedNextStartTime.toISOString()
+                            }
+                        }
                     });
 
-                    await logJob(supabase, job.id, 'info', `Created new batch ${nextBatchIndex} for shifted items.`);
+                    await logJob(supabase, job.id, 'info', `Created new overflow batch ${nextBatchIndex}. Content Start: ${adjustedNextStartTime.toISOString()}`);
                 }
 
                 await supabase.from('job_queue').update({ status: 'completed' }).eq('id', job.id);

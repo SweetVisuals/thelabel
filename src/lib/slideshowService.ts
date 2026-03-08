@@ -1,4 +1,4 @@
-import { SlideshowMetadata, CondensedSlide, TikTokTextOverlay, UploadedImage, PostizSlideshowData, SlideshowTemplate, TemplateApplicationResult, BulkUploadWithTemplate } from '@/types';
+import { SlideshowMetadata, CondensedSlide, TikTokTextOverlay, UploadedImage, PostizSlideshowData, SlideshowTemplate, TemplateApplicationResult, BulkUploadWithTemplate, BulkTemplateOptions } from '@/types';
 import { postizAPI } from './postiz';
 import { imageService, ImageCroppingService } from './imageService';
 import { postizUploadService } from './postizUploadService';
@@ -621,10 +621,14 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
    * Format caption with hashtags for Buffer
    */
   formatCaptionForBuffer(caption: string, hashtags: string[]): string {
-    // Use the caption exactly as provided - no automatic modifications
-    const hashtagText = hashtags.map(tag => `#${tag}`).join(' ');
-    // Ensure proper line breaks for TikTok display
-    return `${caption}\n\n${hashtagText}`;
+    // Generate hashtags string safely
+    const hashtagText = hashtags
+      .map(tag => tag.startsWith('#') ? tag : `#${tag}`)
+      .join(' ');
+
+    // Combine caption and hashtags with a space for TikTok style
+    if (!caption) return hashtagText;
+    return `${caption} ${hashtagText}`;
   }
 
   /**
@@ -2167,17 +2171,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
     template: SlideshowTemplate,
     images: UploadedImage[],
     userId: string,
-    options: {
-      randomizeImages?: boolean;
-      slidesPerSlideshow?: number; // Number of slides per slideshow (cut length)
-      customizations?: {
-        title?: string;
-        caption?: string;
-        hashtags?: string[];
-        randomizeHashtags?: boolean;
-      };
-      slideshowTitles?: string[]; // Optional custom titles for each slideshow
-    } = {},
+    options: BulkTemplateOptions = {},
     onProgress?: (progress: number, current: number, total: number) => void
   ): Promise<{
     success: boolean;
@@ -2229,22 +2223,23 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
 
       const createdSlideshows: SlideshowMetadata[] = [];
       const finalTitle = customizations.title || template.name || template.title;
-      const finalCaption = customizations.caption || template.caption;
       const finalHashtags = customizations.hashtags || template.hashtags;
+      const finalAspectRatio = customizations.aspectRatio || template.aspectRatio;
 
       // Create each slideshow
       for (let i = 0; i < imageGroups.length; i++) {
+        if (options.signal?.aborted) {
+          console.log('🛑 Bulk creation aborted by user');
+          throw new Error('AbortError: Slideshow creation cancelled');
+        }
+
         const imageGroup = imageGroups[i];
 
         // Generate unique title if not provided
         let slideshowTitle = slideshowTitles[i];
         if (!slideshowTitle) {
-          // If we have multiple slideshows, append index to make them unique
-          if (imageGroups.length > 1) {
-            slideshowTitle = `${finalTitle} #${i + 1}`;
-          } else {
-            slideshowTitle = finalTitle;
-          }
+          // Always use the finalized title directly.
+          slideshowTitle = finalTitle;
         }
 
         try {
@@ -2300,23 +2295,26 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
             }))
           });
 
-          // Handle hashtag randomization
+          // Handle hashtag randomization - enforce 4 random hashtags for bulk batches
           let slideshowHashtags = finalHashtags;
-          if (customizations.randomizeHashtags && finalHashtags.length > 0) {
-            // Pick 4 random hashtags
+          if (finalHashtags.length > 0) {
+            // Always pick 4 random hashtags from the pool when making bulk batches
             const shuffled = [...finalHashtags].sort(() => 0.5 - Math.random());
             slideshowHashtags = shuffled.slice(0, 4);
           }
+
+          // Use the slideshow title as the caption so the final post text combines them
+          const captionContent = slideshowTitle;
 
           // Create the slideshow with adapted text overlays
           const slideshow = await this.saveSlideshow(
             slideshowTitle,
             template.postTitle || slideshowTitle,
-            finalCaption,
+            captionContent,
             slideshowHashtags,
             imageGroup,
             adaptedTextOverlays,
-            template.aspectRatio,
+            finalAspectRatio,
             template.transitionEffect,
             template.musicEnabled,
             userId

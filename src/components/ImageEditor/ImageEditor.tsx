@@ -23,7 +23,9 @@ import {
   Scissors,
   Move,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { UploadedImage, ASPECT_RATIO_PRESETS, AspectRatioPreset } from '@/types';
 import { motion } from 'framer-motion';
@@ -85,6 +87,7 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
   const [appliedFilters, setAppliedFilters] = useState<string[]>([]);
   const [history, setHistory] = useState<EditState[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   // Save initial state to history
   React.useEffect(() => {
@@ -423,405 +426,433 @@ export const ImageEditor: React.FC<ImageEditorProps> = ({
           </div>
 
           {/* Tools Panel */}
-          <div className="w-80 border-l border-gray-700 p-4 space-y-4 bg-gray-800">
-            {/* Aspect Ratio Controls */}
-            {selectedTool === 'crop' && (
-              <motion.div
-                className="space-y-3"
-                initial={{ opacity: 0, y: -20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+          <div className={cn(
+            "border-l border-gray-700 bg-gray-800 transition-all duration-300 flex flex-col",
+            isSidebarCollapsed ? "w-12" : "w-80"
+          )}>
+            {/* Column Header with Toggle */}
+            <div className={cn(
+              "flex items-center p-3 border-b border-gray-700",
+              isSidebarCollapsed ? "justify-center" : "justify-between"
+            )}>
+              {!isSidebarCollapsed && <h3 className="font-semibold text-white text-sm">Settings</h3>}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className="h-8 w-8 rounded-full text-gray-400 hover:text-white hover:bg-gray-700"
               >
-                <h4 className="font-semibold text-white">Aspect Ratio</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {ASPECT_RATIO_PRESETS.map((preset) => (
-                    <Button
-                      key={preset.id}
-                      variant={editState.aspectRatio === preset.ratio ? 'default' : 'outline'}
-                      size="sm"
-                      onClick={() => setEditState(prev => ({ ...prev, aspectRatio: preset.ratio }))}
-                      className="flex flex-col items-center p-2 h-auto text-xs"
-                      title={preset.description}
+                {isSidebarCollapsed ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              </Button>
+            </div>
+
+            <div className={cn(
+              "flex-1 p-4 space-y-4 overflow-y-auto overflow-x-hidden transition-opacity duration-300",
+              isSidebarCollapsed ? "opacity-0 invisible" : "opacity-100 visible"
+            )}>
+              {!isSidebarCollapsed && (
+                <>
+                  {/* Aspect Ratio Controls */}
+                  {selectedTool === 'crop' && (
+                    <motion.div
+                      className="space-y-3"
+                      initial={{ opacity: 0, y: -20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
                     >
-                      <span className="text-sm mb-1">{preset.icon}</span>
-                      <span>{preset.label}</span>
-                      <span className="text-[10px] opacity-70">{preset.ratio}</span>
-                    </Button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+                      <h4 className="font-semibold text-white">Aspect Ratio</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        {ASPECT_RATIO_PRESETS.map((preset) => (
+                          <Button
+                            key={preset.id}
+                            variant={editState.aspectRatio === preset.ratio ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setEditState(prev => ({ ...prev, aspectRatio: preset.ratio }))}
+                            className="flex flex-col items-center p-2 h-auto text-xs"
+                            title={preset.description}
+                          >
+                            <span className="text-sm mb-1">{preset.icon}</span>
+                            <span>{preset.label}</span>
+                            <span className="text-[10px] opacity-70">{preset.ratio}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
 
-            {/* Enhanced Tools */}
-            <motion.div
-              className="space-y-4"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <div className="space-y-2">
-                <h3 className="font-semibold text-white">Tools</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  <Button
-                    variant={selectedTool === 'crop' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedTool(selectedTool === 'crop' ? null : 'crop')}
-                    className="flex flex-col items-center p-3 h-auto"
+                  {/* Enhanced Tools */}
+                  <motion.div
+                    className="space-y-4"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.3 }}
                   >
-                    <Scissors className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Crop</span>
-                  </Button>
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-white">Tools</h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button
+                          variant={selectedTool === 'crop' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setSelectedTool(selectedTool === 'crop' ? null : 'crop')}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <Scissors className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Crop</span>
+                        </Button>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={undo}
-                    disabled={historyIndex <= 0}
-                    className="flex flex-col items-center p-3 h-auto"
-                  >
-                    <Undo className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Undo</span>
-                  </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={undo}
+                          disabled={historyIndex <= 0}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <Undo className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Undo</span>
+                        </Button>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={redo}
-                    disabled={historyIndex >= history.length - 1}
-                    className="flex flex-col items-center p-3 h-auto"
-                  >
-                    <Redo className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Redo</span>
-                  </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={redo}
+                          disabled={historyIndex >= history.length - 1}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <Redo className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Redo</span>
+                        </Button>
 
-                  <Button
-                    variant={selectedTool === 'text' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => {
-                      setSelectedTool('text');
-                      addTextOverlay();
-                    }}
-                    className="flex flex-col items-center p-3 h-auto"
-                  >
-                    <Type className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Text</span>
-                  </Button>
+                        <Button
+                          variant={selectedTool === 'text' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => {
+                            setSelectedTool('text');
+                            addTextOverlay();
+                          }}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <Type className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Text</span>
+                        </Button>
 
-                  <Button
-                    variant={selectedTool === 'adjust' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedTool('adjust')}
-                    className="flex flex-col items-center p-3 h-auto"
-                  >
-                    <Palette className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Adjust</span>
-                  </Button>
+                        <Button
+                          variant={selectedTool === 'adjust' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setSelectedTool('adjust')}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <Palette className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Adjust</span>
+                        </Button>
 
-                  <Button
-                    variant={selectedTool === 'filters' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedTool('filters')}
-                    className="flex flex-col items-center p-3 h-auto"
-                  >
-                    <Filter className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Filters</span>
-                  </Button>
+                        <Button
+                          variant={selectedTool === 'filters' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setSelectedTool('filters')}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <Filter className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Filters</span>
+                        </Button>
 
-                  <Button
-                    variant={selectedTool === 'effects' ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setSelectedTool('effects')}
-                    className="flex flex-col items-center p-3 h-auto"
-                  >
-                    <Sparkles className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Effects</span>
-                  </Button>
+                        <Button
+                          variant={selectedTool === 'effects' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => setSelectedTool('effects')}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <Sparkles className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Effects</span>
+                        </Button>
 
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setZoom(Math.min(zoom + 0.25, 3))}
-                    className="flex flex-col items-center p-3 h-auto"
-                  >
-                    <ZoomIn className="w-5 h-5 mb-1" />
-                    <span className="text-xs">Zoom In</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Quick Actions */}
-              <div className="space-y-2">
-                <h4 className="font-medium text-gray-300">Quick Actions</h4>
-                <div className="flex space-x-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditState(prev => ({ ...prev, rotation: prev.rotation + 90 }))}>
-                    <RotateCw className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setEditState(prev => ({ ...prev, flipHorizontal: !prev.flipHorizontal }))}>
-                    <FlipHorizontal className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setEditState(prev => ({ ...prev, flipVertical: !prev.flipVertical }))}>
-                    <FlipVertical className="w-4 h-4" />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setZoom(1)}>
-                    <Move className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-
-            {/* Enhanced Adjustments */}
-            {selectedTool === 'adjust' && (
-              <motion.div
-                className="space-y-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <h4 className="font-semibold text-white">Adjustments</h4>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium flex items-center">
-                        <Sun className="w-4 h-4 mr-2 text-yellow-500" />
-                        Brightness
-                      </label>
-                      <span className="text-xs text-gray-400">{editState.brightness}%</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setZoom(Math.min(zoom + 0.25, 3))}
+                          className="flex flex-col items-center p-3 h-auto"
+                        >
+                          <ZoomIn className="w-5 h-5 mb-1" />
+                          <span className="text-xs">Zoom In</span>
+                        </Button>
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="200"
-                      value={editState.brightness}
-                      onChange={(e) => setEditState(prev => ({ ...prev, brightness: Number(e.target.value) }))}
-                      className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
-                    />
-                  </div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium flex items-center">
-                        <Contrast className="w-4 h-4 mr-2 text-blue-500" />
-                        Contrast
-                      </label>
-                      <span className="text-xs text-gray-400">{editState.contrast}%</span>
+                    {/* Quick Actions */}
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-gray-300">Quick Actions</h4>
+                      <div className="flex space-x-2">
+                        <Button variant="outline" size="sm" onClick={() => setEditState(prev => ({ ...prev, rotation: prev.rotation + 90 }))}>
+                          <RotateCw className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setEditState(prev => ({ ...prev, flipHorizontal: !prev.flipHorizontal }))}>
+                          <FlipHorizontal className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setEditState(prev => ({ ...prev, flipVertical: !prev.flipVertical }))}>
+                          <FlipVertical className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setZoom(1)}>
+                          <Move className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="200"
-                      value={editState.contrast}
-                      onChange={(e) => setEditState(prev => ({ ...prev, contrast: Number(e.target.value) }))}
-                      className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
-                    />
-                  </div>
+                  </motion.div>
 
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium flex items-center">
-                        <Droplet className="w-4 h-4 mr-2 text-purple-500" />
-                        Saturation
-                      </label>
-                      <span className="text-xs text-gray-400">{editState.saturation}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="200"
-                      value={editState.saturation}
-                      onChange={(e) => setEditState(prev => ({ ...prev, saturation: Number(e.target.value) }))}
-                      className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
-                    />
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Filters Panel */}
-            {selectedTool === 'filters' && (
-              <motion.div
-                className="space-y-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <h4 className="font-semibold text-white">Filters</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { name: 'Vintage', icon: '🕰️' },
-                    { name: 'B&W', icon: '⚫' },
-                    { name: 'Sepia', icon: '🏜️' },
-                    { name: 'Cool', icon: '❄️' },
-                    { name: 'Warm', icon: '🔥' },
-                    { name: 'Vivid', icon: '🌈' },
-                    { name: 'Dramatic', icon: '🎭' },
-                    { name: 'Soft', icon: '☁️' }
-                  ].map((filter) => (
-                    <Button
-                      key={filter.name}
-                      variant={appliedFilters.includes(filter.name) ? 'default' : 'outline'}
-                      size="sm"
-                      className="flex flex-col items-center p-3 h-auto"
-                      onClick={() => {
-                        setAppliedFilters(prev =>
-                          prev.includes(filter.name)
-                            ? prev.filter(f => f !== filter.name)
-                            : [...prev, filter.name]
-                        );
-                      }}
+                  {/* Enhanced Adjustments */}
+                  {selectedTool === 'adjust' && (
+                    <motion.div
+                      className="space-y-4"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
                     >
-                      <span className="text-lg mb-1">{filter.icon}</span>
-                      <span className="text-xs">{filter.name}</span>
-                    </Button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+                      <h4 className="font-semibold text-white">Adjustments</h4>
 
-            {/* Effects Panel */}
-            {selectedTool === 'effects' && (
-              <motion.div
-                className="space-y-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-              >
-                <h4 className="font-semibold text-white">Effects</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { name: 'Blur', icon: <Wand2 className="w-4 h-4" /> },
-                    { name: 'Sharpen', icon: <Zap className="w-4 h-4" /> },
-                    { name: 'Noise', icon: <Layers className="w-4 h-4" /> },
-                    { name: 'Vignette', icon: <Filter className="w-4 h-4" /> },
-                    { name: 'Glow', icon: <Sparkles className="w-4 h-4" /> },
-                    { name: 'Emboss', icon: <Move className="w-4 h-4" /> }
-                  ].map((effect) => (
-                    <Button
-                      key={effect.name}
-                      variant="outline"
-                      size="sm"
-                      className="flex flex-col items-center p-3 h-auto"
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium flex items-center">
+                              <Sun className="w-4 h-4 mr-2 text-yellow-500" />
+                              Brightness
+                            </label>
+                            <span className="text-xs text-gray-400">{editState.brightness}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="200"
+                            value={editState.brightness}
+                            onChange={(e) => setEditState(prev => ({ ...prev, brightness: Number(e.target.value) }))}
+                            className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium flex items-center">
+                              <Contrast className="w-4 h-4 mr-2 text-blue-500" />
+                              Contrast
+                            </label>
+                            <span className="text-xs text-gray-400">{editState.contrast}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="200"
+                            value={editState.contrast}
+                            onChange={(e) => setEditState(prev => ({ ...prev, contrast: Number(e.target.value) }))}
+                            className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <label className="text-sm font-medium flex items-center">
+                              <Droplet className="w-4 h-4 mr-2 text-purple-500" />
+                              Saturation
+                            </label>
+                            <span className="text-xs text-gray-400">{editState.saturation}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="200"
+                            value={editState.saturation}
+                            onChange={(e) => setEditState(prev => ({ ...prev, saturation: Number(e.target.value) }))}
+                            className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                          />
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Filters Panel */}
+                  {selectedTool === 'filters' && (
+                    <motion.div
+                      className="space-y-4"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
                     >
-                      <div className="mb-1">{effect.icon}</div>
-                      <span className="text-xs">{effect.name}</span>
-                    </Button>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+                      <h4 className="font-semibold text-white">Filters</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { name: 'Vintage', icon: '🕰️' },
+                          { name: 'B&W', icon: '⚫' },
+                          { name: 'Sepia', icon: '🏜️' },
+                          { name: 'Cool', icon: '❄️' },
+                          { name: 'Warm', icon: '🔥' },
+                          { name: 'Vivid', icon: '🌈' },
+                          { name: 'Dramatic', icon: '🎭' },
+                          { name: 'Soft', icon: '☁️' }
+                        ].map((filter) => (
+                          <Button
+                            key={filter.name}
+                            variant={appliedFilters.includes(filter.name) ? 'default' : 'outline'}
+                            size="sm"
+                            className="flex flex-col items-center p-3 h-auto"
+                            onClick={() => {
+                              setAppliedFilters(prev =>
+                                prev.includes(filter.name)
+                                  ? prev.filter(f => f !== filter.name)
+                                  : [...prev, filter.name]
+                              );
+                            }}
+                          >
+                            <span className="text-lg mb-1">{filter.icon}</span>
+                            <span className="text-xs">{filter.name}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
 
-            {/* Text Overlays */}
-            {editState.textOverlays.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-medium text-white">Text Overlays</h4>
-                {editState.textOverlays.map(overlay => (
-                  <div key={overlay.id} className="border border-gray-600 rounded p-2 space-y-2 bg-gray-700">
-                    <textarea
-                      value={overlay.text}
-                      onChange={(e) => updateTextOverlay(overlay.id, { text: e.target.value })}
-                      className="w-full text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white resize-y min-h-[60px] whitespace-pre overflow-x-auto"
-                      rows={3}
-                    />
+                  {/* Effects Panel */}
+                  {selectedTool === 'effects' && (
+                    <motion.div
+                      className="space-y-4"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <h4 className="font-semibold text-white">Effects</h4>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[
+                          { name: 'Blur', icon: <Wand2 className="w-4 h-4" /> },
+                          { name: 'Sharpen', icon: <Zap className="w-4 h-4" /> },
+                          { name: 'Noise', icon: <Layers className="w-4 h-4" /> },
+                          { name: 'Vignette', icon: <Filter className="w-4 h-4" /> },
+                          { name: 'Glow', icon: <Sparkles className="w-4 h-4" /> },
+                          { name: 'Emboss', icon: <Move className="w-4 h-4" /> }
+                        ].map((effect) => (
+                          <Button
+                            key={effect.name}
+                            variant="outline"
+                            size="sm"
+                            className="flex flex-col items-center p-3 h-auto"
+                          >
+                            <div className="mb-1">{effect.icon}</div>
+                            <span className="text-xs">{effect.name}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* Text Overlays */}
+                  {editState.textOverlays.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-white">Text Overlays</h4>
+                      {editState.textOverlays.map(overlay => (
+                        <div key={overlay.id} className="border border-gray-600 rounded p-2 space-y-2 bg-gray-700">
+                          <textarea
+                            value={overlay.text}
+                            onChange={(e) => updateTextOverlay(overlay.id, { text: e.target.value })}
+                            className="w-full text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white resize-y min-h-[60px] whitespace-pre overflow-x-auto"
+                            rows={3}
+                          />
+                          <div className="flex space-x-2">
+                            <select
+                              value={overlay.fontWeight}
+                              onChange={(e) => updateTextOverlay(overlay.id, { fontWeight: e.target.value })}
+                              className="w-16 text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white"
+                            >
+                              <option value="400">Regular</option>
+                              <option value="700">Bold</option>
+                            </select>
+                            <input
+                              type="number"
+                              value={overlay.fontSize}
+                              onChange={(e) => updateTextOverlay(overlay.id, { fontSize: Number(e.target.value) })}
+                              className="w-16 text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white"
+                              min="8"
+                              max="72"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removeTextOverlay(overlay.id)}
+                              className="text-gray-300 hover:text-white hover:bg-gray-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-gray-300">Fill Color</label>
+                              <input
+                                type="color"
+                                value={overlay.color}
+                                onChange={(e) => updateTextOverlay(overlay.id, { color: e.target.value })}
+                                className="w-8 h-8 rounded border border-gray-500"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <label className="text-sm font-medium text-gray-300">Outline Color</label>
+                              <input
+                                type="color"
+                                value={overlay.outlineColor}
+                                onChange={(e) => updateTextOverlay(overlay.id, { outlineColor: e.target.value })}
+                                className="w-8 h-8 rounded border border-gray-500"
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-gray-300">Outline Width</label>
+                                <span className="text-xs text-gray-400">{overlay.outlineWidth}px</span>
+                              </div>
+                              <input
+                                type="range"
+                                min="0"
+                                max="50"
+                                value={overlay.outlineWidth}
+                                onChange={(e) => updateTextOverlay(overlay.id, { outlineWidth: Number(e.target.value) })}
+                                className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Transform Tools */}
+                  <div className="space-y-2">
+                    <h4 className="font-medium">Transform</h4>
                     <div className="flex space-x-2">
-                      <select
-                        value={overlay.fontWeight}
-                        onChange={(e) => updateTextOverlay(overlay.id, { fontWeight: e.target.value })}
-                        className="w-16 text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white"
-                      >
-                        <option value="400">Regular</option>
-                        <option value="700">Bold</option>
-                      </select>
-                      <input
-                        type="number"
-                        value={overlay.fontSize}
-                        onChange={(e) => updateTextOverlay(overlay.id, { fontSize: Number(e.target.value) })}
-                        className="w-16 text-sm border border-gray-500 rounded px-2 py-1 bg-gray-800 text-white"
-                        min="8"
-                        max="72"
-                      />
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => removeTextOverlay(overlay.id)}
-                        className="text-gray-300 hover:text-white hover:bg-gray-600"
+                        onClick={() => setEditState(prev => ({ ...prev, rotation: prev.rotation + 90 }))}
                       >
-                        <X className="w-3 h-3" />
+                        <RotateCw className="w-4 h-4" />
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditState(prev => ({ ...prev, flipHorizontal: !prev.flipHorizontal }))}
+                      >
+                        <FlipHorizontal className="w-4 h-4" />
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setEditState(prev => ({ ...prev, flipVertical: !prev.flipVertical }))}
+                      >
+                        <FlipVertical className="w-4 h-4" />
                       </Button>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-300">Fill Color</label>
-                        <input
-                          type="color"
-                          value={overlay.color}
-                          onChange={(e) => updateTextOverlay(overlay.id, { color: e.target.value })}
-                          className="w-8 h-8 rounded border border-gray-500"
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium text-gray-300">Outline Color</label>
-                        <input
-                          type="color"
-                          value={overlay.outlineColor}
-                          onChange={(e) => updateTextOverlay(overlay.id, { outlineColor: e.target.value })}
-                          className="w-8 h-8 rounded border border-gray-500"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-sm font-medium text-gray-300">Outline Width</label>
-                          <span className="text-xs text-gray-400">{overlay.outlineWidth}px</span>
-                        </div>
-                        <input
-                          type="range"
-                          min="0"
-                          max="50"
-                          value={overlay.outlineWidth}
-                          onChange={(e) => updateTextOverlay(overlay.id, { outlineWidth: Number(e.target.value) })}
-                          className="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer slider"
-                        />
-                      </div>
-                    </div>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {/* Transform Tools */}
-            <div className="space-y-2">
-              <h4 className="font-medium">Transform</h4>
-              <div className="flex space-x-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditState(prev => ({ ...prev, rotation: prev.rotation + 90 }))}
-                >
-                  <RotateCw className="w-4 h-4" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditState(prev => ({ ...prev, flipHorizontal: !prev.flipHorizontal }))}
-                >
-                  <FlipHorizontal className="w-4 h-4" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditState(prev => ({ ...prev, flipVertical: !prev.flipVertical }))}
-                >
-                  <FlipVertical className="w-4 h-4" />
-                </Button>
-              </div>
+                </>
+              )}
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end space-x-2 p-4 border-t">
-          <Button variant="outline" onClick={onCancel}>
+        <div className="flex items-center justify-end space-x-2 p-4 border-t border-gray-700">
+          <Button variant="outline" onClick={onCancel} className="text-gray-400 hover:text-white hover:bg-gray-800">
             Cancel
           </Button>
           <Button onClick={handleSave}>

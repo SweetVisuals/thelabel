@@ -19,6 +19,8 @@ import {
   List,
   LayoutGrid,
   ArrowUpDown,
+  Zap,
+  Unlink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +42,9 @@ import { imageService } from '../../lib/imageService';
 import { slideshowService } from '../../lib/slideshowService';
 import { toast } from 'sonner';
 import { supabase } from '../../lib/supabase';
+import { QuickModeDialog } from './QuickModeDialog';
+import { postizAPI, PostizProfile } from '../../lib/postiz';
+import { useAuth } from '../../hooks/useAuth';
 
 interface FileBrowserProps {
   images: UploadedImage[];
@@ -87,8 +92,9 @@ export function FileBrowser({
   onSlideshowLoad,
   onSlideshowUnload,
   onCreateFromTemplate,
-  onBulkPost
+  onBulkPost,
 }: FileBrowserProps) {
+  const { user } = useAuth();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [searchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'name' | 'size'>('date');
@@ -118,6 +124,19 @@ export function FileBrowser({
   const [showRenameDialog, setShowRenameDialog] = useState(false);
   const [renameItemName, setRenameItemName] = useState('');
   const [renameItemId, setRenameItemId] = useState('');
+
+  // Accounts Tab State
+  const [activeTab, setActiveTab] = useState<'files' | 'accounts' | 'quickmode'>('files');
+  const [tikTokProfiles, setTikTokProfiles] = useState<PostizProfile[]>([]);
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false);
+
+  // Quick Mode State
+  const [quickModeFolder, setQuickModeFolder] = useState<{ id: string; name: string; accountId: string } | null>(null);
+
+  // Assign Folder Dialog State
+  const [showAssignFolderDialog, setShowAssignFolderDialog] = useState(false);
+  const [folderToAssign, setFolderToAssign] = useState<{ id: string; name: string } | null>(null);
+  const [assignTargetAccountId, setAssignTargetAccountId] = useState('');
 
   // Multi-select state
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(true);
@@ -393,7 +412,7 @@ export function FileBrowser({
     if ((item.type === 'file' && selectedImages.length > 1) || (item.type === 'slideshow' && selectedSlideshows.length > 1)) {
       const count = item.type === 'file' ? selectedImages.length : selectedSlideshows.length;
       const dragImage = document.createElement('div');
-      dragImage.className = 'bg-primary text-white px-3 py-1 rounded-lg shadow-xl font-medium text-sm';
+      dragImage.className = 'bg-primary text-white px-3 py-1 rounded-none shadow-xl font-medium text-sm';
       dragImage.textContent = `Moving ${count} items`;
       document.body.appendChild(dragImage);
       e.dataTransfer.setDragImage(dragImage, 0, 0);
@@ -714,7 +733,11 @@ export function FileBrowser({
           ? selectedSlideshows.filter(id => id !== item.id)
           : [...selectedSlideshows, item.id];
         onSlideshowSelectionChange(newSelection);
-        if (!isSelected) setLastSelectedId(item.id);
+        if (!isSelected) {
+          setLastSelectedId(item.id);
+          // NEW: Load the slideshow even in multi-select mode if it was just selected
+          if (item.slideshow) onSlideshowLoad(item.slideshow);
+        }
       } else if (item.type === 'folder') {
         const isSelected = selectedFolders.includes(item.id);
         const newSelection = isSelected
@@ -855,22 +878,53 @@ export function FileBrowser({
     }
   };
 
+  useEffect(() => {
+    async function fetchProfiles() {
+      setIsLoadingProfiles(true);
+      try {
+        const profiles = await postizAPI.getProfiles();
+        const tiktok = profiles.filter((p: any) => p.provider === 'tiktok');
+        setTikTokProfiles(tiktok);
+      } catch (e) {
+        console.error('Failed to load TikTok profiles', e);
+      } finally {
+        setIsLoadingProfiles(false);
+      }
+    }
+    fetchProfiles();
+  }, [activeTab]);
+
+  const handleAssignFolder = async () => {
+    if (!folderToAssign || !assignTargetAccountId) return;
+    try {
+      const folder = folders.find(f => f.id === folderToAssign.id);
+      await imageService.assignFolderToAccount(folderToAssign.id, assignTargetAccountId, folder?.account_ids || []);
+      toast.success('Folder assigned to account successfully');
+      setShowAssignFolderDialog(false);
+      loadData(true);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to assign folder');
+    }
+  };
+
   return (
     <div
       className="flex flex-col h-full bg-black/20 backdrop-blur-sm relative"
-      onContextMenu={(e) => handleContextMenu(e, 'background')}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      onContextMenu={(e) => {
+        if (activeTab === 'files') handleContextMenu(e, 'background');
+      }}
+      onDragEnter={activeTab === 'files' ? handleDragEnter : undefined}
+      onDragLeave={activeTab === 'files' ? handleDragLeave : undefined}
+      onDragOver={activeTab === 'files' ? handleDragOver : undefined}
+      onDrop={activeTab === 'files' ? handleDrop : undefined}
       onDoubleClick={(e) => {
-        // Prevent if clicking on an item (handled by item's handlers usually, but double check target)
-        if (e.target === e.currentTarget) {
+        if (activeTab === 'files' && e.target === e.currentTarget) {
           setShowNewFolderDialog(true);
         }
       }}
       onTouchEnd={(e) => {
-        if (e.target === e.currentTarget) {
+        if (activeTab === 'files' && e.target === e.currentTarget) {
           const now = Date.now();
           if (now - lastTapRef.current < 300) {
             setShowNewFolderDialog(true);
@@ -879,437 +933,768 @@ export function FileBrowser({
         }
       }}
     >
-      {/* Drag Overlay */}
-      <AnimatePresence>
-        {isDragging && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center border-2 border-dashed border-primary/50 m-4 rounded-3xl"
-          >
-            <motion.div
-              initial={{ scale: 0.8, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.8, y: 20 }}
-              className="flex flex-col items-center gap-4 text-white"
-            >
-              <div className="w-24 h-24 rounded-full bg-primary/20 flex items-center justify-center animate-pulse">
-                <UploadCloud className="w-12 h-12 text-primary" />
-              </div>
-              <h3 className="text-2xl font-bold">Drop files to upload</h3>
-              <p className="text-white/60">Upload to {currentFolderId ? 'current folder' : 'root directory'}</p>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Tab Navigation */}
+      <div className="flex border-b border-white/10 px-4 shrink-0">
+        <button
+          className={cn(
+            "px-6 py-4 text-sm font-medium transition-all relative",
+            activeTab === 'files' ? "text-primary" : "text-white/60 hover:text-white"
+          )}
+          onClick={() => setActiveTab('files')}
+        >
+          Files
+          {activeTab === 'files' && (
+            <motion.div layoutId="activeTab" className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-primary" />
+          )}
+        </button>
+        <button
+          className={cn(
+            "px-6 py-4 text-sm font-medium transition-all relative flex items-center gap-2",
+            activeTab === 'accounts' ? "text-primary" : "text-white/60 hover:text-white"
+          )}
+          onClick={() => setActiveTab('accounts')}
+        >
+          {isLoadingProfiles && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+          Accounts
+          {activeTab === 'accounts' && (
+            <motion.div layoutId="activeTab" className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-primary" />
+          )}
+        </button>
+        <button
+          className={cn(
+            "px-6 py-4 text-sm font-medium transition-all relative flex items-center gap-2",
+            activeTab === 'quickmode' ? "text-primary" : "text-white/60 hover:text-white"
+          )}
+          onClick={() => setActiveTab('quickmode')}
+        >
+          <Zap className="w-3.5 h-3.5" />
+          Quick Mode
+          {activeTab === 'quickmode' && (
+            <motion.div layoutId="activeTab" className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-primary" />
+          )}
+        </button>
+      </div>
 
-      {/* Upload Progress Bar */}
-      <AnimatePresence>
-        {uploadProgress !== null && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="absolute top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4"
-          >
-            <div className="bg-black/90 backdrop-blur-xl border border-white/10 p-4 rounded-xl shadow-2xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-white">Uploading...</span>
-                <span className="text-xs text-white/60">{Math.round(uploadProgress)}%</span>
-              </div>
-              <Progress value={uploadProgress} className="h-2" />
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className="flex flex-col gap-2 bg-black/40 backdrop-blur-xl border-b border-white/10 p-2 z-20">
-        <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
-          {/* Left: Select All & Multi-Select Group */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={selectAll}
-              className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
-            >
-              <CheckSquare className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
-              <span className="text-xs font-medium text-white/80 group-hover:text-white">Select All</span>
-            </Button>
-
-            <Button
-              variant={isMultiSelectMode ? "default" : "outline"}
-              onClick={() => setIsMultiSelectMode(!isMultiSelectMode)}
-              className={cn(
-                "h-8 px-3 transition-all duration-300 rounded-lg gap-2 group",
-                isMultiSelectMode
-                  ? "bg-primary border-primary text-white hover:bg-primary/90"
-                  : "bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary"
-              )}
-              title="Toggle click-to-select mode"
-            >
-              <MousePointer2 className={cn("w-3.5 h-3.5 transition-colors", isMultiSelectMode ? "text-white" : "text-white/60 group-hover:text-primary")} />
-              <span className={cn("text-xs font-medium", isMultiSelectMode ? "text-white" : "text-white/80 group-hover:text-white")}>
-                {isMultiSelectMode ? 'Multi-Select On' : 'Multi-Select'}
-              </span>
-            </Button>
-          </div>
-
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              className="h-8 w-8 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg"
-              title={viewMode === 'grid' ? "Switch to List View" : "Switch to Grid View"}
-            >
-              {viewMode === 'grid' ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
-            </Button>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
-                >
-                  <ArrowUpDown className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
-                  <span className="text-xs font-medium text-white/80 group-hover:text-white hidden sm:inline">Sort</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuLabel>Sort By</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-                  <DropdownMenuRadioItem value="date">Date</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="size">Size</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuLabel>Order</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuRadioGroup value={sortOrder} onValueChange={(v) => setSortOrder(v as any)}>
-                  <DropdownMenuRadioItem value="desc">Descending</DropdownMenuRadioItem>
-                  <DropdownMenuRadioItem value="asc">Ascending</DropdownMenuRadioItem>
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            {/* Delete Button */}
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-hidden relative flex flex-col">
+        <QuickModeDialog
+          isOpen={!!quickModeFolder}
+          onClose={() => setQuickModeFolder(null)}
+          folderId={quickModeFolder?.id || ''}
+          folderName={quickModeFolder?.name || ''}
+          accountId={quickModeFolder?.accountId || ''}
+          userId={user?.id || ''}
+        />
+        {activeTab === 'files' && (
+          <div className="flex flex-col h-full w-full relative">
+            {/* Drag Overlay */}
             <AnimatePresence>
-              {(selectedImages.length > 0 || selectedSlideshows.length > 0) && (
+              {isDragging && (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.9, width: 0 }}
-                  animate={{ opacity: 1, scale: 1, width: 'auto' }}
-                  exit={{ opacity: 0, scale: 0.9, width: 0 }}
-                  className="overflow-hidden"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center border-dashed m-4 rounded-none"
                 >
-                  <Button
-                    variant="destructive"
-                    onClick={removeSelected}
-                    className="h-8 px-3 bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40 text-red-500 hover:text-red-400 transition-all duration-300 rounded-lg gap-2 whitespace-nowrap"
+                  <motion.div
+                    initial={{ scale: 0.8, y: 20 }}
+                    animate={{ scale: 1, y: 0 }}
+                    exit={{ scale: 0.8, y: 20 }}
+                    className="flex flex-col items-center gap-4 text-white"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span className="text-xs font-medium">Delete ({selectedImages.length + selectedSlideshows.length + selectedFolders.length})</span>
-                  </Button>
+                    <div className="w-24 h-24 rounded-none bg-primary/20 flex items-center justify-center animate-pulse">
+                      <UploadCloud className="w-12 h-12 text-primary" />
+                    </div>
+                    <h3 className="text-2xl font-bold">Drop files to upload</h3>
+                    <p className="text-white/60">Upload to {currentFolderId ? 'current folder' : 'root directory'}</p>
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <Button
-              variant="outline"
-              onClick={onCreateFromTemplate}
-              className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
-            >
-              <LayoutTemplate className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
-              <span className="text-xs font-medium text-white/80 group-hover:text-white">Template</span>
-            </Button>
+            {/* Upload Progress Bar */}
+            <AnimatePresence>
+              {uploadProgress !== null && (
+                <motion.div
+                  initial={{ opacity: 0, y: -20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className="absolute top-20 left-1/2 -translate-x-1/2 z-50 w-full max-w-md px-4"
+                >
+                  <div className="bg-black/90 backdrop-blur-xl  p-4 rounded-none shadow-2xl">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-white">Uploading...</span>
+                      <span className="text-xs text-white/60">{Math.round(uploadProgress)}%</span>
+                    </div>
+                    <Progress value={uploadProgress} className="h-2" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            <Button
-              variant="outline"
-              onClick={onBulkPost}
-              className="h-8 px-3 bg-white/5 border-white/10 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-lg gap-2 group"
-            >
-              <Send className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
-              <span className="text-xs font-medium text-white/80 group-hover:text-white">Bulk Post</span>
-            </Button>
+            <div className="flex flex-col gap-2 bg-black/40 backdrop-blur-xl  p-2 z-20">
+              <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
+                {/* Left: Select All & Multi-Select Group */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={selectAll}
+                    className="h-8 px-3 bg-white/5 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-none gap-2 group"
+                  >
+                    <CheckSquare className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+                    <span className="text-xs font-medium text-white/80 group-hover:text-white">Select All</span>
+                  </Button>
 
-            <div className="relative hidden sm:block">
-              <input
-                type="file"
-                multiple
-                accept="image/*,.slideshow"
-                onChange={handleFileSelect}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-              />
-              <Button className="h-8 px-4 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 border-0 rounded-lg gap-2 transition-all duration-300 hover:scale-105 active:scale-95">
-                <ImagePlus className="w-3.5 h-3.5" />
-                <span className="text-xs font-medium">Upload</span>
+                  <Button
+                    variant={isMultiSelectMode ? "default" : "outline"}
+                    onClick={() => setIsMultiSelectMode(!isMultiSelectMode)}
+                    className={cn(
+                      "h-8 px-3 transition-all duration-300 rounded-none gap-2 group",
+                      isMultiSelectMode
+                        ? "bg-primary border-primary text-white hover:bg-primary/90"
+                        : "bg-white/5 hover:bg-white/10 hover:border-primary/30 hover:text-primary"
+                    )}
+                    title="Toggle click-to-select mode"
+                  >
+                    <MousePointer2 className={cn("w-3.5 h-3.5 transition-colors", isMultiSelectMode ? "text-white" : "text-white/60 group-hover:text-primary")} />
+                    <span className={cn("text-xs font-medium", isMultiSelectMode ? "text-white" : "text-white/80 group-hover:text-white")}>
+                      {isMultiSelectMode ? 'Multi-Select On' : 'Multi-Select'}
+                    </span>
+                  </Button>
+                </div>
+
+                {/* Right: Actions */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+                    className="h-8 w-8 bg-white/5 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-none"
+                    title={viewMode === 'grid' ? "Switch to List View" : "Switch to Grid View"}
+                  >
+                    {viewMode === 'grid' ? <List className="w-3.5 h-3.5" /> : <LayoutGrid className="w-3.5 h-3.5" />}
+                  </Button>
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="h-8 px-3 bg-white/5 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-none gap-2 group"
+                      >
+                        <ArrowUpDown className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+                        <span className="text-xs font-medium text-white/80 group-hover:text-white hidden sm:inline">Sort</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuLabel>Sort By</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuRadioGroup value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                        <DropdownMenuRadioItem value="date">Date</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="size">Size</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel>Order</DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuRadioGroup value={sortOrder} onValueChange={(v) => setSortOrder(v as any)}>
+                        <DropdownMenuRadioItem value="desc">Descending</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="asc">Ascending</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  {/* Delete Button */}
+                  <AnimatePresence>
+                    {(selectedImages.length > 0 || selectedSlideshows.length > 0) && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9, width: 0 }}
+                        animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                        exit={{ opacity: 0, scale: 0.9, width: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <Button
+                          variant="destructive"
+                          onClick={removeSelected}
+                          className="h-8 px-3 bg-red-500/10 hover:bg-red-500/20 hover:border-0 text-red-500 hover:text-red-400 transition-all duration-300 rounded-none gap-2 whitespace-nowrap"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="text-xs font-medium">Delete ({selectedImages.length + selectedSlideshows.length + selectedFolders.length})</span>
+                        </Button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <Button
+                    variant="outline"
+                    onClick={onCreateFromTemplate}
+                    className="h-8 px-3 bg-white/5 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-none gap-2 group"
+                  >
+                    <LayoutTemplate className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+                    <span className="text-xs font-medium text-white/80 group-hover:text-white">Template</span>
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={onBulkPost}
+                    className="h-8 px-3 bg-white/5 hover:bg-white/10 hover:border-primary/30 hover:text-primary transition-all duration-300 rounded-none gap-2 group"
+                  >
+                    <Send className="w-3.5 h-3.5 text-white/60 group-hover:text-primary transition-colors" />
+                    <span className="text-xs font-medium text-white/80 group-hover:text-white">Bulk Post</span>
+                  </Button>
+
+                  <div className="relative hidden sm:block">
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*,.slideshow"
+                      onChange={handleFileSelect}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <Button className="h-8 px-4 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 border-0 rounded-none gap-2 transition-all duration-300 hover:scale-105 active:scale-95">
+                      <ImagePlus className="w-3.5 h-3.5" />
+                      <span className="text-xs font-medium">Upload</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Mobile Upload FAB */}
+            <div className="absolute bottom-6 right-6 z-50 sm:hidden">
+              <div className="relative group">
+                <div className="absolute inset-0 bg-primary/20 blur-xl rounded-none opacity-50 group-hover:opacity-100 transition-opacity" />
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*,.slideshow"
+                  onChange={handleFileSelect}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                />
+                <Button className="h-14 w-14 rounded-none bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/20 border-0 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95">
+                  <ImagePlus className="w-6 h-6" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Content Area */}
+            <div
+              className="flex-1 p-4 overflow-auto min-h-0"
+              onClick={() => {
+                onSelectionChange([]);
+                onSlideshowSelectionChange([]);
+                onFolderSelectionChange([]);
+              }}
+              onDoubleClick={(e) => {
+                if (e.target === e.currentTarget) {
+                  setShowNewFolderDialog(true);
+                }
+              }}
+              onTouchEnd={(e) => {
+                if (e.target === e.currentTarget) {
+                  const now = Date.now();
+                  if (now - lastTapRef.current < 300) {
+                    setShowNewFolderDialog(true);
+                  }
+                  lastTapRef.current = now;
+                }
+              }}
+            >
+              {isLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <div className="animate-spin rounded-none h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : filteredAndSortedItems.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground">
+                  <div className="w-20 h-20 rounded-none bg-white/5 flex items-center justify-center mb-6  shadow-xl">
+                    <ImagePlus className="w-10 h-10 opacity-30" />
+                  </div>
+                  <p className="text-lg font-medium text-white/60">No files found</p>
+                  <p className="text-sm text-white/30 mt-1">Upload images to get started</p>
+                </div>
+              ) : (
+                <div className={cn(
+                  "grid gap-4 transition-all duration-300",
+                  viewMode === 'grid' ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-1"
+                )}>
+                  <AnimatePresence>
+                    {filteredAndSortedItems.map(item => (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.15 }}
+                        className={cn(
+                          "group relative rounded-none transition-all duration-150 cursor-pointer overflow-hidden border border-transparent",
+                          viewMode === 'list' ? "flex items-center p-3 gap-4 border-b border-white/5" : "aspect-[4/3] flex flex-col",
+                          // Specific Styles based on Type
+                          item.type === 'folder' && (
+                            selectedFolders.includes(item.id)
+                              ? "bg-white/10 ring-1 ring-white"
+                              : "bg-white/5 hover:bg-white/10"
+                          ),
+                          item.type === 'slideshow' && (
+                            (item.slideshow?.lastUploadStatus === 'failed') ? "bg-white/10 hover:bg-white/15" :
+                              (item.slideshow?.uploadCount || 0) > 1 ? "bg-white/5 hover:bg-white/15" :
+                                (item.slideshow?.uploadCount === 1) ? "bg-white/5 hover:bg-white/15" :
+                                  "bg-white/5 hover:bg-white/10"
+                          ),
+                          item.type === 'file' && "bg-white/5 hover:bg-white/10",
+
+                          // Selection Styles
+                          (item.type === 'file' && selectedImages.includes(item.id)) && "bg-white/20 ring-1 ring-white",
+                          (item.type === 'slideshow' && selectedSlideshows.includes(item.id)) && "bg-white/20 ring-1 ring-white",
+                          // Drop Target Styles
+                          (item.id === 'parent-directory' || item.type === 'folder') && "hover:bg-white/15"
+                        )}
+                        draggable={item.id !== 'parent-directory'}
+                        onDragStart={(e: any) => handleItemDragStart(e, item)}
+                        onDragOver={(e: React.DragEvent<HTMLDivElement>) => {
+                          if (item.type === 'folder' || item.id === 'parent-directory') {
+                            e.preventDefault(); // Allow drop
+                            e.currentTarget.classList.add('ring-1', 'ring-white', 'bg-white/20');
+                          }
+                        }}
+                        onDragLeave={(e) => {
+                          if (item.type === 'folder' || item.id === 'parent-directory') {
+                            e.currentTarget.classList.remove('ring-1', 'ring-white', 'bg-white/20');
+                          }
+                        }}
+                        onDrop={(e) => {
+                          e.currentTarget.classList.remove('ring-1', 'ring-white', 'bg-white/20');
+                          if (item.id === 'parent-directory') {
+                            handleParentDrop(e);
+                          } else if (item.type === 'folder') {
+                            handleFolderDrop(e, item.id);
+                          }
+                        }}
+                        onDoubleClick={() => {
+                          if (item.type === 'folder' && item.id !== 'parent-directory') {
+                            onCurrentFolderIdChange(item.id);
+                          }
+                        }}
+                        onClick={(e) => handleItemClick(item, e)}
+                        onContextMenu={(e) => handleContextMenu(e, item.type, item.id, item.name)}
+                        onTouchStart={(e) => {
+                          const touch = e.touches[0];
+                          const clientX = touch.clientX;
+                          const clientY = touch.clientY;
+                          longPressTimer.current = setTimeout(() => {
+                            handleContextMenu({
+                              preventDefault: () => { },
+                              stopPropagation: () => { },
+                              clientX,
+                              clientY,
+                            } as React.MouseEvent, item.type, item.id, item.name);
+                          }, 500);
+                        }}
+                        onTouchEnd={() => {
+                          if (longPressTimer.current) {
+                            clearTimeout(longPressTimer.current);
+                            longPressTimer.current = null;
+                          }
+                        }}
+                        onTouchMove={() => {
+                          if (longPressTimer.current) {
+                            clearTimeout(longPressTimer.current);
+                            longPressTimer.current = null;
+                          }
+                        }}
+                      >
+                        {item.type === 'folder' ? (
+                          <>
+                            <div className={cn(
+                              "flex items-center justify-center text-white/50 group-hover:text-white transition-colors",
+                              viewMode === 'list' ? "w-10 h-10 rounded-none bg-white/5" : "flex-1"
+                            )}>
+                              {item.id === 'parent-directory' ? (
+                                <CornerLeftUp className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
+                              ) : (
+                                <FolderIcon strokeWidth={1} className={cn(viewMode === 'list' ? "w-5 h-5" : "w-14 h-14")} />
+                              )}
+                            </div>
+                            <div className={cn(
+                              "flex flex-col",
+                              viewMode === 'grid' && "p-3 bg-white/5 border-t border-white/10 group-hover:bg-white/10 transition-colors"
+                            )}>
+                              <span className="font-mono text-xs truncate text-white/80 group-hover:text-white uppercase tracking-wider">{item.name}</span>
+                              <span className="text-[10px] text-white/40 font-mono mt-0.5">{item.itemCount} ITEMS</span>
+                            </div>
+                          </>
+                        ) : item.type === 'slideshow' ? (
+                          <>
+                            <div className={cn(
+                              "flex items-center justify-center transition-colors",
+                              (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-400 group-hover:text-red-300" :
+                                (item.slideshow?.uploadCount || 0) > 1 ? "text-white/70 group-hover:text-white" :
+                                  (item.slideshow?.uploadCount === 1) ? "text-white/70 group-hover:text-white" :
+                                    "text-white/50 group-hover:text-white",
+                              viewMode === 'list' ? (
+                                (item.slideshow?.lastUploadStatus === 'failed') ? "w-10 h-10 bg-red-500/20 rounded-none" :
+                                  "w-10 h-10 bg-white/5 rounded-none"
+                              ) : "flex-1"
+                            )}>
+                              <Film strokeWidth={1} className={cn(viewMode === 'list' ? "w-5 h-5" : "w-14 h-14")} />
+                            </div>
+                            <div className={cn(
+                              "flex flex-col",
+                              viewMode === 'grid' && (
+                                (item.slideshow?.lastUploadStatus === 'failed') ? "p-3 bg-red-500/5 backdrop-blur-sm border-red-500/10 border-t" :
+                                  "p-3 bg-white/5 backdrop-blur-sm border-white/10 border-t group-hover:bg-white/10 transition-colors"
+                              )
+                            )}>
+                              <span className={cn(
+                                "font-mono text-xs truncate group-hover:text-white uppercase tracking-wider",
+                                (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-200" :
+                                  "text-white/80"
+                              )}>{item.name}</span>
+                              <span className={cn(
+                                "text-[10px] font-mono mt-0.5",
+                                (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-200/50" :
+                                  "text-white/40"
+                              )}>{item.itemCount} SLIDES</span>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className={cn(
+                              "relative overflow-hidden",
+                              viewMode === 'list' ? "w-12 h-12 rounded-none shrink-0" : "w-full h-full"
+                            )}>
+                              <img
+                                src={item.image?.url}
+                                alt={item.name}
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
+
+                              {/* Selection Indicator */}
+                              <div className={cn(
+                                "absolute top-2 right-2 w-5 h-5 rounded-none border-white/50 transition-all duration-200 flex items-center justify-center",
+                                selectedImages.includes(item.id) ? "bg-white border-white scale-100" : "scale-0 group-hover:scale-100 bg-black/50"
+                              )}>
+                                {selectedImages.includes(item.id) && <div className="w-2 h-2 bg-black rounded-none" />}
+                              </div>
+                            </div>
+
+                            {viewMode === 'grid' && (
+                              <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                <p className="text-xs font-medium text-white truncate">{item.name}</p>
+                                <p className="text-[10px] text-white/60">{formatFileSize(item.size || 0)}</p>
+                              </div>
+                            )}
+
+                            {viewMode === 'list' && (
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-white/90 truncate">{item.name}</p>
+                                <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                                  <span>{formatFileSize(item.size || 0)}</span>
+                                  <span>•</span>
+                                  <span>{format(new Date(), 'MMM d, yyyy')}</span>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ACCOUNTS VIEW START */}
+        {activeTab === 'accounts' && (
+          <div className="flex-1 overflow-auto p-4 flex flex-col gap-8 min-h-0">
+            {isLoadingProfiles ? (
+              <div className="flex items-center justify-center p-12">
+                <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : tikTokProfiles.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-12 text-center border rounded-none border-dashed border-white/10 bg-black/20">
+                <div className="w-16 h-16 rounded-none bg-white/5 flex items-center justify-center mb-4">
+                  <Film className="w-8 h-8 text-white/40" />
+                </div>
+                <h3 className="text-lg font-medium text-white mb-2">No Connected Accounts</h3>
+                <p className="text-sm text-white/60 max-w-md">
+                  Connect a TikTok account in the Settings to start organizing folders by account.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {tikTokProfiles.map(profile => {
+                  const accountFolders = folders.filter(f => f.account_ids?.includes(profile.id));
+
+                  return (
+                    <div key={profile.id} className="bg-black/40 border-transparent rounded-sm overflow-hidden flex flex-col h-full">
+                      {/* Account Header */}
+                      <div className="flex items-center gap-3 p-4 border-b border-white/10 bg-white/5 pb-3">
+                        {profile.avatar ? (
+                          <img src={profile.avatar} alt={profile.displayName} className="w-10 h-10 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                            {profile.displayName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <h4 className="text-sm font-medium text-white line-clamp-2 leading-tight" title={profile.displayName}>{profile.displayName}</h4>
+                          <p className="text-xs text-white/50 truncate mt-0.5">TikTok Account</p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="w-8 h-8 text-white/60 hover:text-white"
+                          onClick={() => {
+                            setAssignTargetAccountId(profile.id);
+                            setShowAssignFolderDialog(true);
+                          }}
+                          title="Assign existing folder"
+                        >
+                          <FolderPlus className="w-4 h-4" />
+                        </Button>
+                      </div>
+
+                      {/* Account Folders */}
+                      <div className="p-3 flex-1 overflow-y-auto">
+                        {accountFolders.length === 0 ? (
+                          <div className="h-full min-h-[100px] flex flex-col items-center justify-center text-center p-4">
+                            <p className="text-xs text-white/40 mb-2">No folders assigned</p>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-7 text-xs bg-white/5 border-transparent hover:bg-white/10"
+                              onClick={() => {
+                                setAssignTargetAccountId(profile.id);
+                                setShowAssignFolderDialog(true);
+                              }}
+                            >
+                              Assign Folder
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-2">
+                            {accountFolders.map(folder => (
+                              <div
+                                key={folder.id}
+                                className="group flex items-center gap-3 p-2 rounded-sm hover:bg-white/5 transition-colors cursor-pointer border border-transparent hover:border-white/10"
+                                onClick={() => {
+                                  onCurrentFolderIdChange(folder.id);
+                                  setActiveTab('files');
+                                }}
+                              >
+                                <div className="w-8 h-8 rounded-sm bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                                  <FolderIcon className="w-4 h-4" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-blue-100 truncate group-hover:text-white transition-colors">{folder.name}</p>
+                                  <p className="text-[10px] text-white/40">{folder.images?.length || 0} items</p>
+                                </div>
+
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity text-primary hover:text-primary hover:bg-primary/20 shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setQuickModeFolder({ id: folder.id, name: folder.name, accountId: profile.id });
+                                  }}
+                                  title="Quick Mode"
+                                >
+                                  <Zap className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity text-red-500 hover:text-red-400 hover:bg-red-500/20 shrink-0 ml-1"
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`Unassign this folder from ${profile.displayName}?`)) {
+                                      try {
+                                        await imageService.unassignFolderFromAccount(folder.id, profile.id, folder.account_ids || []);
+                                        toast.success('Folder unassigned');
+                                        loadData(true);
+                                      } catch (err) {
+                                        toast.error('Failed to unassign folder');
+                                      }
+                                    }
+                                  }}
+                                  title="Unassign Folder"
+                                >
+                                  <Unlink className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* QUICK MODE VIEW START */}
+        {activeTab === 'quickmode' && (
+          <div className="flex-1 overflow-auto p-4 flex flex-col gap-8 min-h-0">
+            {isLoadingProfiles ? (
+              <div className="flex items-center justify-center p-12">
+                <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+              </div>
+            ) : folders.filter(f => f.account_ids && f.account_ids.length > 0).length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-12 text-center border-none rounded-none bg-black/20">
+                <div className="w-16 h-16 rounded-none bg-white/5 flex items-center justify-center mb-4">
+                  <Zap className="w-8 h-8 text-white/40" />
+                </div>
+                <h3 className="text-lg font-medium text-white mb-2 uppercase tracking-wider">No Folders Assigned</h3>
+                <p className="text-xs text-white/40 max-w-md uppercase tracking-widest leading-relaxed">
+                  Assign folders to your TikTok accounts in the Accounts tab to use Quick Mode.
+                </p>
+                <Button
+                  onClick={() => setActiveTab('accounts')}
+                  className="mt-8 bg-white/10 hover:bg-white/20 text-white rounded-none border-none uppercase tracking-[0.2em] text-[10px] font-bold h-10 px-8"
+                >
+                  Go to Accounts Tab
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-8 max-w-4xl mxauto w-full pb-20">
+                {tikTokProfiles
+                  .filter(profile => folders.some(f => f.account_ids?.includes(profile.id)))
+                  .map(profile => {
+                    const accountFolders = folders.filter(f => f.account_ids?.includes(profile.id));
+                    return (
+                      <div
+                        key={profile.id}
+                        className="bg-[#0f0f0f] border border-white/5 shadow-2xl rounded-none overflow-hidden flex flex-col"
+                      >
+                        {/* Profile Header */}
+                        <div className="flex items-center gap-4 p-5 border-b border-white/5 bg-white/[0.03]">
+                          <div className="relative">
+                            {profile.avatar ? (
+                              <img src={profile.avatar} alt={profile.displayName} className="w-10 h-10 rounded-none object-cover border border-white/10" />
+                            ) : (
+                              <div className="w-10 h-10 rounded-none bg-primary/20 flex items-center justify-center text-primary font-bold text-sm border border-primary/20 uppercase">
+                                {profile.displayName.charAt(0)}
+                              </div>
+                            )}
+                            <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-black border border-white/10 flex items-center justify-center">
+                              <Zap className="w-2.5 h-2.5 text-primary fill-primary" />
+                            </div>
+                          </div>
+                          <div>
+                            <h4 className="text-xs font-black text-white uppercase tracking-[0.2em]">{profile.displayName}</h4>
+                            <p className="text-[9px] text-white/30 uppercase tracking-widest mt-1">
+                              {accountFolders.length} linked {accountFolders.length === 1 ? 'folder' : 'folders'}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Associated Folders */}
+                        <div className="divide-y divide-white/5 bg-black/20">
+                          {accountFolders.map(folder => (
+                            <div key={folder.id} className="flex items-center justify-between p-5 hover:bg-white/[0.02] transition-colors group">
+                              <div className="flex items-center gap-5">
+                                <div className="w-12 h-12 rounded-none bg-white/5 flex items-center justify-center border border-white/5 text-white/20 group-hover:border-primary/30 group-hover:text-primary transition-all duration-300">
+                                  <FolderIcon className="w-6 h-6 fill-current opacity-20" />
+                                </div>
+                                <div>
+                                  <h5 className="text-white font-bold text-sm tracking-wide group-hover:text-primary transition-colors">{folder.name}</h5>
+                                  <div className="flex items-center gap-2 mt-1.5">
+                                    <span className="text-white/20 text-[9px] uppercase tracking-widest border border-white/5 px-1.5 py-0.5">FOLDER</span>
+                                    <span className="text-white/40 text-[10px] uppercase tracking-tighter">{folder.images?.length || 0} assets</span>
+                                  </div>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => {
+                                  setQuickModeFolder({ id: folder.id, name: folder.name, accountId: profile.id });
+                                }}
+                                className="bg-primary hover:bg-primary/90 text-white gap-3 rounded-none border-none uppercase tracking-[0.15em] text-[10px] font-black h-11 px-8 shadow-lg shadow-primary/20 transition-all hover:translate-x-1"
+                              >
+                                <Zap className="w-4 h-4 fill-current" />
+                                Launch Quick Mode
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+
+      {/* Assign Folder Dialog */}
+      {showAssignFolderDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-[#1a1a1a] rounded-sm p-6 w-full max-w-sm shadow-2xl border border-transparent">
+            <h3 className="text-lg font-medium text-white mb-4">Assign Folder to Account</h3>
+
+            <div className="flex flex-col gap-4 mb-6">
+              {folders.filter(f => !f.parent_id && !f.account_ids?.includes(assignTargetAccountId)).length === 0 ? (
+                <p className="text-sm text-white/60">No unassigned root folders available.</p>
+              ) : (
+                <div className="max-h-[200px] overflow-y-auto pr-2 flex flex-col gap-2">
+                  {folders.filter(f => !f.parent_id && !f.account_ids?.includes(assignTargetAccountId)).map(folder => (
+                    <div
+                      key={folder.id}
+                      className={cn(
+                        "p-3 rounded-sm border cursor-pointer transition-all flex items-center gap-3",
+                        folderToAssign?.id === folder.id
+                          ? "bg-primary/20 border-primary text-white"
+                          : "bg-white/5 border-transparent text-white/70 hover:bg-white/10 hover:text-white"
+                      )}
+                      onClick={() => setFolderToAssign({ id: folder.id, name: folder.name })}
+                    >
+                      <FolderIcon className={cn("w-4 h-4", folderToAssign?.id === folder.id ? "text-primary" : "text-white/50")} />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-medium truncate">{folder.name}</span>
+                        <span className="text-[10px] opacity-60">{folder.images?.length || 0} items</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-white/10">
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowAssignFolderDialog(false);
+                  setFolderToAssign(null);
+                  setAssignTargetAccountId('');
+                }}
+                className="hover:bg-white/5 text-white/60 hover:text-white rounded-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleAssignFolder}
+                disabled={!folderToAssign}
+                className="bg-primary hover:bg-primary/90 text-white rounded-sm"
+              >
+                Assign
               </Button>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Mobile Upload FAB */}
-      <div className="absolute bottom-6 right-6 z-50 sm:hidden">
-        <div className="relative group">
-          <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full opacity-50 group-hover:opacity-100 transition-opacity" />
-          <input
-            type="file"
-            multiple
-            accept="image/*,.slideshow"
-            onChange={handleFileSelect}
-            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-          />
-          <Button className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90 text-white shadow-xl shadow-primary/20 border-0 flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95">
-            <ImagePlus className="w-6 h-6" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Content Area */}
-      <div
-        className="flex-1 p-4 overflow-auto min-h-0"
-        onClick={() => {
-          onSelectionChange([]);
-          onSlideshowSelectionChange([]);
-          onFolderSelectionChange([]);
-        }}
-        onDoubleClick={(e) => {
-          if (e.target === e.currentTarget) {
-            setShowNewFolderDialog(true);
-          }
-        }}
-        onTouchEnd={(e) => {
-          if (e.target === e.currentTarget) {
-            const now = Date.now();
-            if (now - lastTapRef.current < 300) {
-              setShowNewFolderDialog(true);
-            }
-            lastTapRef.current = now;
-          }
-        }}
-      >
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        ) : filteredAndSortedItems.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-[50vh] text-muted-foreground">
-            <div className="w-20 h-20 rounded-2xl bg-white/5 flex items-center justify-center mb-6 border border-white/10 shadow-xl">
-              <ImagePlus className="w-10 h-10 opacity-30" />
-            </div>
-            <p className="text-lg font-medium text-white/60">No files found</p>
-            <p className="text-sm text-white/30 mt-1">Upload images to get started</p>
-          </div>
-        ) : (
-          <div className={cn(
-            "grid gap-4 transition-all duration-300",
-            viewMode === 'grid' ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-1"
-          )}>
-            <AnimatePresence>
-              {filteredAndSortedItems.map(item => (
-                <motion.div
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.5, transition: { duration: 0.2 } }}
-                  transition={{ type: "spring", stiffness: 300, damping: 25 }}
-                  className={cn(
-                    "group relative rounded-xl border transition-all duration-300 cursor-pointer overflow-hidden",
-                    viewMode === 'list' ? "flex items-center p-3 gap-4" : "aspect-[4/3] flex flex-col",
-                    // Specific Styles based on Type
-                    item.type === 'folder' && (
-                      selectedFolders.includes(item.id)
-                        ? "bg-blue-500/30 border-blue-500/50 ring-2 ring-blue-500"
-                        : "bg-blue-500/10 border-blue-500/20 hover:bg-blue-500/20 hover:border-blue-500/40"
-                    ),
-                    item.type === 'slideshow' && (
-                      (item.slideshow?.lastUploadStatus === 'failed') ? "bg-red-500/10 border-red-500/20 hover:bg-red-500/20 hover:border-red-500/40" :
-                        (item.slideshow?.uploadCount || 0) > 1 ? "bg-yellow-500/10 border-yellow-500/20 hover:bg-yellow-500/20 hover:border-yellow-500/40" :
-                          (item.slideshow?.uploadCount === 1) ? "bg-green-500/10 border-green-500/20 hover:bg-green-500/20 hover:border-green-500/40" :
-                            "bg-purple-500/10 border-purple-500/20 hover:bg-purple-500/20 hover:border-purple-500/40"
-                    ),
-                    item.type === 'file' && "bg-white/5 border-white/10 hover:bg-white/10",
-
-                    // Selection Styles
-                    (item.type === 'file' && selectedImages.includes(item.id)) && "ring-2 ring-primary border-primary/50",
-                    (item.type === 'slideshow' && selectedSlideshows.includes(item.id)) && "ring-2 ring-primary border-primary/50",
-                    // Drop Target Styles
-                    (item.id === 'parent-directory' || item.type === 'folder') && "hover:ring-2 hover:ring-blue-500/50 hover:bg-blue-500/20"
-                  )}
-                  draggable={item.id !== 'parent-directory'}
-                  onDragStart={(e) => handleItemDragStart(e, item)}
-                  onDragOver={(e: any) => {
-                    if (item.type === 'folder' || item.id === 'parent-directory') {
-                      e.preventDefault(); // Allow drop
-                      e.currentTarget.classList.add('ring-2', 'ring-blue-500', 'bg-blue-500/30');
-                    }
-                  }}
-                  onDragLeave={(e) => {
-                    if (item.type === 'folder' || item.id === 'parent-directory') {
-                      e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/30');
-                    }
-                  }}
-                  onDrop={(e) => {
-                    e.currentTarget.classList.remove('ring-2', 'ring-blue-500', 'bg-blue-500/30');
-                    if (item.id === 'parent-directory') {
-                      handleParentDrop(e);
-                    } else if (item.type === 'folder') {
-                      handleFolderDrop(e, item.id);
-                    }
-                  }}
-                  onDoubleClick={() => {
-                    if (item.type === 'folder' && item.id !== 'parent-directory') {
-                      onCurrentFolderIdChange(item.id);
-                    }
-                  }}
-                  onClick={(e) => handleItemClick(item, e)}
-                  onContextMenu={(e) => handleContextMenu(e, item.type, item.id, item.name)}
-                  onTouchStart={(e) => {
-                    const touch = e.touches[0];
-                    const clientX = touch.clientX;
-                    const clientY = touch.clientY;
-                    longPressTimer.current = setTimeout(() => {
-                      handleContextMenu({
-                        preventDefault: () => { },
-                        stopPropagation: () => { },
-                        clientX,
-                        clientY,
-                      } as React.MouseEvent, item.type, item.id, item.name);
-                    }, 500);
-                  }}
-                  onTouchEnd={() => {
-                    if (longPressTimer.current) {
-                      clearTimeout(longPressTimer.current);
-                      longPressTimer.current = null;
-                    }
-                  }}
-                  onTouchMove={() => {
-                    if (longPressTimer.current) {
-                      clearTimeout(longPressTimer.current);
-                      longPressTimer.current = null;
-                    }
-                  }}
-                >
-                  {item.type === 'folder' ? (
-                    <>
-                      <div className={cn(
-                        "flex items-center justify-center text-blue-400 group-hover:text-blue-300 transition-colors",
-                        viewMode === 'list' ? "w-10 h-10 bg-blue-500/20 rounded-lg" : "flex-1"
-                      )}>
-                        {item.id === 'parent-directory' ? (
-                          <CornerLeftUp className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
-                        ) : (
-                          <FolderIcon className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
-                        )}
-                      </div>
-                      <div className={cn(
-                        "flex flex-col",
-                        viewMode === 'grid' && "p-3 bg-black/40 backdrop-blur-sm border-t border-blue-500/10"
-                      )}>
-                        <span className="font-medium text-sm truncate text-blue-100 group-hover:text-white">{item.name}</span>
-                        <span className="text-[10px] text-blue-200/50">{item.itemCount} files</span>
-                      </div>
-                    </>
-                  ) : item.type === 'slideshow' ? (
-                    <>
-                      <div className={cn(
-                        "flex items-center justify-center transition-colors",
-                        (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-400 group-hover:text-red-300" :
-                          (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-400 group-hover:text-yellow-300" :
-                            (item.slideshow?.uploadCount === 1) ? "text-green-400 group-hover:text-green-300" :
-                              "text-purple-400 group-hover:text-purple-300",
-                        viewMode === 'list' ? (
-                          (item.slideshow?.lastUploadStatus === 'failed') ? "w-10 h-10 bg-red-500/20 rounded-lg" :
-                            (item.slideshow?.uploadCount || 0) > 1 ? "w-10 h-10 bg-yellow-500/20 rounded-lg" :
-                              (item.slideshow?.uploadCount === 1) ? "w-10 h-10 bg-green-500/20 rounded-lg" :
-                                "w-10 h-10 bg-purple-500/20 rounded-lg"
-                        ) : "flex-1"
-                      )}>
-                        <Film className={cn(viewMode === 'list' ? "w-5 h-5" : "w-12 h-12")} />
-                      </div>
-                      <div className={cn(
-                        "flex flex-col",
-                        viewMode === 'grid' && (
-                          (item.slideshow?.lastUploadStatus === 'failed') ? "p-3 bg-black/40 backdrop-blur-sm border-t border-red-500/10" :
-                            (item.slideshow?.uploadCount || 0) > 1 ? "p-3 bg-black/40 backdrop-blur-sm border-t border-yellow-500/10" :
-                              (item.slideshow?.uploadCount === 1) ? "p-3 bg-black/40 backdrop-blur-sm border-t border-green-500/10" :
-                                "p-3 bg-black/40 backdrop-blur-sm border-t border-purple-500/10"
-                        )
-                      )}>
-                        <span className={cn(
-                          "font-medium text-sm truncate group-hover:text-white",
-                          (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-100" :
-                            (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-100" :
-                              (item.slideshow?.uploadCount === 1) ? "text-green-100" :
-                                "text-purple-100"
-                        )}>{item.name}</span>
-                        <span className={cn(
-                          "text-[10px]",
-                          (item.slideshow?.lastUploadStatus === 'failed') ? "text-red-200/50" :
-                            (item.slideshow?.uploadCount || 0) > 1 ? "text-yellow-200/50" :
-                              (item.slideshow?.uploadCount === 1) ? "text-green-200/50" :
-                                "text-purple-200/50"
-                        )}>{item.itemCount} slides</span>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className={cn(
-                        "relative overflow-hidden",
-                        viewMode === 'list' ? "w-12 h-12 rounded-lg shrink-0" : "w-full h-full"
-                      )}>
-                        <img
-                          src={item.image?.url}
-                          alt={item.name}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                        />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300" />
-
-                        {/* Selection Indicator */}
-                        <div className={cn(
-                          "absolute top-2 right-2 w-5 h-5 rounded-full border-2 border-white/50 transition-all duration-200 flex items-center justify-center",
-                          selectedImages.includes(item.id) ? "bg-primary border-primary scale-100" : "scale-0 group-hover:scale-100 bg-black/50"
-                        )}>
-                          {selectedImages.includes(item.id) && <div className="w-2 h-2 bg-white rounded-full" />}
-                        </div>
-                      </div>
-
-                      {viewMode === 'grid' && (
-                        <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 via-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                          <p className="text-xs font-medium text-white truncate">{item.name}</p>
-                          <p className="text-[10px] text-white/60">{formatFileSize(item.size || 0)}</p>
-                        </div>
-                      )}
-
-                      {viewMode === 'list' && (
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-white/90 truncate">{item.name}</p>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <span>{formatFileSize(item.size || 0)}</span>
-                            <span>•</span>
-                            <span>{format(new Date(), 'MMM d, yyyy')}</span>
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
-      </div>
 
       {/* Context Menu */}
       {
         contextMenu && createPortal(
           <div
             ref={menuRef}
-            className="fixed z-50 min-w-[160px] bg-black/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-100"
+            className="fixed z-50 min-w-[160px] bg-black/90 backdrop-blur-xl  rounded-none shadow-2xl p-1.5 animate-in fade-in zoom-in-95 duration-100"
             style={{
               top: contextMenu.y,
               left: contextMenu.x
@@ -1324,7 +1709,7 @@ export function FileBrowser({
                     setShowNewFolderDialog(true);
                     closeContextMenu();
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-none transition-colors text-left"
                 >
                   <FolderPlus className="w-4 h-4" />
                   New Folder
@@ -1334,7 +1719,7 @@ export function FileBrowser({
                     loadData();
                     closeContextMenu();
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-none transition-colors text-left"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Refresh
@@ -1349,7 +1734,7 @@ export function FileBrowser({
                     if (contextMenu.targetId) onCurrentFolderIdChange(contextMenu.targetId);
                     closeContextMenu();
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-none transition-colors text-left"
                 >
                   <FolderIcon className="w-4 h-4" />
                   Open
@@ -1363,7 +1748,7 @@ export function FileBrowser({
                     }
                     closeContextMenu();
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white/80 hover:text-white hover:bg-white/10 rounded-none transition-colors text-left"
                 >
                   <Edit className="w-4 h-4" />
                   Rename
@@ -1374,7 +1759,7 @@ export function FileBrowser({
                     if (contextMenu.targetId) handleDeleteFolder(contextMenu.targetId);
                     closeContextMenu();
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-none transition-colors text-left"
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete
@@ -1389,7 +1774,7 @@ export function FileBrowser({
                     removeSelected();
                     closeContextMenu();
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors text-left"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-none transition-colors text-left"
                 >
                   <Trash2 className="w-4 h-4" />
                   Delete
@@ -1405,13 +1790,13 @@ export function FileBrowser({
       {
         showNewFolderDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="bg-[#1a1a1a]  rounded-none p-6 w-full max-w-sm shadow-2xl">
               <h3 className="text-lg font-medium text-white mb-4">Create New Folder</h3>
               <Input
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 placeholder="Folder name"
-                className="bg-white/5 border-white/10 text-white mb-4"
+                className="bg-white/5 text-white mb-4"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleCreateFolder();
@@ -1442,13 +1827,13 @@ export function FileBrowser({
       {
         showRenameDialog && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-[#1a1a1a] border border-white/10 rounded-xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="bg-[#1a1a1a]  rounded-none p-6 w-full max-w-sm shadow-2xl">
               <h3 className="text-lg font-medium text-white mb-4">Rename Folder</h3>
               <Input
                 value={renameItemName}
                 onChange={(e) => setRenameItemName(e.target.value)}
                 placeholder="Folder name"
-                className="bg-white/5 border-white/10 text-white mb-4"
+                className="bg-white/5 text-white mb-4"
                 autoFocus
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleRenameFolder();

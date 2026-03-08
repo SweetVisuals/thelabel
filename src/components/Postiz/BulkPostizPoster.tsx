@@ -141,7 +141,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
       // Ensure start time respects constraints
       currentScheduledTime = applyScheduleConstraints(currentScheduledTime);
 
-      const safeBatchSize = 5; // Reduced from 10 to avoid Edge Function timeouts (150s)
+      const safeBatchSize = 10; // Fixed as per requirements and refactored timeouts
       const safePostIntervalMinutes = Number(postIntervalMinutes) || 240; // Default to 240 mins (4 hours) as per request
 
       for (let i = 0; i < slideshows.length; i++) {

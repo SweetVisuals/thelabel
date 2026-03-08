@@ -540,6 +540,7 @@ export const imageService = {
             name: folder.name,
             created_at: folder.created_at,
             parent_id: folder.parent_id,
+            account_ids: folder.account_ids || [],
             images: [],
           };
         }
@@ -577,6 +578,7 @@ export const imageService = {
           name: folder.name,
           created_at: folder.created_at,
           parent_id: folder.parent_id,
+          account_ids: folder.account_ids || [],
           images: folderImageList,
         };
       }));
@@ -784,6 +786,58 @@ export const imageService = {
       console.log('✅ Folder deleted successfully:', folderId);
     } catch (error) {
       console.error('❌ Failed to delete folder:', error);
+      throw error;
+    }
+  },
+
+  // Assign folder to account
+  async assignFolderToAccount(folderId: string, accountId: string, currentAccountIds: string[] = []): Promise<void> {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Append new account ID if not already present
+      const newAccountIds = Array.from(new Set([...currentAccountIds, accountId]));
+
+      const { error } = await supabase
+        .from('folders')
+        .update({ account_ids: newAccountIds })
+        .eq('id', folderId)
+        .eq('user_id', session.user.id);
+
+      if (error) {
+        throw new Error(`Failed to assign folder: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Failed to assign folder:', error);
+      throw error;
+    }
+  },
+
+  // Unassign folder from account
+  async unassignFolderFromAccount(folderId: string, accountId: string, currentAccountIds: string[] = []): Promise<void> {
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session?.user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Remove the account ID
+      const newAccountIds = currentAccountIds.filter(id => id !== accountId);
+
+      const { error } = await supabase
+        .from('folders')
+        .update({ account_ids: newAccountIds })
+        .eq('id', folderId)
+        .eq('user_id', session.user.id);
+
+      if (error) {
+        throw new Error(`Failed to unassign folder: ${error.message}`);
+      }
+    } catch (error) {
+      console.error('Failed to unassign folder:', error);
       throw error;
     }
   },

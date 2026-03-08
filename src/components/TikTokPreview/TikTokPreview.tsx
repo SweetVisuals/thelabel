@@ -1,44 +1,16 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { Play, Pause, Volume2, VolumeX, Download, Edit3, Filter, Type, Crop, Music, Sparkles, Settings, Share2, Heart, MessageCircle, Repeat2, X, ChevronLeft, ChevronRight, Shuffle, Layers, Zap, Palette, Wand2, Plus } from 'lucide-react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { Play, Plus, ChevronLeft, ChevronRight, Heart, MessageCircle, Share2, Repeat2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { AspectRatioSelector } from '@/components/ui/aspectRatioSelector';
 import { cn } from '@/lib/utils';
-import { UploadedImage } from '@/types';
+import { UploadedImage, TikTokTextOverlay, SlideshowMetadata } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { parseAspectRatio } from '@/lib/aspectRatio';
-import { useAspectRatio } from '@/hooks/useAspectRatio';
-
-interface TextOverlay {
-  id: string;
-  slideIndex: number;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  color: string;
-  fontFamily: string;
-  fontWeight: string;
-  alignment: 'left' | 'center' | 'right';
-  outlineColor: string;
-  outlineWidth: number;
-  outlinePosition: 'outer' | 'middle' | 'inner';
-  bold: boolean;
-  italic: boolean;
-  outline: boolean;
-  glow: boolean;
-  glowColor: string;
-  glowIntensity: number;
-  isEditing?: boolean;
-  isSelected?: boolean;
-}
 
 interface TikTokPreviewProps {
   images: UploadedImage[];
   selectedImages: string[];
-  textOverlays?: TextOverlay[];
-  title?: string;
+  textOverlays: TikTokTextOverlay[];
+  title: string;
   postTitle?: string;
   caption?: string;
   hashtags?: string[];
@@ -46,222 +18,78 @@ interface TikTokPreviewProps {
   musicEnabled?: boolean;
   aspectRatio?: string;
   previewMode?: boolean;
-  onTextOverlaysChange?: (overlays: TextOverlay[]) => void;
+  onTextOverlaysChange?: (overlays: TikTokTextOverlay[]) => void;
   onTitleChange?: (title: string) => void;
-  onPostTitleChange?: (postTitle: string) => void;
+  onPostTitleChange?: (title: string) => void;
   onCaptionChange?: (caption: string) => void;
   onHashtagsChange?: (hashtags: string[]) => void;
   onTransitionEffectChange?: (effect: 'fade' | 'slide' | 'zoom') => void;
   onMusicEnabledChange?: (enabled: boolean) => void;
-  onAspectRatioChange?: (aspectRatio: string) => void;
+  onAspectRatioChange?: (ratio: string) => void;
   onImagesUpdate?: (images: UploadedImage[]) => void;
-  onCurrentSlideChange?: (slideIndex: number) => void;
-  onSelectionOrderChange?: (orderedIds: string[]) => void;
-  currentSlideshow?: any;
+  onCurrentSlideChange?: (index: number) => void;
+  onSelectionOrderChange?: (order: string[]) => void;
+  currentSlideshow: SlideshowMetadata | null;
 }
 
 export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   images,
   selectedImages,
   textOverlays = [],
-  title = 'Amazing TikTok Slideshow',
-  postTitle,
-  caption = 'Your amazing TikTok slideshow! 🎉',
-  hashtags = ['tiktok', 'slideshow', 'viral'],
-  transitionEffect = 'fade',
-  musicEnabled = false,
+  title,
+  hashtags = [],
   aspectRatio = '9:16',
   previewMode = false,
   onTextOverlaysChange,
-  onTitleChange,
-  onPostTitleChange,
-  onCaptionChange,
-  onHashtagsChange,
-  onTransitionEffectChange,
-  onMusicEnabledChange,
-  onAspectRatioChange,
-  onImagesUpdate,
   onCurrentSlideChange,
-  onSelectionOrderChange,
-  currentSlideshow,
+  onAspectRatioChange,
+  currentSlideshow
 }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [showControls, setShowControls] = useState(true);
-  const [selectedSlideForEdit, setSelectedSlideForEdit] = useState<number | null>(null);
-  const dragContainerRef = React.useRef<HTMLDivElement | null>(null);
-  const [remixedSlideshowImages, setRemixedSlideshowImages] = useState<any[]>([]);
-  const [isRemixed, setIsRemixed] = useState(false);
-  const [showEditPanel, setShowEditPanel] = useState(false);
-  const [activeEditTab, setActiveEditTab] = useState<'text' | 'effects' | 'settings'>('text');
-  const [localTextOverlays, setLocalTextOverlays] = useState<TextOverlay[]>(textOverlays);
+  const [isPlaying, setIsPlaying] = useState(true);
   const [currentAspectRatio, setCurrentAspectRatio] = useState(aspectRatio);
-  const [showAspectRatioSelector, setShowAspectRatioSelector] = useState(false);
-  const [isDraggingText, setIsDraggingText] = useState(false);
-  const [editingTextId, setEditingTextId] = useState<string | null>(null);
-  const [editingTextValue, setEditingTextValue] = useState('');
-  const [snapLines, setSnapLines] = useState({ x: false, y: false });
 
-  // Check if any text overlay is near center
-  const isTextNearCenter = textOverlays.some(overlay =>
-    overlay.slideIndex === currentSlide &&
-    (Math.abs(overlay.x - 50) <= 2 || Math.abs(overlay.y - 50) <= 2)
-  );
-
-  useEffect(() => {
-    setLocalTextOverlays(textOverlays);
-  }, [textOverlays]);
-
+  // Sync aspect ratio prop with local state
   useEffect(() => {
     setCurrentAspectRatio(aspectRatio);
   }, [aspectRatio]);
 
-  // Listen for aspect ratio changes from FileBrowser toolbar
+  // Handle outside messages for aspect ratio (from FileBrowser toolbar)
   useEffect(() => {
-    const handleAspectRatioChange = (event: CustomEvent) => {
-      const { aspectRatio } = event.detail;
-      setCurrentAspectRatio(aspectRatio);
-      onAspectRatioChange?.(aspectRatio);
+    const handleAspectRatioChange = (event: CustomEvent<string>) => {
+      onAspectRatioChange?.(event.detail);
     };
 
     window.addEventListener('tiktokAspectRatioChange', handleAspectRatioChange as EventListener);
-
     return () => {
       window.removeEventListener('tiktokAspectRatioChange', handleAspectRatioChange as EventListener);
     };
   }, [onAspectRatioChange]);
 
-  useEffect(() => {
-    console.log('📱 TikTokPreview Props Debug:', {
-      currentFolderContext: 'TikTokPreview',
-      imagesCount: images.length,
-      selectedImagesCount: selectedImages.length,
-      selectedImageIds: selectedImages,
-      currentSlideshow: !!currentSlideshow,
-      currentSlideshowHashtags: currentSlideshow?.hashtags,
-      previewMode,
-      previewMode,
-      hashtags: hashtags,
-      firstFewImages: images.slice(0, 3).map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' }))
-    });
-  }, [images, selectedImages, currentSlideshow, previewMode, hashtags]);
-
-  const handleRemixSlides = () => {
-    if (!currentSlideshow || !currentSlideshow.condensedSlides || currentSlideshow.condensedSlides.length < 2) return;
-
-    console.log('🎲 Starting remix with slideshow slides:', currentSlideshow.condensedSlides.length);
-
-    // Use all slides when remixing
-    const slidesToRemix = currentSlideshow.condensedSlides.length;
-    const baseSlides = currentSlideshow.condensedSlides.map((slide: any) => ({
-      id: slide.originalImageId || slide.id,
-      condensedSlideId: slide.id,
-      url: slide.condensedImageUrl,
-      originalImageUrl: slide.originalImageUrl,
-      width: slide.width,
-      height: slide.height,
-      aspectRatio: slide.aspectRatio,
-      file: new File([], `slide-${slide.id}.jpg`),
-    }));
-
-    if (baseSlides.length < 2) return;
-
-    const shuffledImages = [...baseSlides];
-    for (let i = shuffledImages.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffledImages[i], shuffledImages[j]] = [shuffledImages[j], shuffledImages[i]];
-    }
-
-    console.log('🔀 Shuffled slideshow slides:', shuffledImages.map(img => img.id));
-
-    setRemixedSlideshowImages(shuffledImages);
-    setIsRemixed(true);
-    setCurrentSlide(0);
-
-    console.log('🎉 Slideshow remix completed! New order:', shuffledImages.map(img => img.id));
-  };
-
+  // Determine which images to show
   const { slideshowImages, originalSlidesCount } = useMemo(() => {
-    console.log('🔄 TikTokPreview useMemo recalculating...', {
-      imagesCount: images.length,
-      selectedImagesCount: selectedImages.length,
-      selectedImageIds: selectedImages,
-      currentSlideshow: !!currentSlideshow,
-      previewMode
-    });
-
-    // Always apply cut length limit - it should override the preview
     let imagesToProcess: any[] = [];
-    let originalCount = 0;
+    let count = 0;
 
     if (currentSlideshow && currentSlideshow.condensedSlides && currentSlideshow.condensedSlides.length > 0) {
-      console.log('📱 Using loaded slideshow (preview mode)');
-      originalCount = currentSlideshow.condensedSlides.length;
-
-      // Get all available slides but limit by cutLength
-      const availableSlides = currentSlideshow.condensedSlides.map((slide: any) => ({
-        id: slide.originalImageId || slide.id,
-        condensedSlideId: slide.id,
+      imagesToProcess = currentSlideshow.condensedSlides.map((slide: any) => ({
+        id: slide.id,
         url: slide.condensedImageUrl,
-        originalImageUrl: slide.originalImageUrl,
-        width: slide.width,
-        height: slide.height,
-        aspectRatio: slide.aspectRatio,
-        file: new File([], `slide-${slide.id}.jpg`),
+        originalImageId: slide.originalImageId
       }));
-
-      // Apply remix if active, but still respect cutLength
-      if (isRemixed && remixedSlideshowImages.length > 0) {
-        imagesToProcess = remixedSlideshowImages;
-      } else {
-        // Use all available slides
-        imagesToProcess = availableSlides;
-      }
-    }
-    else if (selectedImages.length > 0) {
-      console.log('🖼️ Creating slideshow from selected images');
-
+      count = currentSlideshow.condensedSlides.length;
+    } else {
       const imagesMap = new Map(images.map(img => [img.id, img]));
-
-      console.log('🔍 Images map debug:', {
-        totalImagesInMap: imagesMap.size,
-        sampleImageIds: Array.from(imagesMap.keys()).slice(0, 5),
-        selectedIds: selectedImages,
-        mapHasSelectedIds: selectedImages.map(id => imagesMap.has(id))
-      });
-
-      const orderedImages = selectedImages
+      imagesToProcess = selectedImages
         .map(id => imagesMap.get(id))
         .filter(img => img !== undefined) as UploadedImage[];
-
-      console.log('🎬 TikTokPreview: Creating slideshow from selected images:', {
-        selectedImageIds: selectedImages,
-        availableImagesCount: images.length,
-        foundImagesCount: orderedImages.length,
-        missingImageIds: selectedImages.filter(id => !imagesMap.has(id)),
-        foundImageDetails: orderedImages.map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' }))
-      });
-
-      if (orderedImages.length === 0) {
-        console.warn('⚠️ TikTokPreview: No matching images found for selected IDs in current folder');
-        console.log('🔍 Debug - Available images:', images.map(img => ({ id: img.id, url: img.url?.substring(0, 50) + '...' })));
-      }
-
-      // Use all selected images
-      imagesToProcess = orderedImages;
-      originalCount = orderedImages.length;
+      count = imagesToProcess.length;
     }
 
-    console.log('🎬 Final slideshow images:', {
-      imagesToProcessCount: imagesToProcess.length,
-      originalCount
-    });
+    return { slideshowImages: imagesToProcess, originalSlidesCount: count };
+  }, [currentSlideshow, images, selectedImages]);
 
-    return { slideshowImages: imagesToProcess, originalSlidesCount: originalCount };
-  }, [images, selectedImages, currentSlideshow, isRemixed, remixedSlideshowImages]);
-
-  // Synchronize currentSlide with external changes and ensure it stays within bounds
+  // Sync current slide and ensure it stays within bounds
   useEffect(() => {
     if (slideshowImages.length > 0 && currentSlide >= slideshowImages.length) {
       setCurrentSlide(0);
@@ -273,594 +101,189 @@ export const TikTokPreview: React.FC<TikTokPreviewProps> = ({
   useEffect(() => {
     if (isPlaying && slideshowImages.length > 1) {
       const interval = setInterval(() => {
-        setCurrentSlide(prev =>
-          prev >= slideshowImages.length - 1 ? 0 : prev + 1
-        );
-      }, 3000); // 3 seconds per slide
-
+        setCurrentSlide(prev => (prev >= slideshowImages.length - 1 ? 0 : prev + 1));
+      }, 3000);
       return () => clearInterval(interval);
     }
   }, [isPlaying, slideshowImages.length]);
 
-  // Auto-advance when slideshow data changes
-  useEffect(() => {
-    if (slideshowImages.length > 0) {
-      setCurrentSlide(0);
-    }
-  }, [slideshowImages.length]);
-
-  // Debug logging for data flow
-  useEffect(() => {
-    console.log('📱 TikTokPreview Data Debug:', {
-      slideshowImagesCount: slideshowImages.length,
-      originalSlidesCount,
-      selectedImagesCount: selectedImages.length,
-      hasCurrentSlideshow: !!currentSlideshow,
-      currentSlideshowHashtags: currentSlideshow?.hashtags,
-      previewMode,
-      currentSlide,
-      hashtags: hashtags,
-      textOverlaysCount: textOverlays?.length || 0,
-      textOverlaysForCurrentSlide: textOverlays?.filter(overlay => overlay.slideIndex === currentSlide).length || 0,
-      firstTextOverlay: textOverlays?.[0],
-      firstImageUrl: slideshowImages[0]?.url?.substring(0, 50) + '...'
-    });
-  }, [slideshowImages, selectedImages, currentSlideshow, previewMode, currentSlide, originalSlidesCount, textOverlays, hashtags]);
-
-  // Render the TikTok preview interface
   const renderTikTokPreview = () => {
     const hasContent = slideshowImages.length > 0;
 
     if (!hasContent) {
       return (
-        <div className="h-full flex flex-col items-center justify-center bg-gradient-to-br from-purple-500/20 via-pink-500/10 to-purple-500/5 border border-purple-500/20 rounded-2xl p-6">
-          <div className="text-center p-8">
-            <div className="w-24 h-24 bg-gradient-to-br from-purple-500/30 to-pink-500/20 rounded-2xl flex items-center justify-center mb-4 mx-auto">
-              <Play className="w-12 h-12 text-purple-400" />
+        <div className="relative w-full max-w-[420px] mx-auto aspect-[9/19.5]">
+          {/* iPhone Bezel (Hardware) - Empty State */}
+          <div className="absolute inset-0 pointer-events-none z-50 opacity-50">
+            <div className="w-full h-full border-[12px] border-[#111] rounded-[40px] relative shadow-2xl">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#111] rounded-b-[16px]"></div>
             </div>
-            <h3 className="text-lg font-semibold text-foreground mb-2">TikTok Preview</h3>
-            <p className="text-muted-foreground text-sm mb-4">
-              {currentSlideshow ? 'Loading slideshow...' : 'Select images to create a slideshow'}
-            </p>
-            {selectedImages.length > 0 && !currentSlideshow && (
-              <p className="text-primary text-xs">
-                {selectedImages.length} image{selectedImages.length !== 1 ? 's' : ''} selected
+          </div>
+
+          <div className="absolute inset-[3px] bg-black rounded-[34px] flex flex-col items-center justify-center p-6 border border-white/5">
+            <div className="text-center p-8 z-10 w-full">
+              <div className="w-20 h-20 bg-white/5 rounded-none flex items-center justify-center mb-6 mx-auto border border-white/10">
+                <Play className="w-8 h-8 text-white/40" strokeWidth={1} />
+              </div>
+              <h3 className="text-sm font-sans text-white/80 mb-2 uppercase tracking-wider">Preview Unavailable</h3>
+              <p className="text-white/40 text-[10px] font-sans mb-4 uppercase tracking-wider">
+                {currentSlideshow ? 'LOADING SLIDESHOW...' : 'SELECT IMAGES TO PREVIEW'}
               </p>
-            )}
-            {currentSlideshow && (
-              <p className="text-primary text-xs">
-                {currentSlideshow.condensedSlides?.length || 0} slides in slideshow
-              </p>
-            )}
+            </div>
           </div>
         </div>
       );
     }
 
-    // Calculate aspect ratio for image cropping (not container)
+    // Styles for image display
     const getAspectRatioStyle = () => {
-      if (currentAspectRatio === 'free') {
-        return {
-          objectFit: 'contain' as const,
-          objectPosition: 'center' as const,
-        };
-      }
-
-      return {
-        objectFit: 'cover' as const,
-        objectPosition: 'center' as const,
-      };
+      return { objectFit: 'contain' as const, objectPosition: 'center' as const };
     };
 
-    // Calculate image container aspect ratio to show cropping effect
     const getImageContainerStyle = () => {
-      if (currentAspectRatio === 'free') {
-        return {
-          position: 'relative' as const,
-          width: '100%',
-          height: '100%',
-          overflow: 'hidden'
-        };
-      }
-
-      const ratio = parseAspectRatio(currentAspectRatio);
-      if (ratio > 0) {
-        // Use aspect-ratio CSS to show how the image would be cropped
-        return {
-          position: 'relative' as const,
-          width: '100%',
-          maxHeight: '100%',
-          aspectRatio: ratio.toString(),
-          overflow: 'hidden'
-        };
-      }
-
-      return {
-        position: 'relative' as const,
-        width: '100%',
-        height: '100%',
-        overflow: 'hidden'
-      };
+      // Always fill height/width when inside the iPhone frame to avoid black bars
+      return { position: 'relative' as const, width: '100%', height: '100%', overflow: 'hidden' };
     };
 
     return (
-      <div className={`w-full max-w-md mx-auto bg-gradient-to-br from-purple-500/10 via-pink-500/5 to-purple-500/10 border border-purple-500/20 rounded-2xl overflow-hidden relative aspect-[9/16]`}>
-        {/* TikTok-style header */}
-        <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-3 bg-gradient-to-b from-black/60 via-black/30 to-transparent">
-          <div className="flex items-center space-x-2">
-            <div className="w-6 h-6 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-xs font-bold">T</span>
+      <div className="relative w-full max-w-[420px] mx-auto aspect-[9/19.5]">
+        {/* iPhone Bezel (Hardware) */}
+        <div className="absolute inset-0 pointer-events-none z-50">
+          <div className="w-full h-full border-[12px] border-[#111] rounded-[40px] shadow-2xl relative">
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-24 h-6 bg-[#111] rounded-b-[16px] flex items-center justify-center">
+              <div className="w-12 h-1.5 bg-[#222] rounded-full mr-2"></div>
+              <div className="w-2 h-2 bg-[#1a1a1a] rounded-full border border-[#333]"></div>
             </div>
-            <div>
-              <p className="text-white text-xs font-medium">@{title.toLowerCase().replace(/\s+/g, '_').substring(0, 12)}</p>
-              <p className="text-gray-300 text-xs">Following</p>
-            </div>
+            {/* Side buttons */}
+            <div className="absolute top-24 -left-[14px] w-1 h-8 bg-[#222] rounded-l-sm"></div>
+            <div className="absolute top-36 -left-[14px] w-1 h-12 bg-[#222] rounded-l-sm"></div>
+            <div className="absolute top-52 -left-[14px] w-1 h-12 bg-[#222] rounded-l-sm"></div>
+            <div className="absolute top-36 -right-[14px] w-1 h-16 bg-[#222] rounded-r-sm"></div>
           </div>
-          <Button size="sm" variant="ghost" className="text-white hover:bg-white/10 h-6 px-2">
-            <Plus className="w-3 h-3" />
-          </Button>
         </div>
 
-        {/* Main video/slideshow area */}
-        <div className="relative h-full flex flex-col bg-black rounded-xl overflow-hidden shadow-2xl ring-1 ring-white/10" ref={dragContainerRef}>
-          {slideshowImages.length > 0 ? (
-            <>
-              {/* Main Preview Area */}
-              <div className="flex-1 relative bg-gray-900 flex items-center justify-center overflow-hidden">
-                {/* Background Blur */}
-                <div className="absolute inset-0 z-0 opacity-50">
-                  <img
-                    src={slideshowImages[currentSlide]?.url}
-                    alt="Background"
-                    className="w-full h-full object-cover blur-3xl scale-150"
-                  />
-                </div>
-                {/* Current slide display */}
-                <div
-                  className="relative flex items-center justify-center overflow-hidden z-10"
-                  style={getImageContainerStyle()}
-                >
-                  <motion.img
-                    key={`${currentSlide}-${slideshowImages[currentSlide]?.id || 'empty'}-${currentAspectRatio}`}
-                    src={slideshowImages[currentSlide]?.url}
-                    alt={`Slide ${currentSlide + 1}`}
-                    className="w-full h-full"
-                    style={getAspectRatioStyle()}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.5 }}
-                  />
-                </div>
+        {/* Screen Content (The App) */}
+        <div className="absolute inset-[3px] bg-black rounded-[34px] overflow-hidden">
+          {/* Header Overlay */}
+          <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between p-4 pt-8 bg-gradient-to-b from-black/80 via-black/40 to-transparent">
+            <div className="flex items-center space-x-2">
+              <div className="w-6 h-6 bg-white/10 border border-white/20 rounded-none flex items-center justify-center">
+                <span className="text-white text-xs font-sans font-bold">T</span>
               </div>
-
-              {/* Snap lines - only show during active dragging */}
-              {!previewMode && (isDraggingText || snapLines.x || snapLines.y) && (
-                <>
-                  {/* Vertical center line */}
-                  <AnimatePresence>
-                    {snapLines.x && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: '100%' }}
-                        exit={{ opacity: 0 }}
-                        className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-blue-500 z-30 pointer-events-none shadow-[0_0_10px_rgba(59,130,246,0.5)]"
-                      />
-                    )}
-                  </AnimatePresence>
-
-                  {/* Horizontal center line */}
-                  <AnimatePresence>
-                    {snapLines.y && (
-                      <motion.div
-                        initial={{ opacity: 0, width: 0 }}
-                        animate={{ opacity: 1, width: '100%' }}
-                        exit={{ opacity: 0 }}
-                        className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-500 z-30 pointer-events-none shadow-[0_0_10px_rgba(59,130,246,0.5)]"
-                      />
-                    )}
-                  </AnimatePresence>
-                </>
-              )}
-
-              {/* Text overlays on current slide - show for both saved slideshows and edit settings */}
-              {(textOverlays || [])
-                .filter(overlay => overlay.slideIndex === currentSlide)
-                .map((overlay) => {
-                  return (
-                    <div
-                      key={overlay.id}
-                      className={cn(
-                        "absolute group z-20 transition-all duration-200",
-                        previewMode ? "" : "cursor-grab active:cursor-grabbing hover:ring-2 hover:ring-blue-500/50 rounded-lg"
-                      )}
-                      style={{
-                        left: `${overlay.x}%`,
-                        top: `${overlay.y}%`,
-                        width: `${overlay.width}%`,
-                        height: `${overlay.height}%`,
-                        transform: 'translate(-50%, -50%)',
-                      }}
-                      onMouseDown={(e) => {
-                        if (previewMode) return;
-                        e.preventDefault();
-                        e.stopPropagation();
-
-                        const startX = e.clientX;
-                        const startY = e.clientY;
-                        const startLeft = overlay.x;
-                        const startTop = overlay.y;
-                        const container = dragContainerRef.current;
-
-                        // Local flag to track if we actually dragged
-                        let hasMoved = false;
-
-                        if (!container) return;
-
-                        // Initial snap reset
-                        setSnapLines({ x: false, y: false });
-
-                        const handleMouseMove = (e: MouseEvent) => {
-                          const deltaX = e.clientX - startX;
-                          const deltaY = e.clientY - startY;
-
-                          // Consider it a drag if moved more than 5 pixels
-                          if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
-                            hasMoved = true;
-                            setIsDraggingText(true);
-                          }
-
-                          if (!hasMoved) return;
-
-                          const containerRect = container.getBoundingClientRect();
-                          const deltaXPercent = (deltaX / containerRect.width) * 100;
-                          const deltaYPercent = (deltaY / containerRect.height) * 100;
-
-                          let newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
-                          let newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
-
-                          // Snap logic (Snap to 50%)
-                          const SNAP_THRESHOLD = 5; // increased threshold for better feel
-                          let snappedX = false;
-                          let snappedY = false;
-
-                          if (Math.abs(newLeft - 50) < SNAP_THRESHOLD) {
-                            newLeft = 50;
-                            snappedX = true;
-                          }
-
-                          if (Math.abs(newTop - 50) < SNAP_THRESHOLD) {
-                            newTop = 50;
-                            snappedY = true;
-                          }
-
-                          setSnapLines({ x: snappedX, y: snappedY });
-
-                          const updatedOverlays = textOverlays.map(o =>
-                            o.id === overlay.id
-                              ? { ...o, x: newLeft, y: newTop }
-                              : o
-                          );
-                          onTextOverlaysChange?.(updatedOverlays);
-                        };
-
-                        const handleMouseUp = () => {
-                          setIsDraggingText(false);
-                          setSnapLines({ x: false, y: false });
-                          document.removeEventListener('mousemove', handleMouseMove);
-                          document.removeEventListener('mouseup', handleMouseUp);
-
-                          // If we didn't drag, enter edit mode
-                          if (!hasMoved) {
-                            setEditingTextId(overlay.id);
-                            setEditingTextValue(overlay.text);
-                          }
-                        };
-
-                        document.addEventListener('mousemove', handleMouseMove);
-                        document.addEventListener('mouseup', handleMouseUp);
-                      }}
-                      onTouchStart={(e) => {
-                        if (previewMode) return;
-                        e.stopPropagation();
-
-                        const touch = e.touches[0];
-                        const startX = touch.clientX;
-                        const startY = touch.clientY;
-                        const startLeft = overlay.x;
-                        const startTop = overlay.y;
-                        const container = dragContainerRef.current;
-
-                        let hasMoved = false;
-
-                        if (!container) return;
-
-                        setSnapLines({ x: false, y: false });
-
-                        const handleTouchMove = (e: TouchEvent) => {
-                          e.preventDefault(); // Prevent scrolling while dragging
-                          const touch = e.touches[0];
-                          const deltaX = touch.clientX - startX;
-                          const deltaY = touch.clientY - startY;
-
-                          if (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5) {
-                            hasMoved = true;
-                            setIsDraggingText(true);
-                          }
-
-                          if (!hasMoved) return;
-
-                          const containerRect = container.getBoundingClientRect();
-                          const deltaXPercent = (deltaX / containerRect.width) * 100;
-                          const deltaYPercent = (deltaY / containerRect.height) * 100;
-
-                          let newLeft = Math.max(0, Math.min(100, startLeft + deltaXPercent));
-                          let newTop = Math.max(0, Math.min(100, startTop + deltaYPercent));
-
-                          // Snap logic
-                          const SNAP_THRESHOLD = 5;
-                          let snappedX = false;
-                          let snappedY = false;
-
-                          if (Math.abs(newLeft - 50) < SNAP_THRESHOLD) {
-                            newLeft = 50;
-                            snappedX = true;
-                          }
-
-                          if (Math.abs(newTop - 50) < SNAP_THRESHOLD) {
-                            newTop = 50;
-                            snappedY = true;
-                          }
-
-                          setSnapLines({ x: snappedX, y: snappedY });
-
-                          const updatedOverlays = textOverlays.map(o =>
-                            o.id === overlay.id
-                              ? { ...o, x: newLeft, y: newTop }
-                              : o
-                          );
-                          onTextOverlaysChange?.(updatedOverlays);
-                        };
-
-                        const handleTouchEnd = () => {
-                          setIsDraggingText(false);
-                          setSnapLines({ x: false, y: false });
-                          document.removeEventListener('touchmove', handleTouchMove);
-                          document.removeEventListener('touchend', handleTouchEnd);
-
-                          // If we didn't drag, enter edit mode
-                          if (!hasMoved) {
-                            setEditingTextId(overlay.id);
-                            setEditingTextValue(overlay.text);
-                          }
-                        };
-
-                        document.addEventListener('touchmove', handleTouchMove, { passive: false });
-                        document.addEventListener('touchend', handleTouchEnd);
-                      }}
-                    >
-                      {editingTextId === overlay.id ? (
-                        <div className="relative w-full h-full">
-                          <textarea
-                            value={editingTextValue}
-                            onChange={(e) => setEditingTextValue(e.target.value)}
-                            onBlur={() => {
-                              // Save on blur
-                              const updatedOverlays = textOverlays.map(o =>
-                                o.id === overlay.id
-                                  ? { ...o, text: editingTextValue }
-                                  : o
-                              );
-                              onTextOverlaysChange?.(updatedOverlays);
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Escape') {
-                                setEditingTextId(null);
-                                setEditingTextValue(overlay.text); // Revert
-                              }
-                              e.stopPropagation();
-                            }}
-                            className="w-full h-full absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-transparent border-none outline-none text-center p-1 z-30 resize-none overflow-hidden"
-                            style={{
-                              color: overlay.color || '#ffffff',
-                              fontSize: `${Math.max(10, Math.min(overlay.fontSize, 50))}px`,
-                              fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-                              textAlign: overlay.alignment,
-                              lineHeight: '1.2',
-                              whiteSpace: 'pre-wrap',
-
-                              textShadow: overlay.outline
-                                ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
-                                : overlay.glow
-                                  ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
-                                  : 'none',
-                            }}
-                            autoFocus
-                          />
-                          {/* Close/Done Button for Mobile */}
-                          <div className="absolute -top-12 left-1/2 -translate-x-1/2 flex gap-2 z-40 bg-black/80 rounded-full px-3 py-1.5 backdrop-blur-md border border-white/20">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setEditingTextId(null);
-                                const updatedOverlays = textOverlays.map(o => o.id === overlay.id ? { ...o, text: editingTextValue } : o);
-                                onTextOverlaysChange?.(updatedOverlays);
-                              }}
-                              className="text-xs font-bold text-white flex items-center gap-1"
-                            >
-                              Done
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div
-                          className={cn(
-                            "w-full h-full flex items-center justify-center text-center p-1 select-none whitespace-pre-wrap",
-                            overlay.bold && "font-bold",
-                            overlay.italic && "italic",
-                          )}
-                          style={{
-                            color: overlay.color || '#ffffff',
-                            fontSize: `${Math.max(10, Math.min(overlay.fontSize, 50))}px`,
-                            fontFamily: 'TikTok Sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-                            textAlign: overlay.alignment,
-                            lineHeight: '1.2',
-
-                            textShadow: overlay.outline
-                              ? `2px 2px 0 ${overlay.outlineColor || '#000000'}, -2px 2px 0 ${overlay.outlineColor || '#000000'}, 2px -2px 0 ${overlay.outlineColor || '#000000'}, -2px -2px 0 ${overlay.outlineColor || '#000000'}`
-                              : overlay.glow
-                                ? `0 0 ${Math.max(4, overlay.glowIntensity * 2)}px ${overlay.glowColor || '#ffffff'}`
-                                : 'none',
-                          }}
-                        >
-                          {overlay.text || 'Sample Text'}
-                        </div>
-                      )
-                      }
-
-                      {/* Visual Guide Box when hovering/dragging */}
-                      {!previewMode && (
-                        <div className={cn(
-                          "absolute inset-0 border-2 border-transparent group-hover:border-white/30 rounded-lg pointer-events-none transition-colors",
-                          editingTextId === overlay.id && "border-blue-500 bg-blue-500/10"
-                        )} />
-                      )}
-                    </div>
-                  );
-                })
-              }
-
-              {/* TikTok-style side panel - positioned within video container */}
-              <div className="absolute right-6 bottom-24 flex flex-col space-y-5 z-10">
-                {/* Profile picture */}
-                <div className="relative">
-                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-base font-bold">T</span>
-                  </div>
-                  <button className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center border-2 border-black">
-                    <Plus className="w-3.5 h-3.5 text-white" />
-                  </button>
-                </div>
-
-                {/* Action buttons */}
-                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
-                  <Heart className="w-7 h-7" />
-                  <span className="text-sm">24.5K</span>
-                </button>
-                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
-                  <MessageCircle className="w-7 h-7" />
-                  <span className="text-sm">203</span>
-                </button>
-                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
-                  <Repeat2 className="w-7 h-7" />
-                  <span className="text-sm">89</span>
-                </button>
-                <button className="flex flex-col items-center space-y-1 text-white hover:scale-110 transition-transform">
-                  <Share2 className="w-7 h-7" />
-                  <span className="text-sm">Share</span>
-                </button>
+              <div>
+                <p className="text-white text-[10px] font-sans tracking-wider uppercase">@{title?.toLowerCase().replace(/\s+/g, '_').substring(0, 12) || 'label_user'}</p>
+                <p className="text-white/60 text-[9px] font-sans tracking-wider uppercase">Following</p>
               </div>
-
-              {/* Slide indicators */}
-              <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-1 z-20">
-                {slideshowImages.map((_: any, index: number) => (
-                  <button
-                    key={index}
-                    onClick={() => {
-                      setCurrentSlide(index);
-                      onCurrentSlideChange?.(index);
-                    }}
-                    className={cn(
-                      "w-2 h-2 rounded-full transition-all duration-200",
-                      index === currentSlide
-                        ? "bg-white scale-125"
-                        : "bg-white/50 hover:bg-white/75"
-                    )}
-                  />
-                ))}
-              </div>
-
-              {/* Navigation arrows */}
-              {slideshowImages.length > 1 && (
-                <>
-                  <button
-                    onClick={() => {
-                      const newSlide = Math.max(0, currentSlide - 1);
-                      setCurrentSlide(newSlide);
-                      onCurrentSlideChange?.(newSlide);
-                    }}
-                    disabled={currentSlide === 0}
-                    className="absolute left-2 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => {
-                      const newSlide = Math.min(slideshowImages.length - 1, currentSlide + 1);
-                      setCurrentSlide(newSlide);
-                      onCurrentSlideChange?.(newSlide);
-                    }}
-                    disabled={currentSlide === slideshowImages.length - 1}
-                    className="absolute right-16 top-1/2 transform -translate-y-1/2 w-8 h-8 bg-black/50 rounded-full flex items-center justify-center text-white disabled:opacity-50 disabled:cursor-not-allowed z-20"
-                  >
-                    <ChevronRight className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-            </>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-white text-center">
-              <p>No content to display</p>
             </div>
-          )}
-        </div>
+            <Button size="sm" variant="ghost" className="text-white h-6 px-2 rounded-none border border-white/20">
+              <Plus className="w-3 h-3" strokeWidth={1} />
+            </Button>
+          </div>
 
-        {/* Bottom content area - fixed positioning */}
-        <div className="absolute bottom-0 left-0 right-0 z-10 p-3 pb-12 bg-gradient-to-t from-black/80 via-black/40 to-transparent">
-          <div className="text-white">
-            <p className="font-medium mb-1 text-sm truncate">{title}</p>
-            <p className="text-xs text-gray-200 mb-2 line-clamp-2">{caption}</p>
-            {hashtags && hashtags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {hashtags.map((tag, index) => (
-                  <span key={index} className="text-xs text-blue-400">
-                    #{tag}
-                  </span>
-                ))}
+          {/* Main Area */}
+          <div className="absolute inset-0 flex flex-col bg-black overflow-hidden" onClick={() => setIsPlaying(!isPlaying)}>
+            <div className="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+              {/* Image Display */}
+              <div className="relative flex items-center justify-center z-10" style={getImageContainerStyle()}>
+                <motion.img
+                  key={`${currentSlide}-${slideshowImages[currentSlide]?.id}`}
+                  src={slideshowImages[currentSlide]?.url}
+                  className="w-full h-full"
+                  style={getAspectRatioStyle()}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5 }}
+                />
               </div>
+
+              {/* Text Overlays */}
+              {(!currentSlideshow?.condensedSlides || currentSlideshow.condensedSlides.length === 0) && textOverlays
+                .filter(overlay => overlay.slideIndex === currentSlide)
+                .map(overlay => (
+                  <div
+                    key={overlay.id}
+                    className="absolute z-20 pointer-events-none"
+                    style={{
+                      left: `${overlay.x}%`,
+                      top: `${overlay.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      color: overlay.color || '#fff',
+                      fontSize: `${(overlay.fontSize || 20) * 0.4}px`,
+                      textAlign: overlay.alignment as any || 'center',
+                      textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: '1.2',
+                      width: overlay.width ? `${overlay.width}%` : '90%',
+                      fontFamily: overlay.fontFamily === 'TikTok Sans' ? 'sans-serif' : overlay.fontFamily,
+                      fontWeight: overlay.fontWeight
+                    }}
+                  >
+                    {overlay.text}
+                  </div>
+                ))}
+            </div>
+
+            {/* Side Panel */}
+            <div className="absolute right-4 bottom-28 flex flex-col space-y-6 z-20">
+              <div className="w-10 h-10 bg-white/10 border border-white/20 flex items-center justify-center rounded-none shadow-lg">
+                <span className="text-white text-sm font-sans tracking-tighter">TB</span>
+              </div>
+              <div className="flex flex-col items-center space-y-1 text-white">
+                <Heart className="w-6 h-6" strokeWidth={1} />
+                <span className="text-[10px] font-sans uppercase">24k</span>
+              </div>
+              <div className="flex flex-col items-center space-y-1 text-white">
+                <MessageCircle className="w-6 h-6" strokeWidth={1} />
+                <span className="text-[10px] font-sans uppercase">128</span>
+              </div>
+              <div className="flex flex-col items-center space-y-1 text-white">
+                <Share2 className="w-6 h-6" strokeWidth={1} />
+                <span className="text-[10px] font-sans uppercase">Share</span>
+              </div>
+            </div>
+
+            {/* Bottom Info */}
+            <div className="absolute bottom-10 left-4 right-16 z-20 flex flex-col">
+              <p className="text-white text-xs font-sans font-bold mb-1 tracking-wider">@label_user</p>
+              <p className="text-white/90 text-[10px] font-sans line-clamp-2 uppercase leading-tight">
+                <span className="font-bold mr-1">{title || 'the_label'}</span>
+                {hashtags.map(h => h.startsWith('#') ? h : `#${h}`).join(' ') || '#thelabel #viral #slideshow'}
+              </p>
+            </div>
+
+            {/* Slide Indicators */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex space-x-1 z-20">
+              {slideshowImages.map((_, i) => (
+                <div key={i} className={cn("w-1.5 h-1.5 rounded-full transition-all", i === currentSlide ? "bg-white scale-125" : "bg-white/40")} />
+              ))}
+            </div>
+
+            {/* Nav Arrows */}
+            {slideshowImages.length > 1 && (
+              <>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCurrentSlide(prev => Math.max(0, prev - 1)); }}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 border border-white/20 rounded-full text-white flex items-center justify-center z-40 hover:bg-black/80 transition-colors"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setCurrentSlide(prev => Math.min(slideshowImages.length - 1, prev + 1)); }}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 border border-white/20 rounded-full text-white flex items-center justify-center z-40 hover:bg-black/80 transition-colors"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </>
             )}
           </div>
         </div>
-
-        {/* Playback controls - positioned above bottom content */}
-        <div className="absolute bottom-4 left-4 flex items-center space-x-2 z-20">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setIsPlaying(!isPlaying)}
-            className="text-white hover:bg-white/10 h-8 w-8 p-0"
-          >
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => setIsMuted(!isMuted)}
-            className="text-white hover:bg-white/10 h-8 w-8 p-0"
-          >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </Button>
-          <span className="text-white text-xs bg-black/50 px-2 py-1 rounded">
-            {currentSlide + 1}/{slideshowImages.length}
-          </span>
-        </div>
-      </div >
+      </div>
     );
   };
 
   return (
-    <div className="h-full w-full flex flex-col items-center justify-center bg-black/20 rounded-2xl p-6">
-      {/* Main preview container */}
-      <div className="relative">
+    <div className="flex-1 flex items-center justify-center h-full w-full p-6 overflow-hidden relative">
+      <div className="w-full max-h-full flex items-center justify-center">
         {renderTikTokPreview()}
       </div>
     </div>

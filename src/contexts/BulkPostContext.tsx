@@ -251,8 +251,8 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const batchSlideshows = slideshows.slice(i * batchSize, (i + 1) * batchSize);
 
                 // Job Processing Time
-                // First batch processes immediately, subsequent ones wait 70 mins * index
-                const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 70);
+                // First batch processes immediately, subsequent ones wait 1 min * index (so Postiz isn't hammered instantly, but they all queue quickly)
+                const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 1);
 
                 // Post Start Time for THIS batch is the current logical time we've reached
                 const batchPostStartTime = new Date(currentPostTime);
@@ -262,6 +262,9 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 for (let j = 0; j < batchSlideshows.length; j++) {
                     // 1. Apply constraints to the current slot (e.g. if we landed on 11pm, move to 9am)
                     currentPostTime = applyScheduleConstraints(currentPostTime, userTimezone);
+
+                    // Assign strict scheduled time to to the payload so Edge Function avoids recalculating
+                    batchSlideshows[j].scheduledTime = currentPostTime.toISOString();
 
                     // 2. Move time forward for the NEXT post (or the start of the next batch)
                     const effectiveInterval = settings.postIntervalMinutes || 240;
@@ -291,6 +294,25 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             }
         } else {
             // Interval or First-Now strategy - treat as single job
+
+            let currentPostTime = new Date(settings.startTime);
+            currentPostTime.setSeconds(0, 0);
+
+            for (let j = 0; j < slideshows.length; j++) {
+                if (strategy === 'first-now' && j === 0) {
+                    currentPostTime = new Date(); // Immediate for first post
+                } else if (strategy === 'first-now' && j === 1) {
+                    // Start relative intervals from initial start time
+                    currentPostTime = new Date(settings.startTime);
+                    currentPostTime = addHours(currentPostTime, settings.intervalHours);
+                } else if (j > 0) {
+                    currentPostTime = addHours(currentPostTime, settings.intervalHours);
+                }
+
+                currentPostTime = applyScheduleConstraints(currentPostTime, userTimezone);
+                slideshows[j].scheduledTime = currentPostTime.toISOString();
+            }
+
             const payload: JobPayload = {
                 slideshows,
                 profiles,
@@ -316,6 +338,22 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         const { error } = await supabase
             .from('job_queue')
             .insert(jobsToInsert);
+
+        // Also bulk save all slideshow objects into Supabase to persist their scheduled times explicitly
+        try {
+            const allAssignedSlideshows = jobsToInsert.flatMap((job) => job.payload.slideshows);
+            // Updating each slideshow via a massive promise array might be too much, but usually batches are under 200.
+            // A Supabase upsert requires fetching or assuming format. Using standard table approach for user 'slideshows':
+            const formattedDbSlideshows = allAssignedSlideshows.map(s => ({
+                id: s.id,
+                user_id: user.id,
+                metadata: s, // Usually stored in metadata column
+                updated_at: new Date().toISOString()
+            }));
+
+            const { error: slideError } = await supabase.from('slideshows').upsert(formattedDbSlideshows, { onConflict: 'id' });
+            if (slideError) console.error('Failed to save slideshow scheduled times:', slideError);
+        } catch (e) { console.error(e) }
 
         if (error) {
             console.error('Failed to queue jobs:', error);

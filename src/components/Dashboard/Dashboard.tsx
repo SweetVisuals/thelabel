@@ -123,7 +123,7 @@ export const Dashboard: React.FC = () => {
   }, [apiKeys.postizApiKey, user]);
 
   // UI State
-  const [showSettingsPanel, setShowSettingsPanel] = useState(true);
+  const [showSettingsPanel, setShowSettingsPanel] = useState(false);
   const [showPostizPoster, setShowPostizPoster] = useState(false);
   const [showUrlUploader, setShowUrlUploader] = useState(false);
   const [showBulkCreateModal, setShowBulkCreateModal] = useState(false);
@@ -539,9 +539,9 @@ export const Dashboard: React.FC = () => {
 
           {/* Right: Settings Panel */}
           <div className={cn(
-            "transition-all duration-300 ease-in-out bg-card/30 backdrop-blur-md",
-            showSettingsPanel ? "xl:w-[500px] xl:translate-x-0" : "xl:w-0 xl:translate-x-full xl:opacity-0 xl:overflow-hidden",
-            activeMobileTab === 'settings' ? "w-full translate-x-0 block" : "hidden xl:block"
+            "transition-all duration-300 ease-in-out bg-card/30 backdrop-blur-md shrink-0",
+            showSettingsPanel ? "xl:w-[500px]" : "xl:w-16",
+            activeMobileTab === 'settings' ? "w-full block absolute inset-y-0 right-0 z-40" : "hidden xl:block"
           )}>
             <SettingsPanel
               title={title}
@@ -567,6 +567,8 @@ export const Dashboard: React.FC = () => {
               selectedImagesCount={selectedImages.length}
               apiKeys={apiKeys}
               setApiKeys={setApiKeys}
+              isCollapsed={!showSettingsPanel}
+              onToggleCollapse={() => setShowSettingsPanel(!showSettingsPanel)}
               selectedTemplate={selectedTemplate}
               setSelectedTemplate={setSelectedTemplate}
               savedTemplates={savedTemplates}

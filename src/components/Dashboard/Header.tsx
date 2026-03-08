@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, LogOut, Folder, Home, ChevronRight, Calendar as CalendarIcon, ListOrdered, Loader2 } from "lucide-react";
+import { Menu, X, LogOut, Folder, Home, ChevronRight, Calendar as CalendarIcon, ListOrdered } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from '../../hooks/useAuth';
 import { cn } from "@/lib/utils";
@@ -22,7 +22,10 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
     const { user, signOut } = useAuth();
     const navigate = useNavigate();
     // const { theme } = useTheme(); // Unused
-    const { statusMessage, isPosting, isPaused, jobQueue, postingSchedule, currentBatchIndex, totalBatches, nextBatchStartTime } = useBulkPost();
+    const { jobQueue, nextBatchStartTime } = useBulkPost();
+    const isProcessing = jobQueue.some(j => j.status === 'processing');
+    const isPending = jobQueue.some(j => j.status === 'pending');
+    const hasJobs = jobQueue.length > 0;
     const [isMobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [countdown, setCountdown] = useState<string>('');
 
@@ -59,7 +62,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
         <>
             {/* ... Header Content ... */}
             <motion.header
-                className="w-full bg-black/40 backdrop-blur-xl border-b border-white/10 relative overflow-hidden z-50"
+                className="w-full bg-black/40 backdrop-blur-xl relative overflow-hidden z-50"
                 initial={{ y: -50, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.5, type: "spring", stiffness: 100 }}
@@ -92,7 +95,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => navigate('/')}
-                                    className="text-muted-foreground hover:text-white hover:bg-white/5 px-2 h-8 rounded-lg transition-all duration-300"
+                                    className="text-muted-foreground hover:text-white hover:bg-white/5 px-2 h-8 rounded-none transition-all duration-300"
                                 >
                                     <Home className="w-4 h-4 mr-2" />
                                     Home
@@ -101,7 +104,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => navigate('/calendar')}
-                                    className="text-muted-foreground hover:text-white hover:bg-white/5 px-2 h-8 rounded-lg transition-all duration-300"
+                                    className="text-muted-foreground hover:text-white hover:bg-white/5 px-2 h-8 rounded-none transition-all duration-300"
                                 >
                                     <CalendarIcon className="w-4 h-4 mr-2" />
                                     Calendar
@@ -111,10 +114,10 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                         <ChevronRight className="w-4 h-4 text-muted-foreground/50" />
                                         <motion.div
                                             className={cn(
-                                                "flex items-center space-x-2 px-3 py-1 rounded-lg border border-transparent transition-all duration-200",
+                                                "flex items-center space-x-2 px-3 py-1 rounded-none transition-all duration-200",
                                                 index === path.length - 1
-                                                    ? "bg-white/10 border-white/10 text-white"
-                                                    : "hover:bg-white/5 hover:border-white/5 text-muted-foreground hover:text-white cursor-pointer"
+                                                    ? "bg-white/10 text-white"
+                                                    : "hover:bg-white/5 text-muted-foreground hover:text-white cursor-pointer"
                                             )}
                                             whileHover={{ scale: 1.02 }}
                                             onClick={() => onNavigateToFolder?.(folder.id)}
@@ -137,26 +140,17 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                     size="sm"
                                     onClick={() => onAction?.('queue')}
                                     className={cn(
-                                        "hover:bg-white/10 text-muted-foreground hover:text-white px-3 h-9 rounded-lg transition-all duration-300",
+                                        "hover:bg-white/10 text-muted-foreground hover:text-white px-3 h-9 rounded-none transition-all duration-300",
                                         jobQueue.length > 0 && "text-primary bg-primary/10 hover:bg-primary/20"
                                     )}
                                 >
                                     <ListOrdered className="w-4 h-4 mr-2" />
                                     Queue
                                     {jobQueue.length > 0 && (
-                                        <span className="ml-2 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-full">
+                                        <span className="ml-2 bg-primary text-white text-[10px] px-1.5 py-0.5 rounded-none">
                                             {jobQueue.length}
                                         </span>
                                     )}
-                                </Button>
-
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => onAction?.('settings')}
-                                    className="hover:bg-white/10 text-muted-foreground hover:text-white"
-                                >
-                                    <Menu className="w-5 h-5" />
                                 </Button>
                             </div>
 
@@ -170,7 +164,7 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                                 <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="rounded-full bg-white/5 hover:bg-white/10 border border-white/10"
+                                    className="rounded-none bg-white/5 hover:bg-white/10"
                                     onClick={handleSignOut}
                                 >
                                     <LogOut className="w-4 h-4 text-muted-foreground hover:text-destructive transition-colors" />
@@ -245,78 +239,25 @@ function Header1({ path, onNavigateToFolder, onAction }: HeaderProps) {
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.8 }}
                         >
-                            <span className="flex items-center space-x-1.5">
+                            <span className="flex items-center space-x-1.5 font-mono">
                                 <div className={cn(
-                                    "w-1.5 h-1.5 rounded-full animate-pulse",
-                                    isPosting ? "bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]" : "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"
+                                    "w-1.5 h-1.5 rounded-none animate-pulse",
+                                    isProcessing ? "bg-white" : (isPending ? "bg-white/60" : "bg-white/20")
                                 )} />
-                                <span>{isPosting ? "Processing Bulk Schedule" : (jobQueue.length > 0 ? "System Active" : "System Online")}</span>
+                                <span>{isProcessing ? "PROCESSING SCHEDULE" : (hasJobs ? "SYSTEM ACTIVE" : "SYSTEM ONLINE")}</span>
                             </span>
-                            <span>•</span>
+                            <span className="text-white/30">|</span>
 
-                            {isPosting && postingSchedule.length > 0 ? (
-                                <>
-                                    <span className="text-blue-400">
-                                        {totalBatches} Batches Scheduled
-                                    </span>
-                                    <span>•</span>
-                                    <span className="text-blue-400">
-                                        Batch #{currentBatchIndex}
-                                    </span>
-                                    <span>•</span>
-                                    <span className="flex items-center space-x-1 text-blue-400">
-                                        <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                                        <span>
-                                            Post {postingSchedule.filter(s => s.status === 'success' || s.status === 'error').length + 1}/{postingSchedule.length}
-                                        </span>
-                                    </span>
-                                    <span>•</span>
-                                    <span className="text-green-400">
-                                        ✓ {postingSchedule.filter(s => s.status === 'success').length}
-                                    </span>
-                                    {postingSchedule.filter(s => s.status === 'error').length > 0 && (
-                                        <>
-                                            <span>•</span>
-                                            <span className="text-red-400">
-                                                ✗ {postingSchedule.filter(s => s.status === 'error').length}
-                                            </span>
-                                        </>
-                                    )}
-                                </>
-                            ) : isPosting ? (
-                                <span className="flex items-center space-x-1 text-blue-400">
-                                    {isPaused ? (
-                                        <>
-                                            <div className="w-1.5 h-1.5 bg-yellow-500 rounded-full animate-pulse" />
-                                            <span>{statusMessage}</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="w-1.5 h-1.5 bg-blue-500 rounded-full animate-pulse" />
-                                            <span>{statusMessage}</span>
-                                        </>
-                                    )}
-                                </span>
-                            ) : (
-                                // Check if there's a job processing on server (not local)
-                                jobQueue.some(j => j.status === 'processing') ? (
-                                    <span className="flex items-center space-x-1 text-blue-400">
-                                        <Loader2 className="w-3 h-3 animate-spin" />
-                                        <span>Processing Batch on Server...</span>
-                                    </span>
-                                ) : (
-                                    <span className={cn(jobQueue.length > 0 && "text-blue-400")}>
-                                        {jobQueue.length > 0 ? (
-                                            <>
-                                                {jobQueue.length} Batches Scheduled
-                                                {nextBatchStartTime && countdown && (
-                                                    <> - Waiting for next batch {countdown}</>
-                                                )}
-                                            </>
-                                        ) : "Ready"}
-                                    </span>
-                                )
-                            )}
+                            <span className={cn(hasJobs ? "text-white font-mono" : "text-white/40 font-mono")}>
+                                {hasJobs ? (
+                                    <div className="flex items-center space-x-2">
+                                        <span>{jobQueue.length} BATCHES SCHEDULED</span>
+                                        {nextBatchStartTime && countdown && (
+                                            <span className="bg-white/10 px-1 text-white">WAITING: {countdown}</span>
+                                        )}
+                                    </div>
+                                ) : "READY"}
+                            </span>
                         </motion.div>
                         <motion.div
                             initial={{ opacity: 0 }}
