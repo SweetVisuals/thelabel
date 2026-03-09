@@ -555,8 +555,18 @@ export function FileBrowser({
       const currentFolder = folders.find(f => f.id === currentFolderId);
       const parentId = currentFolder?.parent_id;
 
+      const isUnassigningFromAccount = activeAccountId !== null && currentFolderId === null;
+
       if (data.type === 'file') {
-        if (parentId) {
+        if (isUnassigningFromAccount) {
+          for (const id of idsToMove) {
+            const img = images.find(i => i.id === id);
+            await imageService.unassignImageFromAccount(id, activeAccountId, img?.account_ids || []);
+            // Force account_id to null since we are moving it out of the account organization
+            await supabase.from('images').update({ account_id: null }).eq('id', id);
+          }
+          toast.success(`Removed ${idsToMove.length} images from account folder`);
+        } else if (parentId) {
           await imageService.moveImagesToFolder(idsToMove, parentId);
           toast.success(`Moved ${idsToMove.length} images to parent folder`);
         } else {
@@ -564,13 +574,41 @@ export function FileBrowser({
           toast.success(`Moved ${idsToMove.length} images to root`);
         }
       } else if (data.type === 'slideshow') {
-        const targetId = parentId || null;
+        if (isUnassigningFromAccount) {
+          for (const id of idsToMove) {
+            const slideshow = slideshowService.getSlideshowById(id);
+            await slideshowService.unassignSlideshowFromAccount(id, activeAccountId, slideshow?.account_ids || []);
+            await supabase.from('slideshows').update({ account_id: null }).eq('id', id.replace('slideshow_', ''));
+            // Update memory
+            if (slideshow) {
+              slideshow.account_id = null;
+              slideshowService.saveToLocalStorage();
+            }
+          }
+          toast.success(`Removed ${idsToMove.length} slideshows from account folder`);
+        } else {
+          const targetId = parentId || null;
 
-        for (const id of idsToMove) {
-          await slideshowService.moveSlideshowToFolder(id, targetId);
+          for (const id of idsToMove) {
+            await slideshowService.moveSlideshowToFolder(id, targetId);
+          }
+
+          toast.success(`Moved ${idsToMove.length} slideshows to ${parentId ? 'parent folder' : 'root'}`);
         }
-
-        toast.success(`Moved ${idsToMove.length} slideshows to ${parentId ? 'parent folder' : 'root'}`);
+      } else if (data.type === 'folder') {
+        if (isUnassigningFromAccount) {
+          for (const id of idsToMove) {
+            const folder = folders.find(f => f.id === id);
+            await imageService.unassignFolderFromAccount(id, activeAccountId, folder?.account_ids || []);
+            await supabase.from('folders').update({ account_id: null }).eq('id', id);
+          }
+          toast.success(`Removed ${idsToMove.length} folders from account folder`);
+        } else if (parentId) {
+          // Folder moving to parent is not fully supported yet in FileBrowser drag drop, but if it is:
+          await supabase.from('folders').update({ parent_id: parentId }).eq('id', idsToMove[0]);
+        } else {
+          await supabase.from('folders').update({ parent_id: null }).eq('id', idsToMove[0]);
+        }
       }
 
       // Refresh data
@@ -579,6 +617,7 @@ export function FileBrowser({
       // Clear selection
       onSelectionChange([]);
       onSlideshowSelectionChange([]);
+      onFolderSelectionChange([]);
 
     } catch (error) {
       console.error('Failed to move items:', error);

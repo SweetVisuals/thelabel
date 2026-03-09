@@ -956,7 +956,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
   /**
    * Save to localStorage with quota management
    */
-  private saveToLocalStorage(): void {
+  public saveToLocalStorage(): void {
     try {
       const data = Array.from(this.slideshows.entries());
       const jsonData = JSON.stringify(data);
@@ -1557,7 +1557,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
 
       const { error } = await supabase
         .from('slideshows')
-        .update({ account_ids: newAccountIds })
+        .update({ account_ids: newAccountIds, account_id: accountId })
         .eq('id', actualDatabaseId)
         .eq('user_id', session.user.id);
 
@@ -1569,6 +1569,7 @@ import { supabaseStorage } from './supabaseStorage'; export class SlideshowServi
       const slideshow = this.slideshows.get(slideshowId);
       if (slideshow) {
         slideshow.account_ids = newAccountIds;
+        slideshow.account_id = accountId;
         this.slideshows.set(slideshowId, slideshow);
         this.saveToLocalStorage();
       }

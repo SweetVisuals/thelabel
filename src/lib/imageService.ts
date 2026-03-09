@@ -810,7 +810,7 @@ export const imageService = {
 
       const { error } = await supabase
         .from('folders')
-        .update({ account_ids: newAccountIds })
+        .update({ account_ids: newAccountIds, account_id: accountId })
         .eq('id', folderId)
         .eq('user_id', session.user.id);
 
@@ -836,7 +836,7 @@ export const imageService = {
 
       const { error } = await supabase
         .from('images')
-        .update({ account_ids: newAccountIds })
+        .update({ account_ids: newAccountIds, account_id: accountId })
         .eq('id', imageId)
         .eq('user_id', session.user.id);
 

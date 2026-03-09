@@ -140,6 +140,22 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
         }
     };
 
+    const handleClearPending = async () => {
+        try {
+            const { error } = await supabase
+                .from('job_queue')
+                .delete()
+                .in('status', ['pending', 'processing']);
+
+            if (error) throw error;
+            toast.success('Cleared pending jobs');
+            refreshQueue();
+        } catch (error) {
+            console.error('Failed to clear jobs:', error);
+            toast.error('Failed to clear jobs');
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
             <motion.div
@@ -420,6 +436,11 @@ export const QueueViewer: React.FC<QueueViewerProps> = ({ onClose }) => {
                         Background jobs run every 10 minutes. Keep your API key saved in settings.
                     </div>
                     <div className="flex gap-2">
+                        {jobQueue.some(j => ['pending', 'processing'].includes(j.status)) && (
+                            <Button variant="outline" size="sm" onClick={handleClearPending} className="border-white/10 hover:bg-white/5 text-red-400 hover:text-red-300">
+                                <Trash2 className="w-4 h-4 mr-2" /> Clear Pending
+                            </Button>
+                        )}
                         {jobQueue.some(j => j.status === 'pending') && (
                             <Button variant="outline" size="sm" onClick={rescheduleQueue} className="border-white/10 hover:bg-white/5 text-blue-400 hover:text-blue-300">
                                 <Clock className="w-4 h-4 mr-2" /> Reschedule All

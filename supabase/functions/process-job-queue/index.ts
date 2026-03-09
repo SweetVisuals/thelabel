@@ -332,10 +332,9 @@ Deno.serve(async (req) => {
                 if (overflowItems.length > 0) {
                     await logJob(supabase, job.id, 'info', `Scheduling ${overflowItems.length} overflow items for next batch.`);
 
-                    // Calculate immediate overflow runtime so it doesn't wait an entire 70-min gap
-                    // This prevents items pushing so far into the future that their pre-calculated timestamps
-                    // end up in the "past", causing Postiz to drop them all instantaneously.
-                    let nextRunTime = new Date(Date.now() + 60 * 1000); // 1 minute from now
+                    // Schedule the overflow for 67 minutes into the future to let the Postiz API rate limit reset (30 reqs/hr)
+                    // This prevents ThrottleException: Too Many Requests
+                    let nextRunTime = new Date(Date.now() + 67 * 60 * 1000); // 67 minutes from now
                     let nextBatchIndex = (job.batch_index || 0) + 1;
 
                     // Calculate the start time for the content in the NEXT batch.

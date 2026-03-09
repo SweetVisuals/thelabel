@@ -226,14 +226,14 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <motion.div
-        className="bg-[#09090b] w-full max-w-6xl max-h-[90vh] rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-hidden"
+        className="bg-[#09090b] w-full max-w-4xl max-h-[85vh] rounded-xl border border-white/10 shadow-2xl flex flex-col overflow-hidden"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.2 }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-white/5">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-white/5">
           <h3 className="text-xl font-bold bg-gradient-to-r from-white to-white/70 bg-clip-text text-transparent flex items-center">
             <Send className="w-5 h-5 mr-3 text-primary" />
             Bulk Post to TikTok ({slideshows.length})
@@ -244,14 +244,14 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 xl:p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
 
             {/* LEFT COLUMN: Strategy & Preview (4 cols) */}
-            <div className="lg:col-span-4 space-y-6">
+            <div className="lg:col-span-5 space-y-4">
 
               {/* Strategy Section */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wider flex items-center">
                   <Settings className="w-3 h-3 mr-2" />
                   Strategy
@@ -261,17 +261,17 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                   <button
                     onClick={() => setPostingStrategy('interval')}
                     className={cn(
-                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-20",
+                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-16",
                       postingStrategy === 'interval'
                         ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
                         : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
                     )}
                   >
                     <Calendar className={cn(
-                      "w-4 h-4 mb-1.5 transition-colors",
+                      "w-4 h-4 mb-1 transition-colors",
                       postingStrategy === 'interval' ? "text-primary" : "text-muted-foreground"
                     )} />
-                    <span className="font-medium text-xs">Interval</span>
+                    <span className="font-medium text-[10px]">Interval</span>
                     {postingStrategy === 'interval' && (
                       <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
                     )}
@@ -280,17 +280,17 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                   <button
                     onClick={() => setPostingStrategy('batch')}
                     className={cn(
-                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-20",
+                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-16",
                       postingStrategy === 'batch'
                         ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
                         : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
                     )}
                   >
                     <Layers className={cn(
-                      "w-4 h-4 mb-1.5 transition-colors",
+                      "w-4 h-4 mb-1 transition-colors",
                       postingStrategy === 'batch' ? "text-primary" : "text-muted-foreground"
                     )} />
-                    <span className="font-medium text-xs">Batch</span>
+                    <span className="font-medium text-[10px]">Batch</span>
                     {postingStrategy === 'batch' && (
                       <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
                     )}
@@ -299,17 +299,17 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                   <button
                     onClick={() => setPostingStrategy('first-now')}
                     className={cn(
-                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-20",
+                      "p-2 rounded-xl border text-center transition-all duration-200 relative overflow-hidden group flex flex-col items-center justify-center h-16",
                       postingStrategy === 'first-now'
                         ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
                         : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-white/20"
                     )}
                   >
                     <Play className={cn(
-                      "w-4 h-4 mb-1.5 transition-colors",
+                      "w-4 h-4 mb-1 transition-colors",
                       postingStrategy === 'first-now' ? "text-primary" : "text-muted-foreground"
                     )} />
-                    <span className="font-medium text-xs">1 Now</span>
+                    <span className="font-medium text-[10px]">1 Now</span>
                     {postingStrategy === 'first-now' && (
                       <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-primary rounded-full" />
                     )}
@@ -317,7 +317,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                 </div>
 
                 {/* Settings Panel */}
-                <div className="bg-white/5 rounded-xl border border-white/10 p-4 space-y-4">
+                <div className="bg-white/5 rounded-xl border border-white/10 p-4 space-y-3">
                   {postingStrategy === 'batch' ? (
                     <div className="space-y-4">
                       {/* Fixed Batch Size Note */}
@@ -408,7 +408,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                   <CalendarDays className="w-3 h-3 mr-2" />
                   Schedule Preview
                 </h4>
-                <div className="bg-black/40 rounded-xl border border-white/10 overflow-hidden shadow-inner max-h-60 overflow-y-auto custom-scrollbar">
+                <div className="bg-black/40 rounded-xl border border-white/10 overflow-hidden shadow-inner max-h-48 overflow-y-auto custom-scrollbar">
                   <div className="p-3 space-y-2">
                     {previewSchedule.map((item, index) => (
                       <React.Fragment key={index}>
@@ -442,17 +442,17 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
 
             </div>
 
-            {/* RIGHT COLUMN: Accounts & Queue (8 cols) */}
-            <div className="lg:col-span-8 space-y-4 flex flex-col">
+            {/* RIGHT COLUMN: Accounts & Queue (7 cols) */}
+            <div className="lg:col-span-7 space-y-4 flex flex-col">
 
               {/* Queue Status */}
               {jobQueue.length > 0 && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 mb-4">
-                  <h4 className="font-medium text-sm text-blue-200 uppercase tracking-wider flex items-center mb-3">
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 mb-3">
+                  <h4 className="font-medium text-sm text-blue-200 uppercase tracking-wider flex items-center mb-2">
                     <ListOrdered className="w-4 h-4 mr-2" />
                     Active Job Queue ({jobQueue.length})
                   </h4>
-                  <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2">
+                  <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar pr-2">
                     {jobQueue.map((job, idx) => (
                       <div key={job.id} className="flex items-center justify-between text-xs bg-black/20 p-2 rounded border border-white/5">
                         <div className="flex items-center space-x-3">
@@ -506,7 +506,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                 )}
               </div>
 
-              <div className="flex-1 bg-white/5 rounded-xl border border-white/10 p-4 min-h-[300px]">
+              <div className="flex-1 bg-white/5 rounded-xl border border-white/10 p-3 min-h-[200px]">
                 {isLoadingProfiles ? (
                   <div className="h-full flex flex-col items-center justify-center text-muted-foreground">
                     <Loader2 className="w-8 h-8 animate-spin mb-3 text-primary" />
@@ -518,12 +518,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                     <p>No TikTok accounts found</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-2">
                     {profiles.map((profile) => (
                       <motion.label
                         key={profile.id}
                         className={cn(
-                          "flex items-center space-x-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 relative overflow-hidden group",
+                          "flex items-center space-x-2 p-2 rounded-xl border cursor-pointer transition-all duration-200 relative overflow-hidden group",
                           selectedProfiles.includes(profile.id)
                             ? "border-primary/50 bg-primary/10 shadow-[0_0_15px_rgba(var(--primary),0.1)]"
                             : "border-white/10 bg-black/20 hover:bg-white/5 hover:border-white/20"
@@ -532,12 +532,12 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                         whileTap={{ scale: 0.98 }}
                       >
                         <div className={cn(
-                          "w-5 h-5 rounded border flex items-center justify-center transition-colors flex-shrink-0",
+                          "w-4 h-4 rounded border flex items-center justify-center transition-colors flex-shrink-0",
                           selectedProfiles.includes(profile.id)
                             ? "bg-primary border-primary text-primary-foreground"
                             : "border-muted-foreground/50 group-hover:border-white/50"
                         )}>
-                          {selectedProfiles.includes(profile.id) && <CheckCircle className="w-3.5 h-3.5" />}
+                          {selectedProfiles.includes(profile.id) && <CheckCircle className="w-3 h-3" />}
                         </div>
                         <input
                           type="checkbox"
@@ -545,16 +545,16 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
                           onChange={() => handleProfileToggle(profile.id)}
                           className="hidden"
                         />
-                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                        <div className="flex items-center space-x-2 flex-1 min-w-0">
                           {profile.avatar ? (
                             <img
                               src={profile.avatar}
                               alt={profile.displayName}
-                              className="w-8 h-8 rounded-full ring-2 ring-white/10 flex-shrink-0"
+                              className="w-7 h-7 rounded-sm ring-1 ring-white/10 flex-shrink-0"
                             />
                           ) : (
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center ring-2 ring-white/10 flex-shrink-0">
-                              <User className="w-4 h-4 text-white/70" />
+                            <div className="w-7 h-7 rounded-sm bg-gradient-to-br from-gray-700 to-gray-600 flex items-center justify-center ring-1 ring-white/10 flex-shrink-0">
+                              <User className="w-3.5 h-3.5 text-white/70" />
                             </div>
                           )}
                           <div className="flex-1 min-w-0">
@@ -574,7 +574,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-white/10 bg-white/5 flex flex-col gap-4">
+        <div className="p-4 border-t border-white/10 bg-white/5 flex flex-col gap-3">
           <AnimatePresence>
             {validationError && (
               <motion.div
@@ -593,16 +593,16 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
             <Button
               onClick={handleSchedule}
               disabled={selectedProfiles.length === 0 || isScheduling}
-              className="flex-1 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-lg shadow-primary/25 h-12 text-base font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90 text-white shadow-lg shadow-primary/25 h-10 text-sm font-medium rounded-xl transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
             >
               {isScheduling ? (
                 <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   Scheduling...
                 </>
               ) : (
                 <>
-                  <Send className="w-5 h-5 mr-2" />
+                  <Send className="w-4 h-4 mr-2" />
                   {`Schedule ${slideshows.length} Posts`}
                 </>
               )}
@@ -611,7 +611,7 @@ export const BulkPostizPoster: React.FC<BulkPostizPosterProps> = ({
             <Button
               variant="ghost"
               onClick={onClose}
-              className="h-12 px-8 rounded-xl hover:bg-white/10 border border-transparent hover:border-white/10"
+              className="h-10 px-6 rounded-xl hover:bg-white/10 border border-transparent hover:border-white/10"
             >
               Cancel
             </Button>

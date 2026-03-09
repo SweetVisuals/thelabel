@@ -251,14 +251,15 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 const batchSlideshows = slideshows.slice(i * batchSize, (i + 1) * batchSize);
 
                 // Job Processing Time
-                // First batch processes immediately, subsequent ones wait 1 min * index (so Postiz isn't hammered instantly, but they all queue quickly)
-                const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 1);
+                // Process each batch 67 minutes apart to strictly respect the Postiz API rate limit (30 requests per hour = 10 slideshows)
+                const scheduledProcessingTime = addMinutes(baseProcessingTime, i * 67);
 
                 // Post Start Time for THIS batch is the current logical time we've reached
                 const batchPostStartTime = new Date(currentPostTime);
 
                 // Advance currentPostTime for the NEXT batch by simulating this batch's posts
                 // This ensures Batch 2 starts exactly where Batch 1 left off + interval
+                const effectiveInterval = settings.postIntervalMinutes || 240;
                 for (let j = 0; j < batchSlideshows.length; j++) {
                     // 1. Apply constraints to the current slot (e.g. if we landed on 11pm, move to 9am)
                     currentPostTime = applyScheduleConstraints(currentPostTime, userTimezone);
@@ -267,7 +268,6 @@ export const BulkPostProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                     batchSlideshows[j].scheduledTime = currentPostTime.toISOString();
 
                     // 2. Move time forward for the NEXT post (or the start of the next batch)
-                    const effectiveInterval = settings.postIntervalMinutes || 240;
                     currentPostTime = addMinutes(currentPostTime, effectiveInterval);
                 }
 
